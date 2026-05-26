@@ -124,6 +124,10 @@
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
     },
+    async addMom(mom) {
+      if (Array.isArray(window.CDC.MOMS)) window.CDC.MOMS.unshift(mom);
+      await remote(() => sb.from('moms').insert({ id: mom.id, dept: mom.dept || null, data: mom }));
+    },
     async updateFlag(id, state) {
       const f = (window.CDC.FLAGS || []).find((x) => x.id === id); if (f) f.state = state;
       await remote(() => sb.from('flags').update({ state, data: f || { id, state } }).eq('id', id));

@@ -368,11 +368,11 @@ function TasksView({ tweaks, currentUser }) {
   const CDC = window.CDC;
   const allTasks = CDC.filterTasks(currentUser.id);
   const [decisions, setDecisions] = useState_o({}); // id -> 'approved' | 'rejected'
-  const [filter, setFilter] = useState_o('SUGGESTED');
+  const [filter, setFilter] = useState_o(['L0', 'L1', 'TEAM_MEMBER'].includes(currentUser.role) ? 'MINE' : 'SUGGESTED');
   const [editing, setEditing] = useState_o(null);
 
   const list = allTasks
-    .filter((t) => filter === 'ALL' ? true : t.status === filter)
+    .filter((t) => filter === 'ALL' ? true : filter === 'MINE' ? t.owner === currentUser.id : t.status === filter)
     .map((t) => ({ ...t, _decision: decisions[t.id] }));
 
   function approve(id) {
@@ -403,7 +403,7 @@ function TasksView({ tweaks, currentUser }) {
       />
 
       <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        {['SUGGESTED', 'ACTIVE', 'DONE', 'ALL'].map((f) => (
+        {['MINE', 'SUGGESTED', 'ACTIVE', 'DONE', 'ALL'].map((f) => (
           <button
             key={f}
             className="btn"

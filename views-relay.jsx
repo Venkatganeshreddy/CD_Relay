@@ -209,6 +209,16 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         userId: currentUser.id,
       });
     });
+    // Track the whole MOM: what AI suggested vs what was concluded/approved.
+    const mom = {
+      id: `mom-${Date.now()}`, title: (actionItems[0] ? actionItems[0].text : 'MOM').slice(0, 60),
+      date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
+      suggested: actionItems.map((it) => ({ text: it.text, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
+      concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner), changed: it.owner !== it.aiOwner })),
+      rejected: actionItems.filter((it) => decisions[it.id] === 'rejected').map((it) => it.text),
+      actionItems: approved.map((it) => ({ text: it.text, owner: it.owner })),
+    };
+    CDC.db && CDC.db.addMom(mom);
     setStep('done');
     setTimeout(() => { onClose(); resetState(); nav.go('second-brain'); }, 1200);
   }
@@ -352,7 +362,7 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people }) 
             <select value={item.owner} onChange={(e) => onReassign(item.id, e.target.value)}
               style={{ fontSize: 11.5, padding: '2px 4px', borderRadius: 5, border: '1px solid var(--border)', maxWidth: 180 }}
               title="Reassign (Admin / Product Owner)">
-              {(people || []).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level}</option>)}
+              {(people || []).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept} · {u.id}</option>)}
             </select>
           ) : (
             <span style={{ fontWeight: 500 }}>{owner?.name}</span>
