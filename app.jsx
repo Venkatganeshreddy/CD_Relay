@@ -1,0 +1,650 @@
+// CD-Copilot — root App.
+
+const { useState: useState_a, useEffect: useEffect_a, useMemo: useMemo_a } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dark": false,
+  "accent": "indigo",
+  "rag": "numeric",
+  "density": "cozy",
+  "confidence": true,
+  "mononum": true,
+  "userId": "NW0002526",
+  "env": "prod"
+}/*EDITMODE-END*/;
+
+const ACCENT_COLORS = {
+  indigo: 'oklch(0.55 0.16 265)',
+  emerald: 'oklch(0.58 0.13 152)',
+  amber:   'oklch(0.65 0.14 70)',
+  rose:    'oklch(0.6 0.16 15)',
+};
+const ACCENT_BORDER = {
+  indigo: 'oklch(0.85 0.07 265)',
+  emerald: 'oklch(0.85 0.07 152)',
+  amber:   'oklch(0.85 0.08 70)',
+  rose:    'oklch(0.85 0.08 15)',
+};
+const ACCENT_SOFT = {
+  indigo: 'oklch(0.95 0.04 265)',
+  emerald: 'oklch(0.95 0.04 152)',
+  amber:   'oklch(0.95 0.04 70)',
+  rose:    'oklch(0.95 0.04 15)',
+};
+const ACCENT_SOFT_DARK = {
+  indigo: 'oklch(0.32 0.08 265)',
+  emerald: 'oklch(0.32 0.08 152)',
+  amber:   'oklch(0.32 0.08 70)',
+  rose:    'oklch(0.32 0.08 15)',
+};
+const ACCENT_DARK = {
+  indigo: 'oklch(0.72 0.17 265)',
+  emerald: 'oklch(0.72 0.15 152)',
+  amber:   'oklch(0.78 0.16 70)',
+  rose:    'oklch(0.72 0.16 15)',
+};
+
+// Map a user.role to whether they're an L0/L1 contributor (defaults to submit view)
+function isContributorRole(role) {
+  return ['L0', 'L1', 'TEAM_MEMBER'].includes(role);
+}
+
+function App({ authMode = 'demo', me = null, realUser = null, impersonating = false }) {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState_a({ name: 'dashboard', params: {} });
+  const [copilotPrefill, setCopilotPrefill] = useState_a(null);
+  const [momOpen, setMomOpen] = useState_a(false);
+
+  // Authed → the logged-in (or impersonated) employee drives scope; demo → tweak switch.
+  const currentUser = useMemo_a(
+    () => (authMode === 'authed' && me) ? me
+      : (window.CDC.USERS.find((u) => u.id === t.userId) || window.CDC.USERS[0]),
+    [t.userId, authMode, me]
+  );
+
+  // Expose auth-aware actions for the role switcher / tweaks "Acting as" / sign-out.
+  useEffect_a(() => {
+    window.__RELAY = {
+      authed: authMode === 'authed',
+      impersonate: (id) => Promise.resolve(window.CDC.setImpersonation && window.CDC.setImpersonation(id))
+        .then(() => location.reload()),
+      exitImpersonation: () => Promise.resolve(window.CDC.setImpersonation && window.CDC.setImpersonation(null))
+        .then(() => location.reload()),
+      // Clear any impersonation before signing out so the next login starts clean.
+      signOut: () => Promise.resolve(window.CDC.setImpersonation && window.CDC.setImpersonation(null)).catch(() => {})
+        .then(() => window.CDC.auth && window.CDC.auth.signOut())
+        .then(() => location.reload()),
+    };
+  }, [authMode]);
+
+  // Apply theme to <html>
+  useEffect_a(() => {
+    const root = document.documentElement;
+    root.dataset.theme = t.dark ? 'dark' : 'light';
+    root.dataset.density = t.density;
+    document.body.dataset.mononum = t.mononum ? 'on' : 'off';
+    root.style.setProperty('--accent', t.dark ? ACCENT_DARK[t.accent] : ACCENT_COLORS[t.accent]);
+    root.style.setProperty('--accent-border', ACCENT_BORDER[t.accent]);
+    root.style.setProperty('--accent-soft', t.dark ? ACCENT_SOFT_DARK[t.accent] : ACCENT_SOFT[t.accent]);
+  }, [t.dark, t.accent, t.density, t.mononum]);
+
+  // When user switches role, jump to a sensible route they can see
+  useEffect_a(() => {
+    const isContributor = isContributorRole(currentUser.role);
+    if (route.name === 'department') {
+      const visible = window.CDC.filterDepartments(currentUser.id).map((d) => d.id);
+      if (!visible.includes(route.params.id)) {
+        setRoute({ name: isContributor ? 'dashboard' : 'dashboard', params: {} });
+        return;
+      }
+    }
+    // L1/L0 users now have a dashboard too (own dashboard) — don't auto-redirect them
+  }, [currentUser.id]);
+
+  const nav = {
+    go: (name, params = {}) => {
+      if (name === 'copilot' && params.prefill) {
+        setCopilotPrefill(params.prefill);
+      } else if (name !== 'copilot') {
+        setCopilotPrefill(null);
+      }
+      if (name === 'mom') { setMomOpen(true); return; }
+      setRoute({ name, params });
+    },
+  };
+
+  const visibleDepts = window.CDC.filterDepartments(currentUser.id);
+  const role = currentUser.role;
+  const isContributor = isContributorRole(role);
+  const isL2 = role === 'L2' || role === 'SUB_LEAD' || role === 'DEPARTMENT_LEAD' || role === 'CENTRAL_OPS';
+  const isL3orAdmin = role === 'L3' || role === 'ADMIN' || role === 'PRODUCT_OWNER';
+  const isAdmin = role === 'ADMIN';
+
+  // ── Sidebar groups (Daily Worklog / Department / Intelligence / System) ─
+  const groupDaily = [
+    { id: 'submit', label: 'Submit today', icon: 'edit', badge: '5:30', badgeTone: 'accent' },
+    { id: 'my-tasks', label: 'Escalated Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => (tt.status === 'ACTIVE' || tt.status === 'SUGGESTED') && tt.owner === currentUser.id).length || null, badgeTone: 'amber' },
+    { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
+  ];
+  const groupDept = (isL2 || isL3orAdmin) ? [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'missing', label: 'Missing reports', icon: 'tasks', badge: window.CDC.dailyStatus(currentUser.id).filter((s) => !s.submitted).length || null, badgeTone: 'amber' },
+    { id: 'weekly', label: 'Weekly drafts', icon: 'weekly', badge: window.CDC.filterWeekly(currentUser.id).filter((w) => w.status === 'DRAFT').length, badgeTone: 'amber' },
+    { id: 'monthly', label: 'Monthly worklogs', icon: 'weekly' },
+    { id: 'second-brain', label: 'Second Brain', icon: 'sparkles' },
+  ] : [];
+  const groupIntel = [
+    { id: 'copilot', label: 'Concierge', icon: 'copilot' },
+    // Agent Farm is L3/Admin only (L1/L2 don't manage the agent catalog).
+    ...(isL3orAdmin ? [{ id: 'farm', label: 'Agent Farm', icon: 'plug' }] : []),
+  ];
+  const groupSystem = (isL3orAdmin) ? [
+    { id: 'codex', label: 'Codex', icon: 'admin' },
+    { id: 'engram', label: 'Engram', icon: 'sparkles', badge: window.CDC.PROPOSALS.filter((p) => p.state === 'pending').length, badgeTone: 'amber' },
+    { id: 'expense', label: 'Tool Expense Tracker', icon: 'runs' },
+    { id: 'runs', label: 'AI runs', icon: 'runs' },
+    { id: 'guideline', label: 'Guideline', icon: 'sheet' },
+    { id: 'admin', label: 'Admin', icon: 'admin' },
+  ] : [
+    { id: 'guideline', label: 'Guideline', icon: 'sheet' },
+  ];
+
+  return (
+    <div className="app" data-sidebar="open" data-env={t.env}>
+      <Sidebar
+        groupDaily={groupDaily}
+        groupDept={groupDept}
+        groupIntel={groupIntel}
+        groupSystem={groupSystem}
+        route={route}
+        nav={nav}
+        depts={visibleDepts}
+        currentUser={currentUser}
+        isContributor={isContributor}
+      />
+      <div className="main">
+        <Topbar
+          route={route}
+          nav={nav}
+          currentUser={currentUser}
+          tweaks={t}
+          setTweak={setTweak}
+          authMode={authMode}
+          impersonating={impersonating}
+          realName={realUser && realUser.name}
+          openMom={() => setMomOpen(true)}
+        />
+        <div className="content">
+          <div className="content-inner">
+            <RouteView route={route} tweaks={t} currentUser={currentUser} nav={nav} initialPrompt={copilotPrefill} />
+          </div>
+        </div>
+      </div>
+
+      <CDCTweaksPanel t={t} setTweak={setTweak} />
+      <FeedbackFab />
+      {momOpen && <MomLoader open={momOpen} onClose={() => setMomOpen(false)} currentUser={currentUser} nav={nav} />}
+    </div>
+  );
+}
+
+function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
+  const role = currentUser.role;
+  const isL1 = role === 'L0' || role === 'L1' || role === 'TEAM_MEMBER';
+  const isL2 = role === 'L2' || role === 'SUB_LEAD' || role === 'DEPARTMENT_LEAD' || role === 'CENTRAL_OPS';
+  // L1/L0 users see L1Dashboard when they hit "dashboard"; L2 sees ManagerView.
+  switch (route.name) {
+    case 'dashboard': return isL1 ? <L1Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} /> : isL2 ? <ManagerView tweaks={tweaks} currentUser={currentUser} nav={nav} /> : <Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'department': return <DepartmentView deptId={route.params.id} tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'copilot': return <CopilotView tweaks={tweaks} currentUser={currentUser} nav={nav} initialPrompt={initialPrompt} />;
+    case 'weekly': return <WeeklyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'missing': return <MissingReportsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'monthly': return <MonthlyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'my-tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} myOnly />;
+    case 'second-brain': return <SecondBrainView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'admin': return <AdminView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'submit': return <SubmitView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'worklogs': return <WorklogsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'architecture': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} initialTab="architecture" />;
+    case 'codex': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'expense': return <ExpenseView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'engram': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'farm': return <FarmView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'guideline': return <GuidelineView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'team': return <ManagerView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    default: return <Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+  }
+}
+
+// ── Sidebar ─────────────────────────────────────────────────────────────
+function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, depts, currentUser, isContributor }) {
+  const [expanded, setExpanded] = useState_a({ depts: false });
+
+  const item = (it) => (
+    <div
+      key={it.id}
+      className="sb-item"
+      data-active={route.name === it.id}
+      onClick={() => nav.go(it.id)}
+    >
+      <Icon name={it.icon} size={14} />
+      <span>{it.label}</span>
+      {it.badge ? <span className="badge" data-tone={it.badgeTone || 'accent'}>{it.badge}</span> : null}
+    </div>
+  );
+
+  return (
+    <div className="sidebar">
+      <div className="sb-brand">
+        <div className="sb-logo">re</div>
+        <div className="sb-name">
+          Relay
+          <small>department copilot · v0.7</small>
+        </div>
+      </div>
+
+      <div className="sb-nav">
+        {groupDaily && groupDaily.length > 0 && (
+          <>
+            <div className="sb-group-title">Daily Worklog</div>
+            {groupDaily.map(item)}
+          </>
+        )}
+
+        {groupDept && groupDept.length > 0 && (
+          <>
+            <div className="sb-group-title">Department</div>
+            {groupDept.map(item)}
+            <div className="sb-group-title row" style={{ justifyContent: 'space-between', cursor: 'default', paddingLeft: 16 }} onClick={() => setExpanded((e) => ({ ...e, depts: !e.depts }))}>
+              <span style={{ flex: 1, fontSize: 10 }}>Drill-down</span>
+              <Icon name={expanded.depts ? 'chev-down' : 'chev-right'} size={10} />
+            </div>
+            {expanded.depts && depts.map((d) => (
+              <div
+                key={d.id}
+                className="sb-item"
+                data-active={route.name === 'department' && route.params.id === d.id}
+                onClick={() => nav.go('department', { id: d.id })}
+                style={{ paddingLeft: 18 }}
+              >
+                <span className="dot" />
+                <span style={{ flex: 1, fontSize: 12 }}>{d.short || d.name}</span>
+              </div>
+            ))}
+          </>
+        )}
+
+        {groupIntel && groupIntel.length > 0 && (
+          <>
+            <div className="sb-group-title">Intelligence</div>
+            {groupIntel.map(item)}
+          </>
+        )}
+
+        {groupSystem && groupSystem.length > 0 && (
+          <>
+            <div className="sb-group-title">System</div>
+            {groupSystem.map(item)}
+          </>
+        )}
+      </div>
+
+      <div className="sb-foot">
+        <span className="dot" data-tone="green" data-pulse="true" />
+        <span>13 agents nominal</span>
+        <span className="mono" style={{ marginLeft: 'auto' }}>v0.7.0</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Topbar ──────────────────────────────────────────────────────────────
+function Topbar({ route, nav, currentUser, tweaks, setTweak, openMom, authMode, impersonating, realName }) {
+  const [roleOpen, setRoleOpen] = useState_a(false);
+  const [searchOpen, setSearchOpen] = useState_a(false);
+  const authed = authMode === 'authed';
+  const isAdminish = ['L3', 'ADMIN', 'Admin', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  const canSwitch = !authed || isAdminish; // non-admins can't impersonate
+
+  const crumbs = useMemo_a(() => buildCrumbs(route, currentUser), [route, currentUser]);
+  const role = currentUser.role;
+  const lvl = currentUser.level || (role === 'L3' || role === 'PRODUCT_OWNER' ? 'L3' : role === 'ADMIN' ? 'Admin' : 'L2');
+  const scopeLbl = window.CDC.scopeForUser(currentUser.id);
+  const scopeText = scopeLbl.kind === 'all' ? 'all departments' : scopeLbl.kind === 'dept' ? (window.CDC.lookup.dept(scopeLbl.dept)?.short || 'department') : (scopeLbl.sub || 'sub-team');
+
+  useEffect_a(() => {
+    const h = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+
+  return (
+    <div className="topbar">
+      <div className="tb-crumbs">
+        {crumbs.map((c, i) => (
+          <React.Fragment key={i}>
+            <span className="tb-crumb" data-last={i === crumbs.length - 1}>{c}</span>
+            {i < crumbs.length - 1 && <span className="tb-crumb-sep">/</span>}
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="tb-spacer" />
+      <div className="tb-search" onClick={() => setSearchOpen(true)}>
+        <Icon name="search" size={12} />
+        <input placeholder="Search reports, tasks, KPIs…" readOnly />
+        <kbd>⌘K</kbd>
+      </div>
+
+      <button className="btn" data-size="sm" onClick={openMom} title="Upload meeting transcript and run Scribe">
+        <Icon name="sheet" size={12} /> MOM Loader
+      </button>
+
+      <span className={`env-pill`} data-env={tweaks.env}>{tweaks.env}</span>
+
+      {impersonating && (
+        <span className="row" style={{ gap: 6, fontSize: 11.5, color: 'var(--amber, #b7791f)', background: 'var(--amber-soft, #fdf6e3)', border: '1px solid var(--amber, #e8c887)', borderRadius: 8, padding: '3px 8px' }}>
+          Viewing as <strong>{currentUser.name}</strong>{realName ? ` · you: ${realName}` : ''}
+          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => window.__RELAY && window.__RELAY.exitImpersonation()} style={{ marginLeft: 4 }}>Exit</button>
+        </span>
+      )}
+
+      <button className="role-chip" onClick={() => canSwitch && setRoleOpen(true)} style={canSwitch ? undefined : { cursor: 'default' }}
+        title={authed ? (canSwitch ? 'View as another user (impersonate)' : 'Signed in') : 'Switch user / role to see RBAC scope'}>
+        <Avatar user={currentUser} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+          <span style={{ fontSize: 12, fontWeight: 500 }}>{currentUser.name}</span>
+          <span className="role-lbl" style={{ fontSize: 10.5 }}>{lvl} · {scopeText}</span>
+        </div>
+        {canSwitch && <Icon name="chev-down" size={10} />}
+      </button>
+
+      {authed && (
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => window.__RELAY && window.__RELAY.signOut()} title="Sign out">
+          Sign out
+        </button>
+      )}
+
+      <RoleSwitcher open={roleOpen} onClose={() => setRoleOpen(false)} currentId={currentUser.id} onPick={(id) => { relayPickUser(setTweak, id); setRoleOpen(false); }} />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} nav={nav} currentUser={currentUser} />
+    </div>
+  );
+}
+
+function buildCrumbs(route, currentUser) {
+  const CDC = window.CDC;
+  switch (route.name) {
+    case 'dashboard': return ['Department', 'Dashboard'];
+    case 'submit': return ['Daily work', 'Submit today'];
+    case 'my-tasks': return ['Daily work', 'My tasks'];
+    case 'worklogs': return ['Daily work', 'Worklogs'];
+    case 'codex': return ['System', 'Codex'];
+    case 'architecture': return ['System', 'Codex', 'Architecture'];
+    case 'expense': return ['System', 'Tool Expense Tracker'];
+    case 'engram': return ['System', 'Engram'];
+    case 'guideline': return ['System', 'Guideline'];
+    case 'team': return ['Department', 'Sub Department'];
+    case 'farm': return ['Intelligence', 'Agent Farm'];
+    case 'copilot': return ['Intelligence', 'Concierge'];
+    case 'missing': return ['Department', 'Missing reports'];
+    case 'weekly': return ['Department', 'Weekly drafts'];
+    case 'monthly': return ['Department', 'Monthly worklogs'];
+    case 'tasks': return ['Department', 'Tasks board'];
+    case 'second-brain': return ['Department', 'Second Brain'];
+    case 'quality': return ['System', 'Engram'];
+    case 'runs': return ['System', 'AI runs'];
+    case 'admin': return ['System', 'Admin'];
+    case 'department': {
+      const d = CDC.lookup.dept(route.params.id);
+      if (!d) return ['Department'];
+      return ['Department', 'Drill-down', d.short || d.name];
+    }
+    default: return ['Relay'];
+  }
+}
+
+// ── Role switcher ───────────────────────────────────────────────────────
+function RoleSwitcher({ open, onClose, currentId, onPick }) {
+  if (!open) return null;
+  return (
+    <Modal open={true} onClose={onClose} title="Switch user — preview RBAC scope" width={560}>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+        Each role sees only data within its scope. The dashboard, Copilot context, and search results all change.
+      </div>
+      <div className="col" style={{ gap: 6 }}>
+        {window.CDC.USERS.map((u) => {
+          const scope = window.CDC.scopeForUser(u.id);
+          const desc = scope.kind === 'all' ? 'All departments' :
+                       scope.kind === 'dept' ? `Department: ${window.CDC.lookup.dept(scope.dept)?.name}` :
+                       `Sub-team: ${scope.sub} (in ${window.CDC.lookup.dept(scope.dept)?.name})`;
+          return (
+            <div key={u.id} className="list-row" data-active={u.id === currentId} onClick={() => onPick(u.id)}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div className="row" style={{ gap: 10 }}>
+                  <Avatar user={u} size={28} />
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{u.name} <span className="muted" style={{ fontWeight: 400 }}>· {u.title}</span></div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{window.CDC.ROLES[u.role]?.label || u.role}</div>
+                  </div>
+                </div>
+                <Pill tone={u.id === currentId ? 'accent' : 'outline'} dot={u.id === currentId}>{desc}</Pill>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+// ── Cmd-K Search palette ────────────────────────────────────────────────
+function SearchPalette({ open, onClose, nav, currentUser }) {
+  const [q, setQ] = useState_a('');
+  useEffect_a(() => { if (open) setQ(''); }, [open]);
+  if (!open) return null;
+  const CDC = window.CDC;
+  const reports = CDC.filterReports(currentUser.id);
+  const tasks = CDC.filterTasks(currentUser.id);
+  const kpis = CDC.filterKpis(currentUser.id);
+  const depts = CDC.filterDepartments(currentUser.id);
+
+  const lower = q.trim().toLowerCase();
+  const matches = lower.length === 0 ? null : {
+    depts: depts.filter((d) => d.name.toLowerCase().includes(lower)),
+    reports: reports.filter((r) => {
+      const a = CDC.lookup.author(r.author);
+      return (a?.name + ' ' + a?.sub + ' ' + r.items.map((i) => i.text).join(' ')).toLowerCase().includes(lower);
+    }).slice(0, 6),
+    tasks: tasks.filter((t) => t.title.toLowerCase().includes(lower)).slice(0, 4),
+    kpis: kpis.filter((k) => k.name.toLowerCase().includes(lower)).slice(0, 4),
+  };
+
+  function pick(action) { onClose(); action(); }
+
+  return (
+    <Modal open={true} onClose={onClose} title="Search" width={620}>
+      <div className="row" style={{ gap: 8, marginBottom: 12, height: 38, padding: '0 12px', background: 'var(--panel)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Icon name="search" size={14} />
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reports, tasks, KPIs, departments…" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, color: 'var(--text)', fontFamily: 'inherit' }} />
+      </div>
+      {!matches && (
+        <div className="muted" style={{ fontSize: 12 }}>
+          Try: <span className="code">backend</span>, <span className="code">heap-sort</span>, <span className="code">curriculum</span>, <span className="code">P0</span>, <span className="code">NAT</span>
+        </div>
+      )}
+      {matches && (
+        <div className="col" style={{ gap: 14, maxHeight: 480, overflowY: 'auto' }}>
+          {matches.depts.length > 0 && (
+            <div>
+              <div className="detail-section" style={{ margin: '0 0 6px' }}>Departments</div>
+              <div className="col" style={{ gap: 4 }}>
+                {matches.depts.map((d) => (
+                  <div key={d.id} className="list-row" onClick={() => pick(() => nav.go('department', { id: d.id }))}>
+                    <div className="row" style={{ gap: 8 }}>
+                      <Icon name="dashboard" size={12} /><span>{d.name}</span>
+                      <span className="muted" style={{ fontSize: 11 }}>{d.productName}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {matches.reports.length > 0 && (
+            <div>
+              <div className="detail-section" style={{ margin: '0 0 6px' }}>Reports ({matches.reports.length})</div>
+              <div className="col" style={{ gap: 4 }}>
+                {matches.reports.map((r) => {
+                  const a = CDC.lookup.author(r.author);
+                  return (
+                    <div key={r.id} className="list-row" onClick={() => pick(() => nav.go('department', { id: r.dept }))}>
+                      <div className="row" style={{ justifyContent: 'space-between' }}>
+                        <div><strong>{a?.name}</strong> <span className="muted">· {a?.sub} · {r.date}</span></div>
+                        <span className="mono faint" style={{ fontSize: 10.5 }}>{r.id}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {matches.tasks.length > 0 && (
+            <div>
+              <div className="detail-section" style={{ margin: '0 0 6px' }}>Tasks</div>
+              <div className="col" style={{ gap: 4 }}>
+                {matches.tasks.map((t) => (
+                  <div key={t.id} className="list-row" onClick={() => pick(() => nav.go('tasks'))}>
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <div className="row" style={{ gap: 8 }}>
+                        <Pill tone={t.priority === 'P0' ? 'red' : 'amber'}>{t.priority}</Pill>
+                        <span>{t.title}</span>
+                      </div>
+                      <Pill tone={t.status === 'SUGGESTED' ? 'amber' : 'green'}>{t.status.toLowerCase()}</Pill>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {matches.kpis.length > 0 && (
+            <div>
+              <div className="detail-section" style={{ margin: '0 0 6px' }}>KPIs</div>
+              <div className="col" style={{ gap: 4 }}>
+                {matches.kpis.map((k) => (
+                  <div key={k.id} className="list-row">
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <span>{k.name}</span>
+                      <span className="mono">{k.current}{k.unit || ''} / {k.target}{k.unit || ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Object.values(matches).every((arr) => arr.length === 0) && (
+            <div className="empty">No matches in your scope.</div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ── Admin (placeholder) ─────────────────────────────────────────────────
+function AdminView({ tweaks, currentUser }) {
+  return (
+    <div className="fadein">
+      <SectionHeader title="Admin" subtitle="Master data, imports, MCP tokens, system settings." />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {[
+          { t: 'Master data', d: 'Business directions, products, departments, sub-teams', icon: 'admin' },
+          { t: 'Employees', d: '96 users · 5 roles · last sync 06:00 IST', icon: 'admin' },
+          { t: 'KPI catalog', d: '24 KPIs · 8 tracked · formulas versioned server-side', icon: 'dashboard' },
+          { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST', icon: 'sheet' },
+          { t: 'MCP tokens', d: '3 active · used by Claude Desktop / Cursor', icon: 'plug' },
+          { t: 'Audit log', d: 'Every read & write · ranged search', icon: 'lock' },
+        ].map((c, i) => (
+          <Card key={i} title={c.t}>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{c.d}</div>
+            <button className="btn" data-size="sm">Open →</button>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+window.AdminView = AdminView;
+
+// ── Tweaks panel ────────────────────────────────────────────────────────
+function CDCTweaksPanel({ t, setTweak }) {
+  return (
+    <TweaksPanel title="Tweaks">
+      <TweakSection label="Theme" />
+      <TweakToggle label="Dark mode" value={t.dark} onChange={(v) => setTweak('dark', v)} />
+      <TweakColor
+        label="Accent"
+        value={t.accent === 'indigo' ? '#6366f1' : t.accent === 'emerald' ? '#10b981' : t.accent === 'amber' ? '#d97706' : '#e11d48'}
+        options={['#6366f1', '#10b981', '#d97706', '#e11d48']}
+        onChange={(hex) => {
+          const map = { '#6366f1': 'indigo', '#10b981': 'emerald', '#d97706': 'amber', '#e11d48': 'rose' };
+          setTweak('accent', map[hex] || 'indigo');
+        }}
+      />
+
+      <TweakSection label="Layout" />
+      <TweakRadio label="Density" value={t.density} options={['compact', 'cozy', 'comfortable']} onChange={(v) => setTweak('density', v)} />
+      <TweakToggle label="Mono numerals" value={t.mononum} onChange={(v) => setTweak('mononum', v)} />
+
+      <TweakSection label="RAG treatment" />
+      <TweakRadio label="Style" value={t.rag} options={['numeric', 'border', 'tint', 'dot']} onChange={(v) => setTweak('rag', v)} />
+
+      <TweakSection label="AI surfaces" />
+      <TweakToggle label="Show confidence chips" value={t.confidence} onChange={(v) => setTweak('confidence', v)} />
+
+      <TweakSection label="Environment" />
+      <TweakRadio label="Active env" value={t.env} options={['beta', 'prod']} onChange={(v) => setTweak('env', v)} />
+
+      <TweakSection label="User scope (RBAC)" />
+      <TweakSelect label="Acting as" value={t.userId}
+        options={window.CDC.USERS.map((u) => ({ value: u.id, label: `${u.name} — ${(window.CDC.ROLES[u.role] || {}).label || u.level}` }))}
+        onChange={(v) => relayPickUser(setTweak, v)}
+      />
+    </TweaksPanel>
+  );
+}
+
+// Route impersonation (authed) vs demo role switch in one place.
+function relayPickUser(setTweak, id) {
+  if (window.__RELAY && window.__RELAY.authed) { window.__RELAY.impersonate(id); }
+  else { setTweak('userId', id); }
+}
+
+// Mount — gate on a Supabase session: signed in → real scoped data + login as that
+// employee; otherwise show the login screen (with a demo-mode bypass).
+(async () => {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  let me = null, real = null, authMode = 'demo';
+  try {
+    if (window.CDC && window.CDC.auth) {
+      const { data } = await window.CDC.auth.session();
+      if (data && data.session) {
+        me = await window.CDC.whoami();
+        real = window.CDC.whoamiReal ? await window.CDC.whoamiReal() : me;
+        if (me) { authMode = 'authed'; await window.CDC.loadFromSupabase(); }
+      }
+    }
+  } catch (e) { console.warn('[Relay] session check failed', e); }
+
+  if (authMode === 'authed') {
+    const impersonating = !!(me && real && me.id !== real.id);
+    root.render(<App authMode="authed" me={me} realUser={real} impersonating={impersonating} />);
+  } else {
+    root.render(<LoginScreen onAuthed={() => location.reload()} onDemo={() => root.render(<App authMode="demo" me={null} />)} />);
+  }
+})();

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relay — Department Operating Copilot</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-mononum="on">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Offline Concierge shim: the design sandbox injected window.claude.complete.
+       Outside it, provide a deterministic grounded responder so Concierge still demos. -->
+  <script>
+    if (!window.claude) {
+      window.claude = {
+        complete: async ({ messages }) => {
+          await new Promise((r) => setTimeout(r, 350));
+          const q = (messages[messages.length - 1].content || '').toLowerCase();
+          if (q.includes('blocker') || q.includes('blocked'))
+            return "Two blockers are over three days old. The NAT throttle on Fullstack labs [r-1001] has been open since Monday and is now flagged as a recurring blocker [f-1]. Pushpa's GenAI RAG eval set is also stalled on a heap-allocation issue [f-2]. Both feed the Escalations rollup.";
+          if (q.includes('kpi') || q.includes('red'))
+            return "The KPIs trending red are the DS&Algo pass-rate [k-1], down two weeks running, and the assessment-throughput metric [k-2]. Both originate from Pavan Teja's sub-team; see the source records for the underlying daily reports.";
+          if (q.includes('attention') || q.includes('today'))
+            return "Three things need attention: the missing-report streak on Vijay's Systems & Infra team [f-3], the overdue Topic Validator task [r-1004], and the DS&Algo pass-rate slip [k-1]. Start with the missing reports — Nudge has already pinged twice.";
+          if (q.includes('summar') || q.includes('week'))
+            return "This week the team logged work across Fullstack, GenAI and Aptitude. Highlights: shipped the labs portal config [r-1002] and cleared the English content QC backlog [r-1003]. Open risk: the NAT throttle blocker [f-1] is unresolved.";
+          return "Grounded in your in-scope records: the most recent items are the Fullstack NAT throttle blocker [f-1], the labs portal config report [r-1002], and the DS&Algo pass-rate KPI [k-1]. Ask about blockers, KPIs, or what needs attention for a focused answer.";
+        },
+      };
+    }
+  </script>
+
+  <!-- Data layer first (plain JS, attaches to window.CDC) -->
+  <script src="data.js"></script>
+
+  <!-- Supabase client + live data loader (falls back to bundled data.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" crossorigin="anonymous"></script>
+  <script src="supabase-client.js"></script>
+
+  <!-- Components (JSX) -->
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="views-dashboard.jsx"></script>
+  <script type="text/babel" src="views-copilot.jsx"></script>
+  <script type="text/babel" src="views-ops.jsx"></script>
+  <script type="text/babel" src="views-submit.jsx"></script>
+  <script type="text/babel" src="views-worklogs.jsx"></script>
+  <script type="text/babel" src="views-architecture.jsx"></script>
+  <script type="text/babel" src="views-engram.jsx"></script>
+  <script type="text/babel" src="views-farm.jsx"></script>
+  <script type="text/babel" src="views-relay.jsx"></script>
+  <script type="text/babel" src="views-codex.jsx"></script>
+  <script type="text/babel" src="views-roles.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+
+  <script type="text/babel" src="views-auth.jsx"></script>
+
+  <!-- Root app last -->
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
