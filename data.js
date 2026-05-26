@@ -1221,6 +1221,14 @@
     user: (id) => USERS.find((u) => u.id === id),
   };
 
+  // ── Start empty: no hardcoded sample data. Only real submitted/entered data
+  //    should appear. Org + system reference (employees, departments, agents,
+  //    Codex, guidelines, knowledge) is kept; everything operational is cleared.
+  [REPORTS, WORKLOGS, TASKS, FLAGS, WEEKLY, WEEKLY_COMMENTS, ENGRAM, EVAL_SETS,
+   PROPOSALS, MOMS, AI_RUNS, ACTIVITY, FARM_AGENTS, KPIS].forEach((a) => { if (Array.isArray(a)) a.length = 0; });
+  for (const k of Object.keys(DEPT_HEALTH)) delete DEPT_HEALTH[k];
+  if (EXPENSE) { EXPENSE.byTool = []; EXPENSE.byPerson = []; EXPENSE.monthlyTrend = []; }
+
   window.CDC = {
     today, fmt, daysAgo,
     ROLES, USERS,
