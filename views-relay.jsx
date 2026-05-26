@@ -175,21 +175,38 @@ function MomLoader({ open, onClose, currentUser, nav }) {
             { id: 'mi-3', text: 'Estimate Pinecone paid-tier rollout impact for GenAI', owner: 'NW0001778', ownerInferReason: 'Pushpa owns GenAI (manager_id match)', due: '2026-05-29', confidence: 0.91 },
           ];
     }
-    setActionItems(items);
+    // Keep the AI's original assignee so we can record what humans changed.
+    setActionItems(items.map((it) => ({ ...it, aiOwner: it.aiOwner || it.owner })));
     setStep('review');
   }
+
+  // Admin / Product Owner (L3) can reassign the owner before committing.
+  const canReassign = ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  function reassign(id, ownerId) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, owner: ownerId } : it)); }
 
   function decideItem(id, action) { setDecisions((d) => ({ ...d, [id]: action })); }
   function commitAll() {
     // Approved items → tasks (source = mom). Dispatcher already set the owner.
     const approved = actionItems.filter((it) => decisions[it.id] !== 'rejected');
     const CDC = window.CDC;
+    const nm = (id) => (CDC.lookup.user(id) || {}).name || id;
     approved.forEach((it, i) => {
       const owner = CDC.lookup && CDC.lookup.user(it.owner);
       CDC.db && CDC.db.addTask({
         id: `task-mom-${Date.now()}-${i}`, title: it.text, status: 'ACTIVE', reason: 'From MOM',
         sourceReports: [], owner: it.owner, dept: owner ? owner.dept : currentUser.dept,
         created: CDC.fmt ? CDC.fmt(CDC.today) : '', confidence: it.confidence, source: 'mom', due: it.due,
+        aiSuggestedOwner: it.aiOwner, ownerInferReason: it.ownerInferReason,
+      });
+      // Dispatcher self-evolution signal: store AI suggestion vs human's final.
+      const changed = it.owner !== it.aiOwner;
+      CDC.db && CDC.db.logInteraction({
+        agent: 'Dispatcher', flow: 'mom_dispatch', inputRef: `MOM action: ${it.text.slice(0, 60)}`,
+        action: changed ? 'edit' : 'accept',
+        draft: `Assignee: ${nm(it.aiOwner)} — ${it.ownerInferReason}`,
+        final: `Assignee: ${nm(it.owner)}`,
+        reason: changed ? `Reassigned ${nm(it.aiOwner)} → ${nm(it.owner)} by ${currentUser.name}` : 'Accepted as suggested',
+        userId: currentUser.id,
       });
     });
     setStep('done');
@@ -256,7 +273,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                 <strong>Scribe</strong> found <strong>{actionItems.length}</strong> action items. <strong>Dispatcher</strong> proposed owners using the people knowledge base. Review each, edit if needed, approve.
               </div>
               {actionItems.map((it) => (
-                <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} />
+                <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} />
               ))}
             </div>
           )}
@@ -308,8 +325,9 @@ function MomLoader({ open, onClose, currentUser, nav }) {
 }
 window.MomLoader = MomLoader;
 
-function ActionItem({ item, state, onDecide }) {
+function ActionItem({ item, state, onDecide, canReassign, onReassign, people }) {
   const owner = window.CDC.lookup.user(item.owner);
+  const changed = item.aiOwner && item.owner !== item.aiOwner;
   const [editing, setEditing] = useStP(false);
   const [text, setText] = useStP(item.text);
   return (
@@ -330,7 +348,16 @@ function ActionItem({ item, state, onDecide }) {
       <div className="row" style={{ gap: 8, fontSize: 11.5, color: 'var(--text-muted)' }}>
         <div className="row" style={{ gap: 4 }}>
           <Avatar user={owner} size={16} />
-          <span style={{ fontWeight: 500 }}>{owner?.name}</span>
+          {canReassign && !state ? (
+            <select value={item.owner} onChange={(e) => onReassign(item.id, e.target.value)}
+              style={{ fontSize: 11.5, padding: '2px 4px', borderRadius: 5, border: '1px solid var(--border)', maxWidth: 180 }}
+              title="Reassign (Admin / Product Owner)">
+              {(people || []).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level}</option>)}
+            </select>
+          ) : (
+            <span style={{ fontWeight: 500 }}>{owner?.name}</span>
+          )}
+          {changed && <span className="pill" data-tone="amber" style={{ fontSize: 9 }}>reassigned · AI: {(window.CDC.lookup.user(item.aiOwner) || {}).name}</span>}
         </div>
         <span className="muted">·</span>
         <span className="muted">due <span className="mono">{item.due}</span></span>
