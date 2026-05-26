@@ -116,6 +116,10 @@
       if (Array.isArray(window.CDC.REPORTS)) window.CDC.REPORTS.unshift(report);
       await remote(() => sb.from('daily_reports').insert({ id: report.id, author_id: report.author, dept: report.dept, sub: report.sub, report_date: report.date, data: report }));
     },
+    async addWorklog(w) {
+      if (Array.isArray(window.CDC.WORKLOGS)) window.CDC.WORKLOGS.unshift(w);
+      await remote(() => sb.from('worklogs').insert({ id: w.id, owner_id: w.userId, dept: w.dept, work_date: w.date, data: w }));
+    },
     async updateTask(id, status) {
       const t = (window.CDC.TASKS || []).find((x) => x.id === id); if (t) t.status = status;
       await remote(() => sb.from('tasks').update({ status, data: t || { id, status } }).eq('id', id));

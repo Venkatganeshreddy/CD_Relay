@@ -315,6 +315,21 @@ function SubmitView({ tweaks, currentUser, nav }) {
       items, kpiHits: [], source: 'native_form',
     };
     if (CDC.db) CDC.db.addDailyReport(report);
+
+    // One worklog per task (today) — drives Missing-reports + weekly/monthly rollups.
+    tasks.forEach((t, i) => {
+      const w = {
+        id: `wl-${Date.now()}-${i}`, userId: currentUser.id, userName: currentUser.name, userInitials: currentUser.initials,
+        empId: currentUser.id, dept: currentUser.dept, sub: currentUser.sub || null,
+        date: today, daysAgo: 0,
+        products: t.products || [], stacks: t.stacks || [myStack],
+        outputCategory: t.outputCategory || 'Other', taskCategory: t.taskCategory || '',
+        outputCount: t.outputCount || 0, template: t.template || {},
+        hours: Number(t.hours) || 0, status: t.status || 'Done', reason: t.reason || '',
+        submittedAt: 'just now',
+      };
+      if (CDC.db) CDC.db.addWorklog(w);
+    });
   }
 
   function restart() {
