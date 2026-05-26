@@ -558,21 +558,87 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
 
 // ── Admin (placeholder) ─────────────────────────────────────────────────
 function AdminView({ tweaks, currentUser }) {
+  const CDC = window.CDC;
+  const [view, setView] = useState_a(null);          // null | 'employees'
+  const [rows, setRows] = useState_a(null);
+  const [sel, setSel] = useState_a(null);
+  const [loading, setLoading] = useState_a(false);
+  const [source, setSource] = useState_a('');
+
+  async function openEmployees() {
+    setView('employees'); setSel(null); setLoading(true);
+    const fallback = () => CDC.USERS.map((u) => ({ id: u.id, name: u.name, email: '(sign in to load)', role_level: u.level, dept: u.dept, sub: u.sub, title: u.title, manager_id: u.managerId, is_cross_dept: u.crossDept }));
+    try {
+      if (window.RELAY_SB) {
+        const { data, error } = await window.RELAY_SB.from('employees')
+          .select('id,email,name,role_level,dept,sub,title,manager_id,is_cross_dept').order('role_level');
+        if (!error && data && data.length) { setRows(data); setSource('Supabase (live)'); }
+        else { setRows(fallback()); setSource('bundled'); }
+      } else { setRows(fallback()); setSource('bundled'); }
+    } catch (e) { setRows(fallback()); setSource('bundled'); }
+    setLoading(false);
+  }
+
+  const nameOf = (id) => (rows || []).find((r) => r.id === id)?.name || (CDC.lookup.user(id) || {}).name || '—';
+
+  if (view === 'employees') {
+    return (
+      <div className="fadein">
+        <SectionHeader title="Employees" subtitle={`Pulled from the Supabase employees table · ${rows ? rows.length : 0} records · source: ${source || '…'}`}
+          actions={<button className="btn" data-size="sm" data-variant="ghost" onClick={() => setView(null)}>← Admin</button>} />
+        {loading && <div className="muted">Loading…</div>}
+        <div className="split" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="split-list">
+            {(rows || []).map((r) => (
+              <div key={r.id} className="list-row" data-active={sel === r.id} onClick={() => setSel(r.id)}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{r.name}</div>
+                  <Pill tone={r.role_level === 'L3' ? 'accent' : r.role_level === 'Admin' ? 'amber' : 'outline'}>{r.role_level}</Pill>
+                </div>
+                <div className="muted mono" style={{ fontSize: 10.5 }}>{r.id} · {r.sub || (CDC.lookup.dept(r.dept) || {}).name || r.dept}</div>
+              </div>
+            ))}
+          </div>
+          <div className="split-pane">
+            {sel ? (() => {
+              const r = rows.find((x) => x.id === sel);
+              return (
+                <div className="detail-b">
+                  <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>{r.name}</h3>
+                  <dl className="kv" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '8px 12px', fontSize: 13 }}>
+                    <dt className="muted">EMP ID</dt><dd className="mono">{r.id}</dd>
+                    <dt className="muted">Email</dt><dd className="mono">{r.email}</dd>
+                    <dt className="muted">Role level</dt><dd>{r.role_level}</dd>
+                    <dt className="muted">Title</dt><dd>{r.title}</dd>
+                    <dt className="muted">Department</dt><dd>{(CDC.lookup.dept(r.dept) || {}).name || r.dept || '—'}</dd>
+                    <dt className="muted">Sub Department</dt><dd>{r.sub || '—'}</dd>
+                    <dt className="muted">Reports to</dt><dd>{r.manager_id ? nameOf(r.manager_id) : '—'}</dd>
+                    <dt className="muted">Cross-dept</dt><dd>{r.is_cross_dept ? 'yes' : 'no'}</dd>
+                  </dl>
+                </div>
+              );
+            })() : <div className="empty">Select an employee.</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fadein">
-      <SectionHeader title="Admin" subtitle="Master data, imports, MCP tokens, system settings." />
+      <SectionHeader title="Admin" subtitle="Master data, employees, system settings." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[
-          { t: 'Master data', d: 'Business directions, products, departments, sub-teams', icon: 'admin' },
-          { t: 'Employees', d: '96 users · 5 roles · last sync 06:00 IST', icon: 'admin' },
-          { t: 'KPI catalog', d: '24 KPIs · 8 tracked · formulas versioned server-side', icon: 'dashboard' },
-          { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST', icon: 'sheet' },
-          { t: 'MCP tokens', d: '3 active · used by Claude Desktop / Cursor', icon: 'plug' },
-          { t: 'Audit log', d: 'Every read & write · ranged search', icon: 'lock' },
+          { t: 'Employees', d: `${CDC.USERS.length} users · click to view details from Supabase`, action: openEmployees },
+          { t: 'Master data', d: 'Business directions, products, departments, sub-teams' },
+          { t: 'KPI catalog', d: 'KPIs · formulas versioned server-side' },
+          { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST' },
+          { t: 'MCP tokens', d: 'Personal access tokens for Claude Desktop / Cursor' },
+          { t: 'Audit log', d: 'Every read & write · ranged search' },
         ].map((c, i) => (
           <Card key={i} title={c.t}>
             <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{c.d}</div>
-            <button className="btn" data-size="sm">Open →</button>
+            <button className="btn" data-size="sm" onClick={c.action || undefined}>Open →</button>
           </Card>
         ))}
       </div>
