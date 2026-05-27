@@ -386,7 +386,8 @@ function TasksView({ tweaks, currentUser }) {
 
   const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
   const [statusOv, setStatusOv] = useState_o({});      // id -> status (forces re-render after update)
-  const [filter, setFilter] = useState_o('MINE');      // everyone opens to their own tasks
+  // Managers open to their direct reports' tasks (L3 → L2s, L2 → their L1s); ICs open to their own.
+  const [filter, setFilter] = useState_o(reportees.length ? 'TEAM' : 'MINE');
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [editing, setEditing] = useState_o(null);
   const [creating, setCreating] = useState_o(false);

@@ -1202,9 +1202,21 @@
   }
   function filterTasks(userId) {
     const s = scopeForUser(userId);
-    if (s.kind === 'all') return TASKS;
+    if (s.kind === 'all') return TASKS;            // L3 / Admin: whole org (all L2s and below)
     if (s.kind === 'dept') return TASKS.filter((t) => t.dept === s.dept);
-    if (s.kind === 'sub') return TASKS.filter((t) => t.dept === s.dept);
+    if (s.kind === 'sub') {
+      // L2 / L1: own tasks + everyone in their management subtree (their reports).
+      const inSubtree = (ownerId) => {
+        if (ownerId === userId) return true;
+        let u = USERS.find((x) => x.id === ownerId), guard = 0;
+        while (u && u.managerId && guard++ < 10) {
+          if (u.managerId === userId) return true;
+          u = USERS.find((x) => x.id === u.managerId);
+        }
+        return false;
+      };
+      return TASKS.filter((t) => inSubtree(t.owner));
+    }
     return [];
   }
   function filterFlags(userId) {
