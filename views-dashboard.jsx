@@ -53,8 +53,10 @@ function Dashboard({ tweaks, currentUser, nav }) {
     };
   });
 
-  // Dynamic greeting — real time-of-day + live IST date/time.
-  const now = new Date();
+  // Dynamic greeting — real time-of-day + live IST date/time, ticking every 30s
+  // so it flips morning → afternoon → evening as time passes.
+  const [now, setNow] = useState_d(new Date());
+  useEffect_d(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
   const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
   const hourIST = Number(ist({ hour: '2-digit', hour12: false }));
   const greet = hourIST < 12 ? 'Good morning' : hourIST < 17 ? 'Good afternoon' : hourIST < 21 ? 'Good evening' : 'Working late';
