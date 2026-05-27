@@ -138,6 +138,14 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [transcript, setTranscript] = useStP('');
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
+  const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
+
+  function readFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setTranscript(String(e.target.result || ''));
+    reader.readAsText(file);
+  }
 
   // Dispatcher — map Scribe's assignee hint to a real employee (manager_id-aware).
   function dispatcherAssign(hint) {
@@ -175,14 +183,17 @@ function MomLoader({ open, onClose, currentUser, nav }) {
             { id: 'mi-3', text: 'Estimate Pinecone paid-tier rollout impact for GenAI', owner: 'NW0001778', ownerInferReason: 'Pushpa owns GenAI (manager_id match)', due: '2026-05-29', confidence: 0.91 },
           ];
     }
-    // Keep the AI's original assignee so we can record what humans changed.
-    setActionItems(items.map((it) => ({ ...it, aiOwner: it.aiOwner || it.owner })));
+    // Keep the AI's original suggestion (owner/text/due) so we can record what humans changed.
+    setActionItems(items.map((it) => ({ ...it, aiOwner: it.aiOwner || it.owner, aiText: it.text, aiDue: it.due })));
     setStep('review');
   }
 
   // Admin / Product Owner (L3) can reassign the owner before committing.
   const canReassign = ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
   function reassign(id, ownerId) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, owner: ownerId } : it)); }
+  function editText(id, text) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, text } : it)); }
+  function editDue(id, due) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, due } : it)); }
+  function setRejectNote(id, note) { setRejectNotes((n) => ({ ...n, [id]: note })); }
 
   function decideItem(id, action) { setDecisions((d) => ({ ...d, [id]: action })); }
   function commitAll() {
@@ -190,32 +201,43 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     const approved = actionItems.filter((it) => decisions[it.id] !== 'rejected');
     const CDC = window.CDC;
     const nm = (id) => (CDC.lookup.user(id) || {}).name || id;
+    const momId = `mom-${Date.now()}`;
     approved.forEach((it, i) => {
       const owner = CDC.lookup && CDC.lookup.user(it.owner);
+      // Approved action items land on the owner's dashboard as Backlog (status per MoM spec).
       CDC.db && CDC.db.addTask({
-        id: `task-mom-${Date.now()}-${i}`, title: it.text, status: 'ACTIVE', reason: 'From MOM',
+        id: `task-mom-${Date.now()}-${i}`, title: it.text, status: 'BACKLOG', reason: 'From MOM',
         sourceReports: [], owner: it.owner, dept: owner ? owner.dept : currentUser.dept,
         created: CDC.fmt ? CDC.fmt(CDC.today) : '', confidence: it.confidence, source: 'mom', due: it.due,
         aiSuggestedOwner: it.aiOwner, ownerInferReason: it.ownerInferReason,
+        uploadedBy: currentUser.id, momId,
       });
-      // Dispatcher self-evolution signal: store AI suggestion vs human's final.
-      const changed = it.owner !== it.aiOwner;
+      // Dispatcher self-evolution signal: record every human change (owner / text / due) vs the AI draft.
+      const ownerChanged = it.owner !== it.aiOwner;
+      const textChanged = it.text !== it.aiText;
+      const dueChanged = it.due !== it.aiDue;
+      const changes = [];
+      if (ownerChanged) changes.push(`owner ${nm(it.aiOwner)} → ${nm(it.owner)}`);
+      if (textChanged) changes.push('text edited');
+      if (dueChanged) changes.push(`due ${it.aiDue} → ${it.due}`);
+      const anyChange = changes.length > 0;
       CDC.db && CDC.db.logInteraction({
-        agent: 'Dispatcher', flow: 'mom_dispatch', inputRef: `MOM action: ${it.text.slice(0, 60)}`,
-        action: changed ? 'edit' : 'accept',
-        draft: `Assignee: ${nm(it.aiOwner)} — ${it.ownerInferReason}`,
-        final: `Assignee: ${nm(it.owner)}`,
-        reason: changed ? `Reassigned ${nm(it.aiOwner)} → ${nm(it.owner)} by ${currentUser.name}` : 'Accepted as suggested',
+        agent: 'Dispatcher', flow: 'mom_dispatch', inputRef: `MOM action: ${it.aiText.slice(0, 60)}`,
+        action: anyChange ? 'edit' : 'accept',
+        draft: `${it.aiText} · owner ${nm(it.aiOwner)} · due ${it.aiDue}`,
+        final: `${it.text} · owner ${nm(it.owner)} · due ${it.due}`,
+        reason: anyChange ? `${changes.join('; ')} by ${currentUser.name}` : 'Accepted as suggested',
         userId: currentUser.id,
       });
     });
-    // Track the whole MOM: what AI suggested vs what was concluded/approved.
+    // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const mom = {
-      id: `mom-${Date.now()}`, title: (actionItems[0] ? actionItems[0].text : 'MOM').slice(0, 60),
+      id: momId, title: (actionItems[0] ? actionItems[0].text : 'MOM').slice(0, 60),
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
-      suggested: actionItems.map((it) => ({ text: it.text, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
-      concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner), changed: it.owner !== it.aiOwner })),
-      rejected: actionItems.filter((it) => decisions[it.id] === 'rejected').map((it) => it.text),
+      suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
+      concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
+        changed: it.owner !== it.aiOwner || it.text !== it.aiText || it.due !== it.aiDue })),
+      rejected: actionItems.filter((it) => decisions[it.id] === 'rejected').map((it) => ({ text: it.text, note: rejectNotes[it.id] || '' })),
       actionItems: approved.map((it) => ({ text: it.text, owner: it.owner })),
     };
     CDC.db && CDC.db.addMom(mom);
@@ -223,7 +245,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     setTimeout(() => { onClose(); resetState(); nav.go('second-brain'); }, 1200);
   }
   function resetState() {
-    setStep('paste'); setTranscript(''); setActionItems([]); setDecisions({});
+    setStep('paste'); setTranscript(''); setActionItems([]); setDecisions({}); setRejectNotes({});
   }
 
   if (!open) return null;
@@ -245,7 +267,11 @@ function MomLoader({ open, onClose, currentUser, nav }) {
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="muted" style={{ fontSize: 11.5 }}>{transcript.length} chars · {transcript.split(/\s+/).filter(Boolean).length} words</div>
                 <div className="row" style={{ gap: 6 }}>
-                  <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setTranscript(SAMPLE_TRANSCRIPT)}>Use sample</button>
+                  <label className="btn" data-size="sm" data-variant="ghost" style={{ cursor: 'pointer' }}>
+                    <Icon name="sheet" size={11} /> Upload .vtt / .txt
+                    <input type="file" accept=".vtt,.txt,text/plain,text/vtt" style={{ display: 'none' }}
+                      onChange={(e) => { readFile(e.target.files[0]); e.target.value = ''; }} />
+                  </label>
                   <button className="btn" data-size="sm" data-variant="primary" onClick={runPipeline}><Icon name="sparkles" size={11} /> Run pipeline</button>
                 </div>
               </div>
@@ -283,7 +309,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                 <strong>Scribe</strong> found <strong>{actionItems.length}</strong> action items. <strong>Dispatcher</strong> proposed owners using the people knowledge base. Review each, edit if needed, approve.
               </div>
               {actionItems.map((it) => (
-                <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} />
+                <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} onEditText={editText} onEditDue={editDue} rejectNote={rejectNotes[it.id] || ''} onRejectNote={setRejectNote} />
               ))}
             </div>
           )}
@@ -335,22 +361,23 @@ function MomLoader({ open, onClose, currentUser, nav }) {
 }
 window.MomLoader = MomLoader;
 
-function ActionItem({ item, state, onDecide, canReassign, onReassign, people }) {
+function ActionItem({ item, state, onDecide, canReassign, onReassign, people, onEditText, onEditDue, rejectNote, onRejectNote }) {
   const owner = window.CDC.lookup.user(item.owner);
-  const changed = item.aiOwner && item.owner !== item.aiOwner;
+  const ownerChanged = item.aiOwner && item.owner !== item.aiOwner;
+  const textChanged = item.aiText && item.text !== item.aiText;
+  const dueChanged = item.aiDue && item.due !== item.aiDue;
   const [editing, setEditing] = useStP(false);
-  const [text, setText] = useStP(item.text);
   return (
     <div className="mom-action-item" data-state={state || 'pending'}>
       <div className="row" style={{ alignItems: 'flex-start', gap: 8 }}>
-        <span className="engram-action" data-action="edit" style={{ display: state === 'rejected' ? 'inline-flex' : (state === 'approved' ? 'inline-flex' : 'inline-flex'), background: state === 'approved' ? 'var(--green-soft)' : state === 'rejected' ? 'var(--red-soft)' : 'var(--accent-soft)', color: state === 'approved' ? 'var(--green)' : state === 'rejected' ? 'var(--red)' : 'var(--accent)' }}>
+        <span className="engram-action" data-action="edit" style={{ display: 'inline-flex', background: state === 'approved' ? 'var(--green-soft)' : state === 'rejected' ? 'var(--red-soft)' : 'var(--accent-soft)', color: state === 'approved' ? 'var(--green)' : state === 'rejected' ? 'var(--red)' : 'var(--accent)' }}>
           {state || 'pending'}
         </span>
         <div style={{ flex: 1, fontSize: 13 }}>
           {editing ? (
-            <input className="input-text" value={text} onChange={(e) => setText(e.target.value)} onBlur={() => setEditing(false)} autoFocus />
+            <input className="input-text" value={item.text} onChange={(e) => onEditText(item.id, e.target.value)} onBlur={() => setEditing(false)} autoFocus />
           ) : (
-            <span onClick={() => setEditing(true)}>{text}</span>
+            <span onClick={() => !state && setEditing(true)} title="Click to edit">{item.text}{textChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9, marginLeft: 6 }}>edited</span>}</span>
           )}
         </div>
         <ConfChip value={item.confidence} show={true} />
@@ -367,10 +394,18 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people }) 
           ) : (
             <span style={{ fontWeight: 500 }}>{owner?.name}</span>
           )}
-          {changed && <span className="pill" data-tone="amber" style={{ fontSize: 9 }}>reassigned · AI: {(window.CDC.lookup.user(item.aiOwner) || {}).name}</span>}
+          {ownerChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9 }}>reassigned · AI: {(window.CDC.lookup.user(item.aiOwner) || {}).name}</span>}
         </div>
         <span className="muted">·</span>
-        <span className="muted">due <span className="mono">{item.due}</span></span>
+        <span className="row muted" style={{ gap: 4, alignItems: 'center' }}>due
+          {!state ? (
+            <input type="date" value={item.due} onChange={(e) => onEditDue(item.id, e.target.value)}
+              style={{ fontSize: 11.5, padding: '1px 4px', borderRadius: 5, border: '1px solid var(--border)' }} title="Edit due date" />
+          ) : (
+            <span className="mono">{item.due}</span>
+          )}
+          {dueChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9 }}>AI: {item.aiDue}</span>}
+        </span>
         <span style={{ flex: 1 }} />
         {!state && (
           <div className="row" style={{ gap: 4 }}>
@@ -382,6 +417,10 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people }) 
           <button className="btn" data-size="sm" data-variant="ghost" onClick={() => onDecide(item.id, undefined)}>Undo</button>
         )}
       </div>
+      {state === 'rejected' && (
+        <input className="input-text" value={rejectNote} onChange={(e) => onRejectNote(item.id, e.target.value)}
+          placeholder="Rejection note (why was this dropped?)…" style={{ fontSize: 12, marginTop: 2 }} />
+      )}
       <div className="muted" style={{ fontSize: 11, fontStyle: 'italic' }}>
         <Icon name="sparkles" size={10} /> Dispatcher: {item.ownerInferReason}
       </div>

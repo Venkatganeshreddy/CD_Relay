@@ -76,7 +76,7 @@ function WorkflowsTab({ canEdit }) {
               {f.outputs.map((o, i) => <span key={i} className="code" style={{ fontSize: 10.5 }}>{o}</span>)}
             </div>
             <div className="row" style={{ marginTop: 10, gap: 6 }}>
-              <button className="btn" data-size="sm" data-variant="ghost">View flow →</button>
+              <button className="btn" data-size="sm" data-variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(f); }}>View flow →</button>
               {canEdit && <button className="btn" data-size="sm" data-variant="ghost"><Icon name="edit" size={11} /> Edit</button>}
             </div>
           </div>
@@ -92,6 +92,31 @@ function WorkflowsTab({ canEdit }) {
               <dt>Agents</dt><dd>{selected.agents.join(' → ')}</dd>
               <dt>Outputs</dt><dd>{selected.outputs.map((o) => <span key={o} className="code" style={{ marginRight: 6 }}>{o}</span>)}</dd>
             </dl>
+            {selected.steps && (() => {
+              const doneCount = selected.steps.filter((s) => s.done).length;
+              return (
+                <div className="col" style={{ gap: 8 }}>
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: 13 }}>Flow steps</strong>
+                    <Pill tone={doneCount === selected.steps.length ? 'green' : 'amber'}>{doneCount}/{selected.steps.length} done</Pill>
+                  </div>
+                  {selected.steps.map((s) => (
+                    <div key={s.n} className="row" style={{ gap: 10, alignItems: 'flex-start', padding: '8px 10px', background: 'var(--panel)', borderRadius: 6, opacity: s.done ? 1 : 0.6 }}>
+                      <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, background: s.done ? 'var(--green-soft)' : 'var(--border)', color: s.done ? 'var(--green)' : 'var(--text-muted)' }}>
+                        {s.done ? <Icon name="check" size={11} stroke={2.4} /> : s.n}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                          <strong style={{ fontSize: 12.5 }}>{s.title}</strong>
+                          <Pill tone={s.done ? 'green' : 'outline'} dot>{s.done ? 'done' : 'pending'}</Pill>
+                        </div>
+                        <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{s.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="muted" style={{ fontSize: 12, padding: 12, background: 'var(--panel)', borderRadius: 6 }}>
               <strong>Edit-then-validate flow:</strong> changes to the workflow definition run against a synthetic input in beta first. Passes the smoke test → activate. Fails → diff shown to author, change not applied.
             </div>

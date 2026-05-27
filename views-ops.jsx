@@ -385,6 +385,23 @@ function TasksView({ tweaks, currentUser }) {
     CDC.db.updateTask(id, 'REJECTED');
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'reject', userId: currentUser.id });
   }
+  // Mark blocked → notify the uploader + the owner's reporting hierarchy (manager chain).
+  function block(id) {
+    const t = allTasks.find((x) => x.id === id);
+    CDC.db.updateTask(id, 'BLOCKED');
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_block', inputRef: `Task ${id}`, action: 'edit',
+      reason: `Marked blocked by ${currentUser.name}`, userId: currentUser.id });
+    const recipients = [];
+    if (t && t.uploadedBy) recipients.push(t.uploadedBy);
+    let u = t && CDC.lookup.user(t.owner);
+    let guard = 0;
+    while (u && u.managerId && guard++ < 8) { recipients.push(u.managerId); u = CDC.lookup.user(u.managerId); }
+    CDC.db.notify && CDC.db.notify(recipients, {
+      text: `🚫 Task blocked: "${t ? t.title : id}" — flagged by ${currentUser.name}`,
+      icon: '🚫', kind: 'task_blocked', refId: id,
+    });
+    setDecisions((d) => ({ ...d, [id]: 'blocked' }));
+  }
 
   const suggested = allTasks.filter((t) => t.status === 'SUGGESTED');
   const reviewed = Object.keys(decisions).length;
@@ -403,7 +420,7 @@ function TasksView({ tweaks, currentUser }) {
       />
 
       <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        {['MINE', 'SUGGESTED', 'ACTIVE', 'DONE', 'ALL'].map((f) => (
+        {['MINE', 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'BLOCKED', 'DONE', 'ALL'].map((f) => (
           <button
             key={f}
             className="btn"
@@ -467,7 +484,12 @@ function TasksView({ tweaks, currentUser }) {
                         <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
                       </div>
                     ) : (
-                      <Pill tone={t.status === 'ACTIVE' ? 'blue' : 'outline'} dot>{t.status.toLowerCase()}</Pill>
+                      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                        <Pill tone={t.status === 'ACTIVE' ? 'blue' : t.status === 'BLOCKED' ? 'red' : t.status === 'DONE' ? 'green' : 'amber'} dot>{t.status.toLowerCase()}</Pill>
+                        {(t.status === 'ACTIVE' || t.status === 'BACKLOG') && (
+                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => block(t.id)} title="Mark blocked — notifies uploader + reporting hierarchy"><Icon name="flag" size={11} /> Block</button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>

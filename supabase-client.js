@@ -146,6 +146,20 @@
       await remote(() => sb.from('weekly_comments').insert({ id: row.id, weekly_id: weeklyId, author_id: author, data: row }));
       return row;
     },
+    // Append an entry to the live activity feed (also used as the notification sink).
+    async addActivity(act) {
+      const row = { id: act.id || rid('act-'), kind: act.kind || 'event', ts: act.ts || nowStr().slice(11, 16),
+        text: act.text || '', icon: act.icon || '•', to: act.to || null, refId: act.refId || null };
+      if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(row);
+      await remote(() => sb.from('activity').insert({ id: row.id, data: row }));
+      return row;
+    },
+    // Fan out a notification (e.g. task blocked) to one feed entry per recipient.
+    async notify(recipients, { text, icon, kind, refId }) {
+      const list = [...new Set((recipients || []).filter(Boolean))];
+      for (const to of list) await this.addActivity({ kind: kind || 'notify', text, icon: icon || '🔔', to, refId });
+      return list;
+    },
   };
 
   // ── Agents (Phase 5): real LLM work via the relay-agent Edge Function. Each
