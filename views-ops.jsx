@@ -364,80 +364,136 @@ function renderInlineWithCites(text) {
 // ════════════════════════════════════════════════════════════════════════
 // TASK TRIAGE
 // ════════════════════════════════════════════════════════════════════════
+// Task board — every person can create, assign, and update tasks; managers
+// get team + per-reportee visibility. Mirrors the Task Flow spec.
+const TASK_STATUSES = [
+  { v: 'BACKLOG', label: 'Backlog', tone: 'amber' },
+  { v: 'ACTIVE', label: 'In Progress', tone: 'blue' },
+  { v: 'BLOCKED', label: 'Blocked', tone: 'red' },
+  { v: 'DONE', label: 'Done', tone: 'green' },
+];
+const statusMeta = (s) => TASK_STATUSES.find((x) => x.v === s) || { label: (s || '').toLowerCase(), tone: 'outline' };
+
 function TasksView({ tweaks, currentUser }) {
   const CDC = window.CDC;
-  const allTasks = CDC.filterTasks(currentUser.id);
-  const [decisions, setDecisions] = useState_o({}); // id -> 'approved' | 'rejected'
-  const [filter, setFilter] = useState_o(['L0', 'L1', 'TEAM_MEMBER'].includes(currentUser.role) ? 'MINE' : 'SUGGESTED');
+  const me = currentUser;
+  const todayStr = CDC.fmt(CDC.today);
+  const allTasks = CDC.filterTasks(me.id);
+  const reportees = (CDC.USERS || []).filter((u) => u.managerId === me.id);
+  const isManager = me.level === 'L2' || me.level === 'L3' || me.level === 'Admin' ||
+    ['L2', 'L3', 'ADMIN', 'PRODUCT_OWNER', 'DEPARTMENT_LEAD', 'SUB_LEAD', 'CENTRAL_OPS'].includes(me.role);
+  const reporteeIds = new Set(reportees.map((r) => r.id));
+
+  const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
+  const [statusOv, setStatusOv] = useState_o({});      // id -> status (forces re-render after update)
+  const [filter, setFilter] = useState_o('MINE');      // everyone opens to their own tasks
+  const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [editing, setEditing] = useState_o(null);
+  const [creating, setCreating] = useState_o(false);
+
+  const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
+
+  const tabs = ['MINE', ...(reportees.length ? ['TEAM'] : []), 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'BLOCKED', 'OVERDUE', 'DONE', 'ALL'];
+  const matchesTab = (t, f) =>
+    f === 'ALL' ? true :
+    f === 'MINE' ? t.owner === me.id :
+    f === 'TEAM' ? reporteeIds.has(t.owner) :
+    f === 'OVERDUE' ? isOverdue(t) :
+    t.status === f;
 
   const list = allTasks
-    .filter((t) => filter === 'ALL' ? true : filter === 'MINE' ? t.owner === currentUser.id : t.status === filter)
+    .filter((t) => matchesTab(t, filter))
+    .filter((t) => !reporteeSel || t.owner === reporteeSel)
     .map((t) => ({ ...t, _decision: decisions[t.id] }));
 
   function approve(id) {
     setDecisions((d) => ({ ...d, [id]: 'approved' }));
     CDC.db.updateTask(id, 'ACTIVE');
-    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'accept', userId: currentUser.id });
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'accept', userId: me.id });
   }
   function reject(id) {
     setDecisions((d) => ({ ...d, [id]: 'rejected' }));
     CDC.db.updateTask(id, 'REJECTED');
-    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'reject', userId: currentUser.id });
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'reject', userId: me.id });
   }
   // Mark blocked → notify the uploader + the owner's reporting hierarchy (manager chain).
   function block(id) {
     const t = allTasks.find((x) => x.id === id);
     CDC.db.updateTask(id, 'BLOCKED');
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_block', inputRef: `Task ${id}`, action: 'edit',
-      reason: `Marked blocked by ${currentUser.name}`, userId: currentUser.id });
+      reason: `Marked blocked by ${me.name}`, userId: me.id });
     const recipients = [];
     if (t && t.uploadedBy) recipients.push(t.uploadedBy);
     let u = t && CDC.lookup.user(t.owner);
     let guard = 0;
     while (u && u.managerId && guard++ < 8) { recipients.push(u.managerId); u = CDC.lookup.user(u.managerId); }
     CDC.db.notify && CDC.db.notify(recipients, {
-      text: `🚫 Task blocked: "${t ? t.title : id}" — flagged by ${currentUser.name}`,
+      text: `🚫 Task blocked: "${t ? t.title : id}" — flagged by ${me.name}`,
       icon: '🚫', kind: 'task_blocked', refId: id,
     });
-    setDecisions((d) => ({ ...d, [id]: 'blocked' }));
+    setStatusOv((s) => ({ ...s, [id]: 'BLOCKED' }));
+  }
+  function setStatus(id, status) {
+    if (status === 'BLOCKED') { block(id); return; }
+    CDC.db.updateTask(id, status);
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_status', inputRef: `Task ${id}`, action: 'edit',
+      reason: `Status → ${statusMeta(status).label} by ${me.name}`, userId: me.id });
+    setStatusOv((s) => ({ ...s, [id]: status }));
+  }
+  function createTask(form) {
+    const owner = CDC.lookup.user(form.owner);
+    const task = {
+      id: `task-${Date.now()}`, title: form.title.trim(), status: form.status,
+      reason: 'Manual', sourceReports: [], owner: form.owner,
+      dept: owner ? owner.dept : me.dept, created: todayStr, due: form.due,
+      confidence: null, source: 'manual', createdBy: me.id,
+    };
+    CDC.db.addTask(task);
+    CDC.db.logInteraction({ agent: '—', flow: 'task_create', inputRef: `Task ${task.id}`, action: 'create',
+      reason: `Created "${task.title}" for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
+    setStatusOv((s) => ({ ...s, [task.id]: form.status }));
+    setCreating(false);
   }
 
   const suggested = allTasks.filter((t) => t.status === 'SUGGESTED');
   const reviewed = Object.keys(decisions).length;
+  const tabCount = (f) =>
+    f === 'ALL' ? allTasks.length :
+    f === 'MINE' ? allTasks.filter((t) => t.owner === me.id).length :
+    f === 'TEAM' ? allTasks.filter((t) => reporteeIds.has(t.owner)).length :
+    f === 'OVERDUE' ? allTasks.filter(isOverdue).length :
+    allTasks.filter((t) => t.status === f).length;
 
   return (
     <div className="fadein">
       <SectionHeader
         title="Tasks"
-        subtitle="Suggested tasks from the Escalation agent. Approve to activate; reject to drop with reason."
+        subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see team + reportee tasks; agent-suggested tasks need triage."
         actions={
           <>
             <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Scan now</button>
-            <button className="btn" data-size="sm" data-variant="primary"><Icon name="check" size={12} /> Approve all (high conf.)</button>
+            <button className="btn" data-size="sm" data-variant="primary" onClick={() => setCreating(true)}><Icon name="check" size={12} /> New task</button>
           </>
         }
       />
 
-      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        {['MINE', 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'BLOCKED', 'DONE', 'ALL'].map((f) => (
-          <button
-            key={f}
-            className="btn"
-            data-size="sm"
-            data-variant={filter === f ? 'primary' : 'ghost'}
-            onClick={() => setFilter(f)}
-          >
+      <div className="row" style={{ gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {tabs.map((f) => (
+          <button key={f} className="btn" data-size="sm" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
             {f.toLowerCase()}
-            <span className="mono muted" style={{ marginLeft: 6 }}>
-              {(f === 'ALL' ? allTasks.length : allTasks.filter((t) => t.status === f).length)}
-            </span>
+            <span className="mono muted" style={{ marginLeft: 6 }}>{tabCount(f)}</span>
           </button>
         ))}
         <span style={{ flex: 1 }} />
-        {filter === 'SUGGESTED' && (
-          <span className="muted" style={{ fontSize: 12 }}>{reviewed} of {suggested.length} triaged</span>
+        {reportees.length > 0 && (
+          <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)}
+            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+            title="Filter by immediate reportee">
+            <option value="">All reportees</option>
+            {reportees.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.level} · {r.sub || r.dept}</option>)}
+          </select>
         )}
+        {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12 }}>{reviewed} of {suggested.length} triaged</span>}
       </div>
 
       <Card pad={false}>
@@ -445,37 +501,46 @@ function TasksView({ tweaks, currentUser }) {
           <thead>
             <tr>
               <th>Task</th>
-              <th>Dept</th>
               <th>Owner</th>
-              <th>Reason</th>
-              <th>Conf.</th>
-              <th style={{ width: 200 }}>Action</th>
+              <th>Due</th>
+              <th>Status</th>
+              <th style={{ width: 210 }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {list.map((t) => {
               const decided = t._decision;
-              const dept = CDC.lookup.dept(t.dept);
+              const status = statusOv[t.id] || t.status;
               const owner = CDC.USERS.find((u) => u.id === t.owner) || CDC.REPORT_AUTHORS.find((a) => a.id === t.owner);
               const ownerName = owner?.name || 'Unassigned';
+              const overdue = isOverdue({ ...t, status });
+              const meta = statusMeta(status);
+              const canSetStatus = status !== 'SUGGESTED';
               return (
                 <tr key={t.id} style={decided === 'rejected' ? { opacity: 0.45 } : decided === 'approved' ? { background: 'color-mix(in oklch, var(--green-soft) 40%, transparent)' } : {}}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{t.title}</div>
-                    {t.sourceReports.length > 0 && (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.source === 'manual' ? 'Manual' : t.reason}</div>
+                    {t.sourceReports && t.sourceReports.length > 0 && (
                       <div style={{ fontSize: 11, marginTop: 2 }}>
-                        {t.sourceReports.map((rid, i) => (
-                          <Cite key={i} n={i + 1} sourceId={rid} lookupFn={(id) => resolveCitation(id)} />
-                        ))}
+                        {t.sourceReports.map((rid, i) => <Cite key={i} n={i + 1} sourceId={rid} lookupFn={(id) => resolveCitation(id)} />)}
                       </div>
                     )}
                   </td>
-                  <td className="muted">{dept?.name || '—'}</td>
                   <td className="muted">{ownerName}</td>
-                  <td className="muted" style={{ maxWidth: 280, fontSize: 12 }}>{t.reason}</td>
-                  <td><ConfChip value={t.confidence} show={tweaks.confidence} /></td>
+                  <td className="muted mono" style={{ fontSize: 12 }}>
+                    {t.due || '—'}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>overdue</span>}
+                  </td>
                   <td>
-                    {t.status === 'SUGGESTED' ? (
+                    {canSetStatus ? (
+                      <select value={status} onChange={(e) => setStatus(t.id, e.target.value)}
+                        style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                        {TASK_STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+                      </select>
+                    ) : <Pill tone="outline" dot>suggested</Pill>}
+                  </td>
+                  <td>
+                    {status === 'SUGGESTED' ? (
                       decided === 'approved' ? <Pill tone="green" dot>approved</Pill> :
                       decided === 'rejected' ? <Pill tone="red" dot>rejected</Pill> :
                       <div className="row" style={{ gap: 4 }}>
@@ -483,24 +548,17 @@ function TasksView({ tweaks, currentUser }) {
                         <button className="btn" data-size="sm" data-variant="danger" onClick={() => reject(t.id)}>Reject</button>
                         <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
                       </div>
-                    ) : (
-                      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                        <Pill tone={t.status === 'ACTIVE' ? 'blue' : t.status === 'BLOCKED' ? 'red' : t.status === 'DONE' ? 'green' : 'amber'} dot>{t.status.toLowerCase()}</Pill>
-                        {(t.status === 'ACTIVE' || t.status === 'BACKLOG') && (
-                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => block(t.id)} title="Mark blocked — notifies uploader + reporting hierarchy"><Icon name="flag" size={11} /> Block</button>
-                        )}
-                      </div>
-                    )}
+                    ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
                   </td>
                 </tr>
               );
             })}
-            {list.length === 0 && (
-              <tr><td colSpan={7}><div className="empty">No {filter.toLowerCase()} tasks.</div></td></tr>
-            )}
+            {list.length === 0 && <tr><td colSpan={5}><div className="empty">No {filter.toLowerCase()} tasks.</div></td></tr>}
           </tbody>
         </table>
       </Card>
+
+      <CreateTaskModal open={creating} onClose={() => setCreating(false)} onCreate={createTask} me={me} people={CDC.USERS} todayStr={todayStr} />
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit suggested task"
         footer={<>
@@ -514,16 +572,6 @@ function TasksView({ tweaks, currentUser }) {
               <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Title</div>
               <input className="tb-search" defaultValue={editing.title} style={{ width: '100%' }} />
             </div>
-            <div className="row" style={{ gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Owner</div>
-                <input className="tb-search" defaultValue={editing.owner} style={{ width: '100%' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Due date</div>
-                <input className="tb-search" type="date" defaultValue="2026-05-29" style={{ width: '100%' }} />
-              </div>
-            </div>
             <div>
               <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Reason (AI-generated)</div>
               <div className="muted" style={{ fontSize: 12 }}>{editing.reason}</div>
@@ -535,6 +583,51 @@ function TasksView({ tweaks, currentUser }) {
   );
 }
 window.TasksView = TasksView;
+
+function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
+  const [title, setTitle] = useState_o('');
+  const [owner, setOwner] = useState_o(me.id);
+  const [due, setDue] = useState_o('');
+  const [status, setStatus] = useState_o('BACKLOG');
+  useEffect_o(() => { if (open) { setTitle(''); setOwner(me.id); setDue(''); setStatus('BACKLOG'); } }, [open]);
+  const label = (s) => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
+  const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+  return (
+    <Modal open={open} onClose={onClose} title="New task"
+      footer={<>
+        <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
+        <button className="btn" data-variant="primary" disabled={!title.trim()} onClick={() => onCreate({ title, owner, due: due || null, status })}>Create task</button>
+      </>}
+    >
+      <div className="col" style={{ gap: 12 }}>
+        <div>
+          <div style={label()}>Task</div>
+          <input className="tb-search" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to get done?" style={inp} />
+        </div>
+        <div className="row" style={{ gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={label()}>Owner</div>
+            <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
+              <option value={me.id}>{me.name} (me)</option>
+              {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={label()}>Due date</div>
+            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
+          </div>
+        </div>
+        <div>
+          <div style={label()}>Status</div>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
+            {TASK_STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+          </select>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+window.CreateTaskModal = CreateTaskModal;
 
 // ════════════════════════════════════════════════════════════════════════
 // DATA QUALITY (FLAGS) INBOX
