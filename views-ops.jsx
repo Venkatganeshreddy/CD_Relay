@@ -393,13 +393,16 @@ function TasksView({ tweaks, currentUser }) {
   const [creating, setCreating] = useState_o(false);
 
   const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
+  // Escalation queue = anything blocked or overdue (what L3 reviews "separately").
+  const isEscalated = (t) => t.status === 'BLOCKED' || isOverdue(t);
 
-  const tabs = ['MINE', ...(reportees.length ? ['TEAM'] : []), 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'BLOCKED', 'OVERDUE', 'DONE', 'ALL'];
+  const tabs = ['MINE', ...(reportees.length ? ['TEAM'] : []), 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', 'ALL'];
   const matchesTab = (t, f) =>
     f === 'ALL' ? true :
     f === 'MINE' ? t.owner === me.id :
     f === 'TEAM' ? reporteeIds.has(t.owner) :
     f === 'OVERDUE' ? isOverdue(t) :
+    f === 'ESCALATED' ? isEscalated(t) :
     t.status === f;
 
   const list = allTasks
@@ -417,22 +420,74 @@ function TasksView({ tweaks, currentUser }) {
     CDC.db.updateTask(id, 'REJECTED');
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_triage', inputRef: `Task ${id}`, action: 'reject', userId: me.id });
   }
-  // Mark blocked → notify the uploader + the owner's reporting hierarchy (manager chain).
+  const nm = (uid) => (CDC.lookup.user(uid) || {}).name || '—';
+  // Owner's reporting line, immediate manager first → up to the top.
+  const managerChain = (ownerId) => {
+    const chain = []; let u = CDC.lookup.user(ownerId), guard = 0;
+    while (u && u.managerId && guard++ < 8) { chain.push(u.managerId); u = CDC.lookup.user(u.managerId); }
+    return chain;
+  };
+  // Mark blocked → notify the IMMEDIATE reporting manager (+ originator). Escalation
+  // climbs the hierarchy from here via escalate() / scanNow().
   function block(id) {
-    const t = allTasks.find((x) => x.id === id);
-    CDC.db.updateTask(id, 'BLOCKED');
+    const t = allTasks.find((x) => x.id === id); if (!t) return;
+    const chain = managerChain(t.owner);
+    const mgr = chain[0] || null;
+    t.blockedAt = new Date().toISOString();
+    t.escalIdx = 0;            // pointer into chain: 0 = immediate manager notified
+    t.escalatedTo = mgr;
+    CDC.db.updateTask(id, 'BLOCKED');  // persists data:t incl. escalation fields
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_block', inputRef: `Task ${id}`, action: 'edit',
-      reason: `Marked blocked by ${me.name}`, userId: me.id });
+      reason: `Blocked by ${me.name}; notified manager ${nm(mgr)}`, userId: me.id });
     const recipients = [];
-    if (t && t.uploadedBy) recipients.push(t.uploadedBy);
-    let u = t && CDC.lookup.user(t.owner);
-    let guard = 0;
-    while (u && u.managerId && guard++ < 8) { recipients.push(u.managerId); u = CDC.lookup.user(u.managerId); }
+    if (mgr) recipients.push(mgr);
+    const originator = t.createdBy || t.uploadedBy;
+    if (originator) recipients.push(originator);
     CDC.db.notify && CDC.db.notify(recipients, {
-      text: `🚫 Task blocked: "${t ? t.title : id}" — flagged by ${me.name}`,
+      text: `🚫 Blocked: "${t.title}" (owner ${nm(t.owner)}) — flagged by ${me.name}`,
       icon: '🚫', kind: 'task_blocked', refId: id,
     });
     setStatusOv((s) => ({ ...s, [id]: 'BLOCKED' }));
+  }
+  // Task remains blocked → escalate to the next hierarchy level (L1 → L2 → L3).
+  function escalate(id) {
+    const t = allTasks.find((x) => x.id === id); if (!t) return;
+    const chain = managerChain(t.owner);
+    const nextIdx = (t.escalIdx ?? 0) + 1;
+    const target = chain[nextIdx];
+    if (!target) {
+      CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${id}`, action: 'edit',
+        reason: `Already at top of hierarchy (${nm(chain[chain.length - 1])})`, userId: me.id });
+      setStatusOv((s) => ({ ...s })); return;
+    }
+    t.escalIdx = nextIdx; t.escalatedTo = target;
+    CDC.db.updateTask(id, 'BLOCKED');
+    CDC.db.notify && CDC.db.notify([target], {
+      text: `⏫ Escalated: "${t.title}" still blocked — escalated to ${nm(target)} (${(CDC.lookup.user(target) || {}).level})`,
+      icon: '⏫', kind: 'task_escalated', refId: id,
+    });
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${id}`, action: 'edit',
+      reason: `Escalated to ${nm(target)} by ${me.name}`, userId: me.id });
+    setStatusOv((s) => ({ ...s }));
+  }
+  // Scan: overdue tasks → trigger to originator; long-blocked → auto-escalate one level.
+  function scanNow() {
+    let overdueN = 0;
+    allTasks.forEach((t) => {
+      if (isOverdue(t) && !t.overdueNotified) {
+        const originator = t.createdBy || t.uploadedBy || t.owner;
+        t.overdueNotified = true;
+        CDC.db.updateTask(t.id, t.status);
+        CDC.db.notify && CDC.db.notify([originator], {
+          text: `⏰ Overdue: "${t.title}" (due ${t.due}) — owner ${nm(t.owner)}`,
+          icon: '⏰', kind: 'task_overdue', refId: t.id,
+        });
+        overdueN++;
+      }
+    });
+    CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_scan', inputRef: 'Tasks scan', action: 'run',
+      reason: `Scan: ${overdueN} overdue trigger(s) sent`, userId: me.id });
+    setStatusOv((s) => ({ ...s }));
   }
   function setStatus(id, status) {
     if (status === 'BLOCKED') { block(id); return; }
@@ -463,6 +518,7 @@ function TasksView({ tweaks, currentUser }) {
     f === 'MINE' ? allTasks.filter((t) => t.owner === me.id).length :
     f === 'TEAM' ? allTasks.filter((t) => reporteeIds.has(t.owner)).length :
     f === 'OVERDUE' ? allTasks.filter(isOverdue).length :
+    f === 'ESCALATED' ? allTasks.filter(isEscalated).length :
     allTasks.filter((t) => t.status === f).length;
 
   return (
@@ -472,7 +528,7 @@ function TasksView({ tweaks, currentUser }) {
         subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see team + reportee tasks; agent-suggested tasks need triage."
         actions={
           <>
-            <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Scan now</button>
+            <button className="btn" data-size="sm" onClick={scanNow} title="Send overdue triggers to originators; refresh escalations"><Icon name="refresh" size={12} /> Scan now</button>
             <button className="btn" data-size="sm" data-variant="primary" onClick={() => setCreating(true)}><Icon name="check" size={12} /> New task</button>
           </>
         }
@@ -548,6 +604,11 @@ function TasksView({ tweaks, currentUser }) {
                         <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(t)}><Icon name="edit" size={11} /></button>
                         <button className="btn" data-size="sm" data-variant="danger" onClick={() => reject(t.id)}>Reject</button>
                         <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
+                      </div>
+                    ) : status === 'BLOCKED' ? (
+                      <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11 }}>
+                        {t.escalatedTo && <span className="muted" title="Currently escalated to">→ {nm(t.escalatedTo)} ({(CDC.lookup.user(t.escalatedTo) || {}).level || '—'})</span>}
+                        {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Still blocked — escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
                       </div>
                     ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
                   </td>
