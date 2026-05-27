@@ -89,8 +89,8 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Action items extracted</div>
-          <div className="kpi-value">{moms.reduce((s, m) => s + m.actionItems.length, 0)}</div>
-          <div className="kpi-meta"><span>{moms.reduce((s, m) => s + m.actionItems.filter((a) => a.status === 'approved').length, 0)} approved</span></div>
+          <div className="kpi-value">{moms.reduce((s, m) => s + (m.actionItems || []).length, 0)}</div>
+          <div className="kpi-meta"><span>{moms.reduce((s, m) => s + (m.actionItems || []).filter((a) => a.status === 'approved').length, 0)} approved</span></div>
         </div>
       </div>
 
@@ -112,25 +112,25 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
               <tr key={m.id}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{m.title}</div>
-                  <div className="muted" style={{ fontSize: 11, lineHeight: 1.35 }}>{m.summary.slice(0, 100)}…</div>
+                  {m.summary && <div className="muted" style={{ fontSize: 11, lineHeight: 1.35 }}>{m.summary.slice(0, 100)}…</div>}
                 </td>
                 <td className="mono muted" style={{ fontSize: 11.5 }}>{m.date}</td>
-                <td className="num">{m.duration} min</td>
+                <td className="num">{m.duration ? `${m.duration} min` : '—'}</td>
                 <td>
                   <div className="row" style={{ gap: 2 }}>
-                    {m.attendees.slice(0, 4).map((uid) => (
+                    {(m.attendees || []).slice(0, 4).map((uid) => (
                       <Avatar key={uid} user={window.CDC.lookup.user(uid)} size={20} />
                     ))}
-                    {m.attendees.length > 4 && <span className="muted mono" style={{ fontSize: 11 }}>+{m.attendees.length - 4}</span>}
+                    {(m.attendees || []).length > 4 && <span className="muted mono" style={{ fontSize: 11 }}>+{m.attendees.length - 4}</span>}
                   </div>
                 </td>
                 <td>
                   <div className="row" style={{ gap: 4 }}>
-                    <Pill tone="green">{m.actionItems.filter((a) => a.status === 'approved').length}</Pill>
-                    <Pill tone="amber">{m.actionItems.filter((a) => a.status === 'pending_review').length}</Pill>
+                    <Pill tone="green">{(m.actionItems || []).filter((a) => a.status === 'approved').length}</Pill>
+                    <Pill tone="amber">{(m.actionItems || []).filter((a) => a.status === 'pending_review').length}</Pill>
                   </div>
                 </td>
-                <td className="muted" style={{ fontSize: 11.5 }}>{m.channel}</td>
+                <td className="muted" style={{ fontSize: 11.5 }}>{m.channel || '—'}</td>
               </tr>
             ))}
           </tbody>
