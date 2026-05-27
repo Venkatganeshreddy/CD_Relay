@@ -205,8 +205,13 @@
     },
     // Scribe — extract action items from a meeting transcript.
     async runScribe(transcript) {
-      const prompt = `You are Scribe. Extract action items from this meeting transcript.\n` +
-        `Return ONLY JSON: {"items":[{"text":"...","assigneeHint":"name or team","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
+      const prompt = `You are Scribe, extracting action items from a meeting transcript.\n` +
+        `For each action item, set assigneeHint to the PERSON or TEAM RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
+        `- If a task is directed at a person ("Rushikesh, do X") or a team/area ("for GenAI", "DS&Algo team", "Aptitude"), use that person or team name.\n` +
+        `- If a speaker volunteers ("I'll…", "I will…", "let me…"), use that speaker's name.\n` +
+        `- Do NOT default to the meeting chair or whoever is handing out the work; pick who must complete it.\n` +
+        `- If truly unclear, set assigneeHint to "".\n` +
+        `Return ONLY JSON: {"items":[{"text":"...","assigneeHint":"person or team","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).items || []; } catch (_) { return []; }
     },
