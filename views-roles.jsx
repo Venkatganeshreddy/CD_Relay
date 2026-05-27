@@ -49,9 +49,9 @@ function ManagerView({ tweaks, currentUser, nav }) {
 
   return (
     <div className="fadein">
-      <SectionHeader
-        title={isL3 ? 'Sub Department view' : `Your Sub Department — ${mgr.sub || mgr.title}`}
-        subtitle={isL3 ? 'Drill into any of your direct L2s.' : 'Sub Department overview + per-employee history. Last 7 days.'}
+      <GreetingHeader
+        currentUser={currentUser}
+        context={isL3 ? 'Drill into any of your direct L2s' : `Your Sub Department — ${mgr.sub || mgr.title}`}
         actions={
           <>
             {isL3 && (
@@ -455,9 +455,9 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
 
   return (
     <div className="fadein">
-      <SectionHeader
-        title={`Hi ${currentUser.name.split(' ')[0]}.`}
-        subtitle={`${currentUser.title} · ${submittedToday ? "today's report is submitted" : "today's report not submitted yet"}`}
+      <GreetingHeader
+        currentUser={currentUser}
+        context={`${currentUser.title} · ${submittedToday ? "today's report is submitted" : "today's report not submitted yet"}`}
         actions={
           <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>
             <Icon name="edit" size={12} /> {submittedToday ? 'Edit today' : 'Submit today'}

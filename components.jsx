@@ -233,6 +233,21 @@ function SectionHeader({ title, subtitle, actions }) {
 }
 window.SectionHeader = SectionHeader;
 
+// ── Personalized greeting header (used by every dashboard) ───────────────
+// Time-of-day greeting for the signed-in user + live IST date/time that ticks
+// every 30s, so it changes with the user and as time passes.
+function GreetingHeader({ currentUser, context, actions }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
+  const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
+  const hour = Number(ist({ hour: '2-digit', hour12: false }));
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Working late';
+  const first = (currentUser && currentUser.name ? currentUser.name.split(' ')[0] : 'there');
+  const dateline = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric', year: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
+  return <SectionHeader title={`${greet}, ${first}.`} subtitle={context ? `${context} · ${dateline}` : dateline} actions={actions} />;
+}
+window.GreetingHeader = GreetingHeader;
+
 // ── Card wrapper ────────────────────────────────────────────────────────
 function Card({ title, meta, actions, children, pad = true, className = '' }) {
   return (

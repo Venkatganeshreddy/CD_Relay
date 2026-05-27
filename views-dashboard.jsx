@@ -53,21 +53,11 @@ function Dashboard({ tweaks, currentUser, nav }) {
     };
   });
 
-  // Dynamic greeting — real time-of-day + live IST date/time, ticking every 30s
-  // so it flips morning → afternoon → evening as time passes.
-  const [now, setNow] = useState_d(new Date());
-  useEffect_d(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
-  const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
-  const hourIST = Number(ist({ hour: '2-digit', hour12: false }));
-  const greet = hourIST < 12 ? 'Good morning' : hourIST < 17 ? 'Good afternoon' : hourIST < 21 ? 'Good evening' : 'Working late';
-  const greetSubtitle = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric', year: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
-
   return (
     <div className="fadein">
       {/* Context strip */}
-      <SectionHeader
-        title={`${greet}, ${currentUser.name.split(' ')[0]}.`}
-        subtitle={greetSubtitle}
+      <GreetingHeader
+        currentUser={currentUser}
         actions={
           <>
             <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
