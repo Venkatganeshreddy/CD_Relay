@@ -53,12 +53,19 @@ function Dashboard({ tweaks, currentUser, nav }) {
     };
   });
 
+  // Dynamic greeting — real time-of-day + live IST date/time.
+  const now = new Date();
+  const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
+  const hourIST = Number(ist({ hour: '2-digit', hour12: false }));
+  const greet = hourIST < 12 ? 'Good morning' : hourIST < 17 ? 'Good afternoon' : hourIST < 21 ? 'Good evening' : 'Working late';
+  const greetSubtitle = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric', year: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
+
   return (
     <div className="fadein">
       {/* Context strip */}
       <SectionHeader
-        title={`Good morning, ${currentUser.name.split(' ')[0]}.`}
-        subtitle="Thursday · May 22, 2026 · 09:14 IST"
+        title={`${greet}, ${currentUser.name.split(' ')[0]}.`}
+        subtitle={greetSubtitle}
         actions={
           <>
             <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>

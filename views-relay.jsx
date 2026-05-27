@@ -8,6 +8,14 @@ function canUseMomLoader(u) {
 }
 window.canUseMomLoader = canUseMomLoader;
 
+// Pick the lead of a group: the member others report to, else the highest level.
+function pickLead(members) {
+  const rank = { Admin: 4, L3: 3, L2: 2, L1: 1, L0: 0 };
+  const manager = members.find((m) => members.some((o) => o.managerId === m.id));
+  if (manager) return manager;
+  return [...members].sort((a, b) => (rank[b.level] || 0) - (rank[a.level] || 0))[0];
+}
+
 // ── Placeholder shell for views we'll build out later ──────────────────
 function Placeholder({ title, sub, hint }) {
   return (
@@ -153,13 +161,41 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     reader.readAsText(file);
   }
 
-  // Dispatcher — map Scribe's assignee hint to a real employee (manager_id-aware).
+  // Dispatcher — route Scribe's assignee hint to a real employee using the
+  // people graph: person → sub-team lead → dept lead → role, then triage fallback.
   function dispatcherAssign(hint) {
     const users = window.CDC.USERS || [];
-    const h = String(hint || '').toLowerCase().trim();
-    let u = h && users.find((x) => x.name.toLowerCase().includes(h) || (x.sub || '').toLowerCase().includes(h));
-    if (u) return { id: u.id, reason: `${u.name} — matched "${hint}"` };
-    return { id: currentUser.id, reason: 'No clear owner — assigned to you for triage' };
+    const norm = (s) => String(s || '').toLowerCase().trim();
+    const h = norm(hint);
+    if (!h) return { id: currentUser.id, reason: 'No assignee hint — assigned to you for triage' };
+
+    // 1. Person: exact name, partial name, initials, or shared name token.
+    const hTokens = h.split(/\s+/).filter(Boolean);
+    let u = users.find((x) => norm(x.name) === h)
+         || users.find((x) => norm(x.name).includes(h) || h.includes(norm(x.name)))
+         || users.find((x) => norm(x.initials) === h)
+         || users.find((x) => norm(x.name).split(/\s+/).some((p) => p.length > 2 && hTokens.includes(p)));
+    if (u) return { id: u.id, reason: `${u.name} (${u.level}) — matched person "${hint}"` };
+
+    // 2. Sub-team: route to that sub's lead (the manager others report to).
+    const subMembers = users.filter((x) => x.sub && (norm(x.sub).includes(h) || h.includes(norm(x.sub))));
+    if (subMembers.length) {
+      const lead = pickLead(subMembers);
+      return { id: lead.id, reason: `${lead.name} — lead of "${lead.sub}" via manager graph (hint "${hint}")` };
+    }
+
+    // 3. Department: route to the dept lead.
+    const dept = (window.CDC.DEPARTMENTS || []).find((d) => norm(d.name).includes(h) || h.includes(norm(d.name)) || norm(d.id).includes(h));
+    if (dept) {
+      const deptMembers = users.filter((x) => x.dept === dept.id);
+      if (deptMembers.length) { const lead = pickLead(deptMembers); return { id: lead.id, reason: `${lead.name} — ${dept.name} lead via manager graph (hint "${hint}")` }; }
+    }
+
+    // 4. Role keyword.
+    if (/\badmin\b/.test(h)) { const a = users.find((x) => x.level === 'Admin' || x.role === 'ADMIN'); if (a) return { id: a.id, reason: `${a.name} — Admin (role match)` }; }
+
+    // 5. Fallback: triager.
+    return { id: currentUser.id, reason: `No clear owner for "${hint}" — assigned to you for triage` };
   }
   function dueIn(days) { const CDC = window.CDC; const d = CDC.daysAgo ? CDC.daysAgo(-days) : new Date(Date.now() + days * 864e5); return CDC.fmt ? CDC.fmt(d) : d.toISOString().slice(0, 10); }
 

@@ -207,7 +207,7 @@
     async runScribe(transcript) {
       const prompt = `You are Scribe. Extract action items from this meeting transcript.\n` +
         `Return ONLY JSON: {"items":[{"text":"...","assigneeHint":"name or team","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
-      const content = await this.run({ agent: 'Scribe', model: 'fast', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
+      const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).items || []; } catch (_) { return []; }
     },
   };
