@@ -169,12 +169,17 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     const h = norm(hint);
     if (!h) return { id: currentUser.id, reason: 'No assignee hint — assigned to you for triage' };
 
-    // 1. Person: exact name, partial name, initials, or shared name token.
-    const hTokens = h.split(/\s+/).filter(Boolean);
+    // 1. Person: exact name wins; then full-name contained in hint; then initials;
+    //    then a UNIQUE name-token (skip ambiguous first names like "Pavan" → 2 people).
+    const hTokens = h.split(/\s+/).filter((p) => p.length > 2);
     let u = users.find((x) => norm(x.name) === h)
-         || users.find((x) => norm(x.name).includes(h) || h.includes(norm(x.name)))
-         || users.find((x) => norm(x.initials) === h)
-         || users.find((x) => norm(x.name).split(/\s+/).some((p) => p.length > 2 && hTokens.includes(p)));
+         || users.find((x) => h.includes(norm(x.name)))                              // hint contains a full name
+         || (h.length >= 4 ? users.find((x) => norm(x.name).includes(h)) : null)     // hint is a substring of a name
+         || users.find((x) => norm(x.initials) === h);
+    if (!u) {
+      const tokenMatches = users.filter((x) => norm(x.name).split(/\s+/).some((p) => p.length > 2 && hTokens.includes(p)));
+      if (tokenMatches.length === 1) u = tokenMatches[0];   // only if unambiguous
+    }
     if (u) return { id: u.id, reason: `${u.name} (${u.level}) — matched person "${hint}"` };
 
     // 2. Sub-team: route to that sub's lead (the manager others report to).
