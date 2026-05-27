@@ -108,7 +108,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
       } else if (name !== 'copilot') {
         setCopilotPrefill(null);
       }
-      if (name === 'mom') { setMomOpen(true); return; }
+      if (name === 'mom') { if (window.canUseMomLoader(currentUser)) setMomOpen(true); return; }
       setRoute({ name, params });
     },
   };

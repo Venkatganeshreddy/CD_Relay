@@ -2,6 +2,12 @@
 
 const { useState: useStP, useMemo: useMP } = React;
 
+// MOM Loader is restricted to L3 and Admin.
+function canUseMomLoader(u) {
+  return !!u && (u.role === 'ADMIN' || u.role === 'PRODUCT_OWNER' || u.level === 'L3' || u.level === 'Admin');
+}
+window.canUseMomLoader = canUseMomLoader;
+
 // ── Placeholder shell for views we'll build out later ──────────────────
 function Placeholder({ title, sub, hint }) {
   return (
@@ -52,7 +58,7 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
         actions={
           <>
             <button className="btn" data-size="sm"><Icon name="search" size={12} /> GraphRAG search</button>
-            <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('mom')}><Icon name="sparkles" size={12} /> Add MOM</button>
+            {canUseMomLoader(currentUser) && <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('mom')}><Icon name="sparkles" size={12} /> Add MOM</button>}
           </>
         }
       />
@@ -189,7 +195,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
 
   // Admin / Product Owner (L3) can reassign the owner before committing.
-  const canReassign = ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  const canReassign = canUseMomLoader(currentUser);
   function reassign(id, ownerId) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, owner: ownerId } : it)); }
   function editText(id, text) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, text } : it)); }
   function editDue(id, due) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, due } : it)); }
