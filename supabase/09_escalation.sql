@@ -21,14 +21,14 @@ end; $$;
 -- Escalate tasks that have stayed BLOCKED past the threshold — one level per run.
 create or replace function app.run_escalations(p_block_hours int default 48)
 returns int language plpgsql security definer set search_path = public, app as $$
-declare r record; nxt_idx int; nxt_mgr text; mgr_name text; owner_id text; since timestamptz; n int := 0; aid text;
+declare r record; nxt_idx int; nxt_mgr text; mgr_name text; v_owner text; since timestamptz; n int := 0; aid text;
 begin
   for r in select id, owner_id as oid, data from tasks where status = 'BLOCKED' loop
     since := coalesce((r.data->>'lastEscalatedAt')::timestamptz, (r.data->>'blockedAt')::timestamptz, now());
     if since > now() - make_interval(hours => p_block_hours) then continue; end if;  -- not old enough
-    owner_id := coalesce(r.oid, r.data->>'owner');
+    v_owner := coalesce(r.oid, r.data->>'owner');
     nxt_idx := coalesce((r.data->>'escalIdx')::int, 0) + 1;          -- 0 = immediate already notified at block
-    nxt_mgr := app.manager_at_level(owner_id, nxt_idx + 1);          -- escalIdx 1 → level-2 manager, etc.
+    nxt_mgr := app.manager_at_level(v_owner, nxt_idx + 1);           -- escalIdx 1 → level-2 manager, etc.
     if nxt_mgr is null then continue; end if;                        -- already at top of hierarchy
     select name into mgr_name from employees where id = nxt_mgr;
     update tasks set data = data || jsonb_build_object('escalIdx', nxt_idx, 'escalatedTo', nxt_mgr, 'lastEscalatedAt', now()::text), updated_at = now() where id = r.id;
