@@ -18,24 +18,47 @@ begin
   end loop;
 end; $$;
 
--- Escalate tasks that have stayed BLOCKED past the threshold — one level per run.
-create or replace function app.run_escalations(p_block_hours int default 48)
+-- Time-based escalation. A task gets a trigger when it crosses a threshold —
+-- in progress > 2 days (3rd day), blocked > 1 day (2nd day), overdue > 2 days
+-- (3rd day) — at which point its status flips to ESCALATED and it climbs one
+-- manager level per run (L1 → L2 → L3) until the top of the chain.
+create or replace function app.run_escalations(p_block_hours int default 24)
 returns int language plpgsql security definer set search_path = public, app as $$
-declare r record; nxt_idx int; nxt_mgr text; mgr_name text; v_owner text; since timestamptz; n int := 0; aid text;
+declare r record; nxt_idx int; nxt_mgr text; mgr_name text; v_owner text; n int := 0; aid text;
+  reason text; eff text; today date := (now() at time zone 'Asia/Kolkata')::date; od int; bdays numeric; adays numeric;
 begin
-  for r in select id, owner_id as oid, data from tasks where status = 'BLOCKED' loop
-    since := coalesce((r.data->>'lastEscalatedAt')::timestamptz, (r.data->>'blockedAt')::timestamptz, now());
-    if since > now() - make_interval(hours => p_block_hours) then continue; end if;  -- not old enough
+  for r in select id, status, owner_id as oid, data from tasks where status not in ('DONE','SUGGESTED','REJECTED') loop
     v_owner := coalesce(r.oid, r.data->>'owner');
-    nxt_idx := coalesce((r.data->>'escalIdx')::int, 0) + 1;          -- 0 = immediate already notified at block
-    nxt_mgr := app.manager_at_level(v_owner, nxt_idx + 1);           -- escalIdx 1 → level-2 manager, etc.
-    if nxt_mgr is null then continue; end if;                        -- already at top of hierarchy
+    reason := null;
+    -- Overdue > 2 days.
+    if (r.data->>'due') is not null and (r.data->>'due')::date < today then
+      od := today - (r.data->>'due')::date;
+      if od > 2 then reason := 'Overdue ' || od || ' days'; end if;
+    end if;
+    -- When already ESCALATED, evaluate the state it came from so it can climb further.
+    eff := case when r.status = 'ESCALATED' then coalesce(r.data->>'escalPrevStatus','') else r.status end;
+    if reason is null and eff = 'BLOCKED' then
+      bdays := extract(epoch from (now() - coalesce((r.data->>'blockedAt')::timestamptz, (r.data->>'lastEscalatedAt')::timestamptz, now()))) / 86400;
+      if bdays > 1 then reason := 'Blocked ' || floor(bdays)::int || ' days'; end if;
+    end if;
+    if reason is null and eff = 'ACTIVE' then
+      adays := extract(epoch from (now() - coalesce((r.data->>'created')::timestamptz, now()))) / 86400;
+      if adays > 2 then reason := 'In progress ' || floor(adays)::int || ' days'; end if;
+    end if;
+    if reason is null then continue; end if;
+    nxt_idx := coalesce((r.data->>'escalIdx')::int, -1) + 1;        -- idx 0 → immediate manager
+    nxt_mgr := app.manager_at_level(v_owner, nxt_idx + 1);
+    update tasks set status = 'ESCALATED',
+      data = data || jsonb_build_object(
+        'escalPrevStatus', case when r.status = 'ESCALATED' then r.data->>'escalPrevStatus' else r.status end,
+        'escalIdx', nxt_idx, 'escalatedTo', coalesce(nxt_mgr, r.data->>'escalatedTo'),
+        'escalReason', reason, 'lastEscalatedAt', now()::text),
+      updated_at = now() where id = r.id;
     select name into mgr_name from employees where id = nxt_mgr;
-    update tasks set data = data || jsonb_build_object('escalIdx', nxt_idx, 'escalatedTo', nxt_mgr, 'lastEscalatedAt', now()::text), updated_at = now() where id = r.id;
     aid := 'act-esc-' || r.id || '-' || floor(extract(epoch from clock_timestamp()))::bigint;
     insert into activity (id, data) values (aid, jsonb_build_object(
       'id', aid, 'kind', 'task_escalated', 'to', nxt_mgr, 'icon', '⏫', 'refId', r.id,
-      'text', '⏫ Auto-escalated: "' || coalesce(r.data->>'title','task') || '" still blocked → ' || coalesce(mgr_name, nxt_mgr),
+      'text', '⏫ Escalated: "' || coalesce(r.data->>'title','task') || '" — ' || reason || coalesce(' → ' || mgr_name, ''),
       'ts', to_char(now() at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') || ' IST'));
     n := n + 1;
   end loop;
@@ -64,7 +87,7 @@ end; $$;
 
 create or replace function app.run_task_automations() returns void
 language plpgsql security definer set search_path = public, app as $$
-begin perform app.run_escalations(48); perform app.run_overdue_triggers(); end; $$;
+begin perform app.run_escalations(); perform app.run_overdue_triggers(); end; $$;
 
 -- Schedule every 30 minutes (idempotent: drop any prior job of the same name).
 create extension if not exists pg_cron;

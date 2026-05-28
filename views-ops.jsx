@@ -370,6 +370,7 @@ const TASK_STATUSES = [
   { v: 'BACKLOG', label: 'Backlog', tone: 'amber' },
   { v: 'ACTIVE', label: 'In Progress', tone: 'blue' },
   { v: 'BLOCKED', label: 'Blocked', tone: 'red' },
+  { v: 'ESCALATED', label: 'Escalated', tone: 'red' },
   { v: 'DONE', label: 'Done', tone: 'green' },
 ];
 const statusMeta = (s) => TASK_STATUSES.find((x) => x.v === s) || { label: (s || '').toLowerCase(), tone: 'outline' };
@@ -393,8 +394,26 @@ function TasksView({ tweaks, currentUser }) {
   const [creating, setCreating] = useState_o(false);
 
   const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
-  // Escalation queue = anything blocked or overdue (what L3 reviews "separately").
-  const isEscalated = (t) => t.status === 'BLOCKED' || isOverdue(t);
+  // Escalation queue = anything escalated, blocked, or overdue (what L3 reviews "separately").
+  const isEscalated = (t) => t.status === 'ESCALATED' || t.status === 'BLOCKED' || isOverdue(t);
+
+  // ── Time-based escalation rules (Sentry scan). Climbs L1 → L2 → L3. ─────────
+  const DAY_MS = 864e5;
+  const fullDaysSince = (d) => { if (!d) return 0; const ms = new Date(d).getTime(); return isNaN(ms) ? 0 : Math.floor((Date.now() - ms) / DAY_MS); };
+  const daysOverdue = (t) => (t.due && t.due < todayStr) ? Math.floor((new Date(todayStr) - new Date(t.due)) / DAY_MS) : 0;
+  // Returns a human reason if a task crosses a time threshold, else null.
+  // Thresholds (the day a trigger fires): in progress > 2 days (3rd day),
+  // blocked > 1 day (2nd day), overdue > 2 days (3rd day).
+  const escalationTrigger = (t) => {
+    if (['DONE', 'SUGGESTED', 'REJECTED'].includes(t.status)) return null;
+    const od = daysOverdue(t);
+    if (od > 2) return `Overdue ${od} days (due ${t.due})`;
+    // When already ESCALATED, keep evaluating the state it came from so it can climb further.
+    const eff = t.status === 'ESCALATED' ? (t.escalPrevStatus || '') : t.status;
+    if (eff === 'BLOCKED' && fullDaysSince(t.blockedAt || t.created) > 1) return `Blocked ${fullDaysSince(t.blockedAt || t.created)} days`;
+    if (eff === 'ACTIVE' && fullDaysSince(t.created) > 2) return `In progress ${fullDaysSince(t.created)} days`;
+    return null;
+  };
 
   const tabs = ['MINE', ...(reportees.length ? ['TEAM'] : []), 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', 'ALL'];
   const matchesTab = (t, f) =>
@@ -460,8 +479,9 @@ function TasksView({ tweaks, currentUser }) {
         reason: `Already at top of hierarchy (${nm(chain[chain.length - 1])})`, userId: me.id });
       setStatusOv((s) => ({ ...s })); return;
     }
+    if (t.status !== 'ESCALATED') t.escalPrevStatus = t.status;
     t.escalIdx = nextIdx; t.escalatedTo = target;
-    CDC.db.updateTask(id, 'BLOCKED');
+    CDC.db.updateTask(id, 'ESCALATED');
     CDC.db.notify && CDC.db.notify([target], {
       text: `⏫ Escalated: "${t.title}" still blocked — escalated to ${nm(target)} (${(CDC.lookup.user(target) || {}).level})`,
       icon: '⏫', kind: 'task_escalated', refId: id,
@@ -470,23 +490,38 @@ function TasksView({ tweaks, currentUser }) {
       reason: `Escalated to ${nm(target)} by ${me.name}`, userId: me.id });
     setStatusOv((s) => ({ ...s }));
   }
-  // Scan: overdue tasks → trigger to originator; long-blocked → auto-escalate one level.
+  // Scan: tasks crossing a time threshold (in-progress > 2d, blocked > 1d, overdue
+  // > 2d) get a trigger, flip to ESCALATED, and climb one level up the chain
+  // (L1 → L2 → L3). Each scan advances one more level until the top is reached.
   function scanNow() {
-    let overdueN = 0;
+    let triggered = 0;
     allTasks.forEach((t) => {
-      if (isOverdue(t) && !t.overdueNotified) {
-        const originator = t.createdBy || t.uploadedBy || t.owner;
-        t.overdueNotified = true;
-        CDC.db.updateTask(t.id, t.status);
-        CDC.db.notify && CDC.db.notify([originator], {
-          text: `⏰ Overdue: "${t.title}" (due ${t.due}) — owner ${nm(t.owner)}`,
-          icon: '⏰', kind: 'task_overdue', refId: t.id,
-        });
-        overdueN++;
-      }
+      const reason = escalationTrigger(t);
+      if (!reason) return;
+      const chain = managerChain(t.owner);
+      const top = chain.length - 1;
+      const nextIdx = chain.length ? Math.min((t.escalIdx ?? -1) + 1, top) : -1;
+      const target = nextIdx >= 0 ? chain[nextIdx] : null;
+      // Once a trigger is received, the task status becomes ESCALATED.
+      if (t.status !== 'ESCALATED') t.escalPrevStatus = t.status;
+      t.escalIdx = nextIdx;
+      t.escalatedTo = target || t.escalatedTo;
+      t.escalReason = reason;
+      CDC.db.updateTask(t.id, 'ESCALATED');
+      const recipients = [];
+      if (target) recipients.push(target);
+      const originator = t.createdBy || t.uploadedBy;
+      if (originator && originator !== target) recipients.push(originator);
+      CDC.db.notify && CDC.db.notify(recipients, {
+        text: `⏫ Escalated: "${t.title}" — ${reason}${target ? ` → ${nm(target)} (${(CDC.lookup.user(target) || {}).level || '—'})` : ''}`,
+        icon: '⏫', kind: 'task_escalated', refId: t.id,
+      });
+      CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${t.id}`, action: 'edit',
+        reason: `${reason}; escalated${target ? ` to ${nm(target)}` : ' (top of chain)'} by Sentry scan`, userId: me.id });
+      triggered++;
     });
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_scan', inputRef: 'Tasks scan', action: 'run',
-      reason: `Scan: ${overdueN} overdue trigger(s) sent`, userId: me.id });
+      reason: `Scan: ${triggered} task(s) escalated`, userId: me.id });
     setStatusOv((s) => ({ ...s }));
   }
   function setStatus(id, status) {
@@ -605,10 +640,10 @@ function TasksView({ tweaks, currentUser }) {
                         <button className="btn" data-size="sm" data-variant="danger" onClick={() => reject(t.id)}>Reject</button>
                         <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
                       </div>
-                    ) : status === 'BLOCKED' ? (
+                    ) : (status === 'BLOCKED' || status === 'ESCALATED') ? (
                       <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11 }}>
-                        {t.escalatedTo && <span className="muted" title="Currently escalated to">→ {nm(t.escalatedTo)} ({(CDC.lookup.user(t.escalatedTo) || {}).level || '—'})</span>}
-                        {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Still blocked — escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
+                        {t.escalatedTo && <span className="muted" title={t.escalReason || 'Currently escalated to'}>→ {nm(t.escalatedTo)} ({(CDC.lookup.user(t.escalatedTo) || {}).level || '—'})</span>}
+                        {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
                       </div>
                     ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
                   </td>
