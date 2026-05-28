@@ -9,39 +9,42 @@ const { useState: useStA, useMemo: useMA, useEffect: useEA, useRef: useRA } = Re
 // Nodes laid out on a virtual grid (x,y in px from top-left).
 const ARCH_NODES = [
   // Data sources (left column)
-  { id: 'gsheets',  kind: 'source', x: 30,  y: 30,  title: 'Google Sheets', sub: 'Daily reports · Monthly KPIs', icon: 'sheet' },
-  { id: 'submit',   kind: 'source', x: 30,  y: 130, title: 'Submit flow',   sub: 'Chat-based EOD intake', icon: 'edit' },
-  { id: 'slack',    kind: 'external', x: 30, y: 230, title: 'Slack', sub: 'Threads, blockers, ad-hoc', icon: 'plug' },
+  { id: 'submit',   kind: 'source', x: 30,  y: 30,  title: 'Submit flow',   sub: 'Chat-based EOD daily report', icon: 'edit' },
+  { id: 'mom',      kind: 'source', x: 30,  y: 130, title: 'MOM upload', sub: 'Meeting transcripts → action items', icon: 'weekly' },
+  { id: 'teams',    kind: 'external', x: 30, y: 230, title: 'Microsoft Teams', sub: 'Nudge chases · notifications', icon: 'plug' },
   { id: 'mcp-in',   kind: 'external', x: 30, y: 330, title: 'External MCPs', sub: 'JIRA · Drive · HRMS (Phase 4)', icon: 'plug' },
 
   // Storage middle column
-  { id: 'pg',       kind: 'storage', x: 290, y: 30, title: 'PostgreSQL', sub: '25 entities · Prisma', icon: 'admin' },
-  { id: 'redis',    kind: 'storage', x: 290, y: 130, title: 'Redis', sub: 'Queue · session · cache', icon: 'refresh' },
-  { id: 'knowledge',kind: 'storage', x: 290, y: 230, title: 'Knowledge layer', sub: 'Employees · stacks · KPI catalog · hierarchy', icon: 'admin' },
-  { id: 'memory',   kind: 'storage', x: 290, y: 330, title: 'Memory store', sub: 'Episodic + semantic + working', icon: 'admin' },
+  { id: 'pg',       kind: 'storage', x: 290, y: 30, title: 'Supabase', sub: 'Postgres + RLS · employees · reports · tasks', icon: 'admin' },
+  { id: 'redis',    kind: 'storage', x: 290, y: 130, title: 'Edge Function', sub: 'relay-agent · OpenRouter proxy (JWT)', icon: 'refresh' },
+  { id: 'knowledge',kind: 'storage', x: 290, y: 230, title: 'Knowledge layer', sub: 'knowledge_docs · Obsidian vault round-trip', icon: 'admin' },
+  { id: 'memory',   kind: 'storage', x: 290, y: 330, title: 'Memory graph', sub: 'Engram interactions · Cartographer', icon: 'admin' },
 
   // Agents (third column, vertically arranged)
-  { id: 'a-intake', kind: 'agent', x: 560, y: 10,  title: 'Report Intake', sub: 'Normalize → structured items', icon: 'sparkles' },
-  { id: 'a-dq',     kind: 'agent', x: 560, y: 100, title: 'Data Quality', sub: 'Flag gaps · duplicates · stale KPIs', icon: 'sparkles' },
-  { id: 'a-cop',    kind: 'agent', x: 560, y: 190, title: 'Copilot Q&A', sub: 'Permission-scoped retrieval + answer', icon: 'copilot' },
-  { id: 'a-week',   kind: 'agent', x: 560, y: 280, title: 'Weekly Consolidation', sub: 'Per-dept summary draft', icon: 'weekly' },
-  { id: 'a-month',  kind: 'agent', x: 560, y: 370, title: 'Monthly Check-in', sub: 'Month summary + carryforwards', icon: 'weekly' },
-  { id: 'a-esc',    kind: 'agent', x: 560, y: 460, title: 'Escalation', sub: 'SLA + recurring blocker scan', icon: 'flag' },
+  { id: 'a-intake', kind: 'agent', x: 560, y: 10,  title: 'Scribe', sub: 'Extract action items from MOM', icon: 'sparkles' },
+  { id: 'a-dq',     kind: 'agent', x: 560, y: 100, title: 'Sentry', sub: 'Surface blocked + overdue tasks', icon: 'flag' },
+  { id: 'a-cop',    kind: 'agent', x: 560, y: 190, title: 'Concierge', sub: 'Grounded chat — how-to, Q&A, feedback', icon: 'copilot' },
+  { id: 'a-week',   kind: 'agent', x: 560, y: 280, title: 'Rollup', sub: 'Per-dept weekly report draft', icon: 'weekly' },
+  { id: 'a-month',  kind: 'agent', x: 560, y: 370, title: 'Ledger', sub: 'Monthly worklog compile', icon: 'weekly' },
+  { id: 'a-esc',    kind: 'agent', x: 560, y: 460, title: 'Dispatcher', sub: 'Match items → people, draft tasks', icon: 'sparkles' },
 
   // Output surfaces (right column)
   { id: 'o-dash',   kind: 'ui',     x: 830, y: 30,  title: 'Dashboard', sub: 'Pavan G · per-dept health' },
   { id: 'o-draft',  kind: 'output', x: 830, y: 130, title: 'Weekly drafts', sub: 'Approve · edit · publish' },
   { id: 'o-tasks',  kind: 'output', x: 830, y: 230, title: 'Suggested tasks', sub: 'Triage queue' },
   { id: 'o-copilot',kind: 'ui',     x: 830, y: 330, title: 'Copilot UI / MCP', sub: 'Web + Claude Desktop' },
-  { id: 'o-notif',  kind: 'output', x: 830, y: 430, title: 'Notifications', sub: 'Slack · email · in-app (Phase 3)' },
+  { id: 'o-notif',  kind: 'output', x: 830, y: 430, title: 'Notifications', sub: 'Teams · email · in-app (Phase 3)' },
 ];
 
 const ARCH_EDGES = [
   // Sources → Storage
-  { from: 'gsheets', to: 'pg', label: 'ingest', kind: 'data' },
   { from: 'submit', to: 'pg', label: 'write', kind: 'data' },
-  { from: 'slack', to: 'pg', label: 'sync', kind: 'data' },
+  { from: 'mom', to: 'pg', label: 'upload', kind: 'data' },
+  { from: 'teams', to: 'pg', label: 'sync', kind: 'data' },
   { from: 'mcp-in', to: 'pg', label: '(Phase 4)', kind: 'data' },
+
+  // Agents run via Edge Function (OpenRouter)
+  { from: 'pg', to: 'redis', kind: 'data', label: 'invoke' },
 
   // Storage → Agents (RBAC scoped)
   { from: 'pg', to: 'a-intake', kind: 'data', label: 'rows' },
@@ -62,13 +65,13 @@ const ARCH_EDGES = [
   { from: 'a-week', to: 'memory', kind: 'memory' },
 
   // Agents → UI/Output
-  { from: 'a-intake', to: 'o-dash' },
+  { from: 'pg', to: 'o-dash', label: 'dept health' },
+  { from: 'a-intake', to: 'o-tasks' },
   { from: 'a-dq', to: 'o-tasks' },
   { from: 'a-week', to: 'o-draft' },
   { from: 'a-month', to: 'o-draft' },
   { from: 'a-esc', to: 'o-tasks' },
   { from: 'a-cop', to: 'o-copilot' },
-  { from: 'a-esc', to: 'o-notif' },
   { from: 'a-dq', to: 'o-notif' },
 
   // Approval loop back
@@ -79,53 +82,54 @@ const ARCH_EDGES = [
 // Agents catalog with deployment links + tool list + costs
 const AGENTS = [
   {
-    id: 'a-intake', name: 'Report Intake', status: 'ok',
-    purpose: 'Parses raw Google Sheet rows or chat submissions into structured items with kind, confidence, KPI hits.',
-    model: 'claude-haiku-4-5', trigger: 'new row · cron 23:30 IST',
-    lastRun: '2026-05-25 09:08', avgLatency: 412, costPerRun: 0.0021, runsToday: 24,
-    deployUrl: '/api/agents/intake',
-    tools: ['gsheets.read', 'pg.upsert', 'knowledge.lookup'],
+    id: 'a-intake', name: 'Scribe', status: 'ok',
+    purpose: 'Extracts decisions + action items from an uploaded MOM transcript into structured items.',
+    model: 'claude-sonnet-4-6', trigger: 'new MOM uploaded',
+    lastRun: '2026-05-26 11:14', avgLatency: 4100, costPerRun: 0.024, runsToday: 7,
+    deployUrl: 'edge:relay-agent',
+    tools: ['mom.read', 'items.extract', 'knowledge.lookup'],
   },
   {
-    id: 'a-dq', name: 'Data Quality', status: 'ok',
-    purpose: 'Nightly scan for duplicates, missing reports, recurring blockers, stale KPIs. Emits Feedback flags.',
-    model: 'claude-haiku-4-5', trigger: 'cron 07:30 IST · post-intake',
-    lastRun: '2026-05-25 07:30', avgLatency: 1820, costPerRun: 0.0073, runsToday: 1,
-    deployUrl: '/api/agents/data-quality',
-    tools: ['pg.scan', 'memory.episodic', 'flags.emit'],
+    id: 'a-dq', name: 'Sentry', status: 'ok',
+    purpose: 'Continuous scan surfacing blocked + overdue tasks. Deterministic, no LLM call.',
+    model: 'deterministic', trigger: 'continuous (5-min)',
+    lastRun: '2026-05-26 11:30', avgLatency: 142, costPerRun: 0, runsToday: 288,
+    deployUrl: 'edge:relay-agent',
+    tools: ['pg.scan', 'flags.emit', 'tasks.suggest'],
   },
   {
-    id: 'a-cop', name: 'Copilot Q&A', status: 'ok',
-    purpose: 'Permission-scoped retrieval + cited answers over reports / KPIs / tasks. Read-only.',
-    model: 'claude-sonnet-4-6', trigger: 'user query (web + MCP)',
-    lastRun: '2026-05-25 09:14', avgLatency: 2310, costPerRun: 0.018, runsToday: 38,
-    deployUrl: '/api/agents/copilot',
-    tools: ['pg.scoped-read', 'memory.semantic', 'cite.builder'],
+    id: 'a-cop', name: 'Concierge', status: 'ok',
+    purpose: 'Permission-scoped grounded chat — how-to, feedback, cited Q&A over reports / KPIs / tasks / vault.',
+    model: 'claude-sonnet-4-6', trigger: 'user opens chat (web + MCP)',
+    lastRun: '2026-05-26 11:32', avgLatency: 2310, costPerRun: 0.018, runsToday: 43,
+    deployUrl: 'edge:relay-agent',
+    tools: ['pg.scoped-read', 'knowledge.search', 'cite.builder'],
   },
   {
-    id: 'a-week', name: 'Weekly Consolidation', status: 'warning',
+    id: 'a-week', name: 'Rollup', status: 'warning',
     purpose: 'Per-dept weekly draft (highlights/risks/asks) from last 7 days of reports. Human approval required.',
     model: 'claude-sonnet-4-6', trigger: 'cron Mon 06:00 IST · manual',
     lastRun: '2026-05-25 06:02', avgLatency: 9120, costPerRun: 0.078, runsToday: 0,
-    deployUrl: '/api/agents/weekly',
+    deployUrl: 'edge:relay-agent',
     tools: ['pg.dept-window', 'kpi.compute', 'cite.builder'],
     note: 'DS&Algo draft confidence 0.62 — flagged for review.',
   },
   {
-    id: 'a-month', name: 'Monthly Check-in', status: 'idle',
-    purpose: 'Month summary + carryforward task suggestions on first of month.',
+    id: 'a-month', name: 'Ledger', status: 'idle',
+    purpose: 'Compiles monthly worklogs + carryforward task suggestions on first of month.',
     model: 'claude-sonnet-4-6', trigger: 'cron 1st 07:00 IST · manual',
     lastRun: '2026-05-01 07:00', avgLatency: 14200, costPerRun: 0.14, runsToday: 0,
-    deployUrl: '/api/agents/monthly',
-    tools: ['pg.month-window', 'tasks.suggest', 'cite.builder'],
+    deployUrl: 'edge:relay-agent',
+    tools: ['pg.month-window', 'worklog.compile', 'cite.builder'],
   },
   {
-    id: 'a-esc', name: 'Escalation', status: 'ok',
-    purpose: 'Deterministic scan: blockers > 72h, KPI red 2w, missed-report streaks. Suggests tasks. No LLM call.',
-    model: 'deterministic', trigger: 'cron every 6h · manual',
-    lastRun: '2026-05-25 06:00', avgLatency: 142, costPerRun: 0, runsToday: 4,
-    deployUrl: '/api/agents/escalation',
-    tools: ['pg.scan', 'tasks.suggest'],
+    id: 'a-esc', name: 'Dispatcher', status: 'warning',
+    purpose: 'Matches Scribe action items to people, drafts tasks with owner + reason.',
+    model: 'claude-haiku-4-5', trigger: 'after Scribe',
+    lastRun: '2026-05-26 11:15', avgLatency: 1100, costPerRun: 0.012, runsToday: 7,
+    deployUrl: 'edge:relay-agent',
+    tools: ['pg.scoped-read', 'owner.infer', 'tasks.draft'],
+    note: 'Owner inference accuracy below threshold this week.',
   },
 ];
 
