@@ -166,13 +166,25 @@
   //    run is recorded to AI Runs + the activity feed (live observability). ──
   window.CDC.agents = {
     available: () => !!(sb),
+    // Distilled learned preferences for an agent (written by runCurator),
+    // injected as a system message so the agent self-corrects on its next run.
+    memoryFor(name) {
+      const a = (window.CDC.RELAY_AGENTS || []).find((x) => x.name === name);
+      const rules = a && a.memory && a.memory.rules;
+      return (rules && rules.length)
+        ? `Learned preferences for ${name}, distilled from past human corrections — follow these:\n` +
+          rules.map((r) => `• ${r}`).join('\n')
+        : '';
+    },
     // Generic run: calls the model, logs an ai_runs + activity entry.
     async run({ agent, model, messages, inputLabel }) {
       const t0 = Date.now();
+      const mem = agent ? this.memoryFor(agent) : '';
+      const msgs = mem ? [{ role: 'system', content: mem }, ...messages] : messages;
       let content = '', usage = null, outcome = 'OK', errMsg = null;
       try {
         if (!window.CDC.askAgent) throw new Error('agent endpoint unavailable');
-        const r = await window.CDC.askAgent({ messages, model: model || 'smart' });
+        const r = await window.CDC.askAgent({ messages: msgs, model: model || 'smart' });
         content = r.content || ''; usage = r.usage || null;
       } catch (e) { outcome = 'ERROR'; errMsg = e.message || String(e); }
 
@@ -220,6 +232,45 @@
         `Return ONLY JSON: {"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).items || []; } catch (_) { return []; }
+    },
+    // Curator — close the learning loop: read where humans edited/rejected an
+    // agent's drafts (engram_interactions), distill the recurring corrections
+    // into durable preference rules, and write them to relay_agents.data.memory
+    // so memoryFor() injects them into that agent's future runs.
+    async runCurator(agentName) {
+      const byAgent = {};
+      (window.CDC.ENGRAM || []).forEach((e) => {
+        if (!e || e.action === 'accept') return;          // edits/rejects carry the teaching signal
+        if (agentName && e.agent !== agentName) return;
+        (byAgent[e.agent] = byAgent[e.agent] || []).push(e);
+      });
+      const results = [];
+      for (const [name, items] of Object.entries(byAgent)) {
+        const cases = items.slice(0, 40).map((e, i) =>
+          `${i + 1}. flow=${e.flow || '?'} verdict=${e.action}\n` +
+          `   AI draft: ${(e.draft || '').slice(0, 300)}\n` +
+          `   Human kept: ${(e.final || '').slice(0, 300)}\n` +
+          `   Reason: ${e.reason || '(none given)'}`).join('\n\n');
+        const prompt = `You are Curator. Below are cases where ${name}'s AI suggestion was edited or rejected by a human reviewer.\n` +
+          `Find the RECURRING ways humans correct ${name} and turn them into durable, imperative preference rules the agent should follow next time. ` +
+          `Ignore one-off corrections; keep only patterns that repeat. Be specific and actionable.\n` +
+          `Return ONLY JSON: {"rules":["...","..."]} with 3-7 short rules. No preamble.\n\nCases:\n${cases}`;
+        let rules = [];
+        try {
+          const content = await this.run({ agent: 'Curator', model: 'smart',
+            inputLabel: `Distill ${name} (${items.length} corrections)`,
+            messages: [{ role: 'user', content: prompt }] });
+          const m = content.match(/\{[\s\S]*\}/); rules = (JSON.parse(m[0]).rules || []).slice(0, 7);
+        } catch (_) { continue; }
+        if (!rules.length) continue;
+        const a = (window.CDC.RELAY_AGENTS || []).find((x) => x.name === name);
+        if (a) {
+          a.memory = { rules, distilledFrom: items.length, ts: nowStr() };
+          if (a.id) remote(() => sb.from('relay_agents').update({ data: a }).eq('id', a.id));
+        }
+        results.push({ agent: name, rules, distilledFrom: items.length });
+      }
+      return results;
     },
   };
 })();
