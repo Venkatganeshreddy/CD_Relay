@@ -28,11 +28,11 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   }, [messages, streamText]);
 
   const suggested = [
-    "What blockers are over 3 days old?",
-    "Why is Content health at 78?",
-    "Which KPIs are red and getting worse?",
-    "Summarize Backend's last week",
     "What needs my attention today?",
+    "Any blockers or overdue tasks right now?",
+    "How do I submit my daily report?",
+    "What does the Rollup agent do?",
+    "Walk me through the weekly rollup process",
   ];
 
   async function ask(q) {
@@ -53,7 +53,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
         ],
       });
     } catch (e) {
-      answer = `[error] Could not reach the model: ${e.message}. Falling back to a scripted answer.\n\nBased on the most recent reports, the top items that need attention are the Backend missing-reports streak [f-1] and the Safari 17.4 chart flicker P0 [r-1006]. The Content health score is 78 [t-5].`;
+      answer = `[error] Could not reach the model right now (${e.message}). Try again in a moment, or ask your L3 if it keeps failing.`;
     }
     // Simulate stream-in
     await fakeStream(answer, (partial) => setStreamText(partial));
@@ -62,7 +62,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
       role: 'assistant', content: answer,
       ts: timeNow(),
       meta: {
-        model: 'claude-haiku-4-5',
+        model: 'claude-sonnet-4-6',
         latency: 412 + Math.round(Math.random() * 600),
         confidence: 0.82 + Math.random() * 0.12,
         scopeHash: scopeHashFor(currentUser),
@@ -81,7 +81,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             <div className="row" style={{ gap: 8 }}>
               <Icon name="sparkles" size={16} />
               <h1 className="h-title" style={{ fontSize: 18 }}>Concierge</h1>
-              <Pill tone="accent" dot>claude-haiku-4-5</Pill>
+              <Pill tone="accent" dot>claude-sonnet-4-6</Pill>
             </div>
             <div className="h-subtitle" style={{ fontSize: 12 }}>
               Grounded in <strong>{corpus.reportCount}</strong> reports, <strong>{corpus.kpiCount}</strong> KPIs, <strong>{corpus.taskCount}</strong> tasks, <strong>{corpus.flagCount}</strong> flags · scope: <span className="mono code">{scopeLabelFor(currentUser)}</span>
