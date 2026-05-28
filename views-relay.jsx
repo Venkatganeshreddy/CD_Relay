@@ -150,6 +150,7 @@ window.SecondBrainView = SecondBrainView;
 function MomLoader({ open, onClose, currentUser, nav }) {
   const [step, setStep] = useStP('paste');  // paste → scribe → dispatcher → review → done
   const [transcript, setTranscript] = useStP('');
+  const [agenda, setAgenda] = useStP('');
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
@@ -207,18 +208,27 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   async function runPipeline() {
     setStep('scribe');
     let items = null;
+    let derivedAgenda = '';
     try {
       if (window.CDC.agents && transcript.trim().length > 20) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
-        if (raw && raw.length) {
-          items = raw.map((it, i) => {
+        derivedAgenda = (raw && raw.agenda) || '';
+        const rawItems = (raw && raw.items) || [];
+        if (rawItems.length) {
+          items = rawItems.map((it, i) => {
             const a = dispatcherAssign(it.assigneeHint);
             return { id: `mi-${i + 1}`, text: it.text, owner: a.id, ownerInferReason: a.reason, due: dueIn(3 + i), confidence: it.confidence || 0.8 };
           });
         }
       }
     } catch (e) { console.warn('[Relay] Scribe failed (deploy relay-agent to enable):', e.message); }
+    // Fallback agenda: first substantive transcript line, else a generic label.
+    if (!derivedAgenda) {
+      const firstLine = transcript.split('\n').map((l) => l.replace(/^[^:]{1,30}:/, '').trim()).find((l) => l.length > 12);
+      derivedAgenda = firstLine ? firstLine.slice(0, 90) : 'Team sync — action items';
+    }
+    setAgenda(derivedAgenda);
     if (!items) {
       // Fallback: heuristic extraction (or canned) so the demo still flows offline.
       setStep('dispatcher');
@@ -241,6 +251,14 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   function editText(id, text) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, text } : it)); }
   function editDue(id, due) { setActionItems((items) => items.map((it) => it.id === id ? { ...it, due } : it)); }
   function setRejectNote(id, note) { setRejectNotes((n) => ({ ...n, [id]: note })); }
+  // Manually add an extra action item Scribe missed; owner defaults to the uploader for triage.
+  function addActionItem() {
+    setActionItems((items) => [...items, {
+      id: `mi-manual-${Date.now()}`, text: '', owner: currentUser.id,
+      ownerInferReason: 'Added manually by ' + currentUser.name, due: dueIn(3), confidence: 1,
+      aiOwner: currentUser.id, aiText: '', aiDue: dueIn(3), manual: true,
+    }]);
+  }
 
   function decideItem(id, action) { setDecisions((d) => ({ ...d, [id]: action })); }
   function commitAll() {
@@ -279,7 +297,8 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     });
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const mom = {
-      id: momId, title: (actionItems[0] ? actionItems[0].text : 'MOM').slice(0, 60),
+      id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
+      agenda,
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
@@ -292,7 +311,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     setTimeout(() => { onClose(); resetState(); nav.go('second-brain'); }, 1200);
   }
   function resetState() {
-    setStep('paste'); setTranscript(''); setActionItems([]); setDecisions({}); setRejectNotes({});
+    setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
   }
 
   if (!open) return null;
@@ -352,12 +371,19 @@ function MomLoader({ open, onClose, currentUser, nav }) {
           )}
           {step === 'review' && (
             <div className="col" style={{ gap: 10, padding: 4, maxHeight: 460, overflowY: 'auto' }}>
-              <div className="muted" style={{ fontSize: 12 }}>
-                <strong>Scribe</strong> found <strong>{actionItems.length}</strong> action items. <strong>Dispatcher</strong> proposed owners using the people knowledge base. Review each, edit if needed, approve.
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Action Items</div>
+                <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+                  <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.04, fontSize: 10.5, color: 'var(--text-faint)' }}>Agenda</span>
+                  <span style={{ marginLeft: 6 }}>{agenda}</span>
+                </div>
               </div>
               {actionItems.map((it) => (
                 <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} onEditText={editText} onEditDue={editDue} rejectNote={rejectNotes[it.id] || ''} onRejectNote={setRejectNote} />
               ))}
+              <button className="btn" data-size="sm" data-variant="ghost" onClick={addActionItem} style={{ alignSelf: 'flex-start' }}>
+                <Icon name="sparkles" size={11} /> Add action item
+              </button>
             </div>
           )}
           {step === 'done' && (
@@ -413,7 +439,7 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people, on
   const ownerChanged = item.aiOwner && item.owner !== item.aiOwner;
   const textChanged = item.aiText && item.text !== item.aiText;
   const dueChanged = item.aiDue && item.due !== item.aiDue;
-  const [editing, setEditing] = useStP(false);
+  const [editing, setEditing] = useStP(!item.text);
   return (
     <div className="mom-action-item" data-state={state || 'pending'}>
       <div className="row" style={{ alignItems: 'flex-start', gap: 8 }}>
@@ -422,7 +448,7 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people, on
         </span>
         <div style={{ flex: 1, fontSize: 13 }}>
           {editing ? (
-            <input className="input-text" value={item.text} onChange={(e) => onEditText(item.id, e.target.value)} onBlur={() => setEditing(false)} autoFocus />
+            <input className="input-text" value={item.text} placeholder="Describe the action item…" onChange={(e) => onEditText(item.id, e.target.value)} onBlur={() => setEditing(false)} autoFocus />
           ) : (
             <span onClick={() => !state && setEditing(true)} title="Click to edit">{item.text}{textChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9, marginLeft: 6 }}>edited</span>}</span>
           )}

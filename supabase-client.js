@@ -221,17 +221,18 @@
       // EXACT name/team the Dispatcher can map without guessing.
       const roster = (window.CDC.USERS || [])
         .map((u) => `${u.name} — ${u.level} — ${u.sub || u.dept || ''}`).join('\n');
-      const prompt = `You are Scribe, extracting EVERY action item from a meeting transcript for the team listed below.\n` +
-        `Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
+      const prompt = `You are Scribe, summarizing a meeting transcript for the team listed below.\n` +
+        `First, write a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n` +
+        `Then extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
         `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
         `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
         `- If a speaker volunteers ("I'll…", "I will…", "let me…"), assign that speaker.\n` +
         `- Never default to the meeting chair or whoever is handing out work; pick who must complete it.\n` +
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON: {"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON: {"agenda":"<one crisp line>","items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
-      try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).items || []; } catch (_) { return []; }
+      try { const m = content.match(/\{[\s\S]*\}/); const p = JSON.parse(m[0]); return { agenda: p.agenda || '', items: p.items || [] }; } catch (_) { return { agenda: '', items: [] }; }
     },
     // Curator — close the learning loop: read where humans edited/rejected an
     // agent's drafts (engram_interactions), distill the recurring corrections
