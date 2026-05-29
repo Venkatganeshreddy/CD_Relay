@@ -53,6 +53,28 @@ function Dashboard({ tweaks, currentUser, nav }) {
     };
   });
 
+  // Daily captured work — worklogs submitted today + tasks created today,
+  // normalized to the CD Task-flow daily columns.
+  const todayStr = CDC.fmt(CDC.today);
+  const tmplText = (tmpl) => tmpl && typeof tmpl === 'object' ? Object.values(tmpl).filter(Boolean).join(' · ') : '';
+  const STATUS_LABEL = { ACTIVE: 'In-progress', DONE: 'Done', BLOCKED: 'Blocked', ESCALATED: 'Escalated', BACKLOG: 'Backlog', OVERDUE: 'Overdue' };
+  const capturedToday = [
+    ...worklogs.filter((w) => w.date === todayStr).map((w) => ({
+      empId: w.empId || w.userId, metric: w.metricCategory, products: w.products || [], taskCat: w.taskCategory,
+      stacks: w.stacks || [], outputCat: w.outputCategory, count: w.outputCount,
+      task: tmplText(w.template), status: w.status, reason: w.reason, est: w.hours,
+    })),
+    // Every captured task in scope (manual, MOM-derived, agent — any source),
+    // excluding untriaged suggestions and rejected ones.
+    ...tasks.filter((t) => !['SUGGESTED', 'REJECTED'].includes(t.status)).map((t) => {
+      const o = CDC.lookup.user(t.owner) || {};
+      return { empId: o.empId || t.owner, metric: t.metricCategory, products: t.products || [], taskCat: t.taskCategory,
+        stacks: t.stacks || [], outputCat: t.outputCategory, count: t.outputCount,
+        task: tmplText(t.template) || t.title, status: STATUS_LABEL[t.status] || t.status,
+        reason: t.blockReason || t.escalReason, est: t.estHours, src: t.source === 'manual' ? null : (t.reason || t.source) };
+    }),
+  ];
+
   return (
     <div className="fadein">
       {/* Context strip */}
@@ -260,6 +282,43 @@ function Dashboard({ tweaks, currentUser, nav }) {
             })}
           </tbody>
         </table>
+      </Card>
+
+      {/* Captured work — CD Task-flow daily format (worklogs today + all tasks) */}
+      <h2 className="h-section">Captured work <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· {capturedToday.length} entries</span></h2>
+      <Card pad={false}>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="tbl" style={{ minWidth: 1100 }}>
+            <thead>
+              <tr>
+                <th>EMP ID</th><th>Metric</th><th>Product-Audience</th><th>Task Category</th>
+                <th>Stack</th><th>Output Category</th><th className="num">Count</th><th>Task</th>
+                <th>Status</th><th>Reason</th><th className="num">Est (h)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {capturedToday.map((r, i) => (
+                <tr key={i}>
+                  <td className="mono" style={{ fontSize: 11 }}>{r.empId}</td>
+                  <td>{r.metric ? <Pill tone="accent">{r.metric}</Pill> : <span className="muted">—</span>}</td>
+                  <td style={{ fontSize: 12 }}>{(r.products || []).join(', ') || '—'}</td>
+                  <td style={{ fontSize: 12 }}>{r.taskCat || '—'}</td>
+                  <td style={{ fontSize: 12 }}>{(r.stacks || []).join(', ') || '—'}</td>
+                  <td style={{ fontSize: 12 }}>{r.outputCat || '—'}</td>
+                  <td className="num">{r.count != null ? r.count : '—'}</td>
+                  <td style={{ fontSize: 12, maxWidth: 240 }}>
+                    {r.task || '—'}
+                    {r.src && <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>{r.src}</div>}
+                  </td>
+                  <td><Pill tone={r.status === 'Done' ? 'green' : r.status === 'Blocked' || r.status === 'Escalated' ? 'red' : r.status === 'Backlog' ? 'amber' : 'outline'}>{r.status}</Pill></td>
+                  <td className="muted" style={{ fontSize: 11.5, maxWidth: 180 }}>{r.reason || '—'}</td>
+                  <td className="num">{r.est != null && r.est !== '' ? r.est : '—'}</td>
+                </tr>
+              ))}
+              {capturedToday.length === 0 && <tr><td colSpan={11}><div className="empty">No work captured today yet.</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {/* Section 7: Agent activity */}

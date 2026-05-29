@@ -564,6 +564,7 @@ function AdminView({ tweaks, currentUser }) {
   const [sel, setSel] = useState_a(null);
   const [loading, setLoading] = useState_a(false);
   const [source, setSource] = useState_a('');
+  const [empSearch, setEmpSearch] = useState_a('');
 
   async function openEmployees() {
     setView('employees'); setSel(null); setLoading(true);
@@ -589,7 +590,19 @@ function AdminView({ tweaks, currentUser }) {
         {loading && <div className="muted">Loading…</div>}
         <div className="split" style={{ height: 'calc(100vh - 200px)' }}>
           <div className="split-list">
-            {(rows || []).map((r) => (
+            <div style={{ padding: 8, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
+              <input className="tb-search" placeholder="Search name, EMP ID, sub-dept, level…" value={empSearch}
+                onChange={(e) => setEmpSearch(e.target.value)}
+                style={{ width: '100%', fontSize: 12.5, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' }} />
+            </div>
+            {(rows || [])
+              .filter((r) => {
+                const q = empSearch.trim().toLowerCase();
+                if (!q) return true;
+                return [r.name, r.id, r.sub, r.role_level, r.title, (CDC.lookup.dept(r.dept) || {}).name, r.dept]
+                  .filter(Boolean).join(' ').toLowerCase().includes(q);
+              })
+              .map((r) => (
               <div key={r.id} className="list-row" data-active={sel === r.id} onClick={() => setSel(r.id)}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{r.name}</div>

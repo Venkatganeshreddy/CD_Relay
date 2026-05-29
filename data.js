@@ -136,6 +136,16 @@
     { id: 'NW-VIJAY-CO', name: 'Vijay', initials: 'VJ', role: 'L2', level: 'L2', dept: 'd-fsgci', sub: 'Central Ops', title: 'L2 · Central Ops', managerId: 'NW0002526' },
   ];
 
+  // Normalize sub-department: DS&ML / DS&Algo (and a few others) carry the
+  // sub only in `title` (e.g. "L1 · Content — DS&ML"). Derive `sub` so every
+  // member shows under their L2's sub-team and scope filters work.
+  USERS.forEach((u) => {
+    if (!u.sub && typeof u.title === 'string' && u.title.includes('·')) {
+      const derived = u.title.split('·').pop().trim();
+      if (derived) u.sub = derived;
+    }
+  });
+
   // ── Department health (computed-ish) ───────────────────────────────────
   const DEPT_HEALTH = {
     'd-fsgci': {

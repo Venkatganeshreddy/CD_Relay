@@ -388,7 +388,7 @@ function TasksView({ tweaks, currentUser }) {
   const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
   const [statusOv, setStatusOv] = useState_o({});      // id -> status (forces re-render after update)
   // Managers open to their direct reports' tasks (L3 → L2s, L2 → their L1s); ICs open to their own.
-  const [filter, setFilter] = useState_o(reportees.length ? 'TEAM' : 'MINE');
+  const [filter, setFilter] = useState_o('MINE');
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [editing, setEditing] = useState_o(null);
   const [creating, setCreating] = useState_o(false);
@@ -417,7 +417,8 @@ function TasksView({ tweaks, currentUser }) {
     return null;
   };
 
-  const tabs = ['MINE', ...(reportees.length ? ['TEAM'] : []), 'SUGGESTED', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', 'ALL'];
+  const TAB_LABELS = { MINE: 'self', ALL: 'team mates' };
+  const tabs = ['MINE', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', ...(reportees.length ? ['ALL'] : [])];
   const matchesTab = (t, f) =>
     f === 'ALL' ? true :
     f === 'MINE' ? t.owner === me.id :
@@ -427,6 +428,7 @@ function TasksView({ tweaks, currentUser }) {
     t.status === f;
 
   const list = allTasks
+    .filter((t) => t.status !== 'SUGGESTED')
     .filter((t) => matchesTab(t, filter))
     .filter((t) => !reporteeSel || t.owner === reporteeSel)
     .map((t) => ({ ...t, _decision: decisions[t.id] }));
@@ -581,7 +583,7 @@ function TasksView({ tweaks, currentUser }) {
     <div className="fadein">
       <SectionHeader
         title="Tasks"
-        subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see team + reportee tasks; agent-suggested tasks need triage."
+        subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see their team mates' tasks via the team mates tab + reportee filter."
         actions={
           <>
             <button className="btn" data-size="sm" onClick={scanNow} title="Send overdue triggers to originators; refresh escalations"><Icon name="refresh" size={12} /> Scan now</button>
@@ -593,7 +595,7 @@ function TasksView({ tweaks, currentUser }) {
       <div className="row" style={{ gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
         {tabs.map((f) => (
           <button key={f} className="btn" data-size="sm" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
-            {f.toLowerCase()}
+            {TAB_LABELS[f] || f.toLowerCase()}
             <span className="mono muted" style={{ marginLeft: 6 }}>{tabCount(f)}</span>
           </button>
         ))}
