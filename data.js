@@ -133,8 +133,7 @@
     { id: 'NW1006662', name: 'Chittharu Nagapravallika', initials: 'CN', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
     { id: 'NW1006940', name: 'Rishu Raj Singh', initials: 'RS', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
     { id: 'NW1006983', name: 'Dasari Pallavi', initials: 'DP', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
-    // Latest roster additions (Team List CD): Assessment Intelligence intern + University Partnership L2.
-    { id: 'NW1006396', name: 'Pakala Akshitha', initials: 'PA', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Assessment Intelligence', title: 'L1 · Assessment Intelligence', managerId: 'NW0001240' },
+    // Latest roster addition (Team List CD): University Partnership L2.
     { id: 'NW0006700', name: 'Sunil Tekale', initials: 'ST', role: 'L2', level: 'L2', dept: 'd-fsgci', sub: 'University Partnership', title: 'L2 · University Partnership', managerId: 'NW0002526' },
   ];
 
