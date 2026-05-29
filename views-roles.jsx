@@ -470,7 +470,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
         <div className="submit-banner" style={{ marginBottom: 18 }}>
           <div className="banner-icon"><Icon name="clock" size={14} /></div>
           <div style={{ flex: 1 }}>
-            <div className="banner-title">5:30 PM nudge · capture what you accomplished today</div>
+            <div className="banner-title">6:00 PM snapshot · review status & note your backlog</div>
             <div className="banner-sub">Takes 5 minutes. Logs against {CDC.empIdForUser(currentUser.id)} for tonight's intake.</div>
           </div>
           <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>Submit now</button>

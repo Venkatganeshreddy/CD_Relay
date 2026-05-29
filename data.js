@@ -1251,9 +1251,120 @@
   for (const k of Object.keys(DEPT_HEALTH)) delete DEPT_HEALTH[k];
   if (EXPENSE) { EXPENSE.byTool = []; EXPENSE.byPerson = []; EXPENSE.monthlyTrend = []; }
 
+  // ── Task catalog (authoritative, from CD "Task flow" sheet) ─────────────
+  // Shared by the end-of-day SubmitView and the manual Create-Task form.
+  const PRODUCTS = [
+    'NIAT - B1', 'NIAT - B2', 'NIAT - B3', 'NIAT - B4', 'NIAT - B5',
+    'Academy 1.0', 'Academy 1.5', 'Academy 2.0',
+    'Intensive Offline', 'LaunchPad',
+    'NIAT-GRIT', 'NIAT-MINT',
+    'Academy-AI Fullstack Project',
+    'NxtWave- Agentic Workflow/Services',
+  ];
+
+  const STACKS = [
+    'FS - Java', 'FS - Python', 'FS - MERN',
+    'DS/ML', 'DSA', 'GenAI', 'English', 'Aptitude',
+  ];
+
+  // Output Category → { task, activity, metric } (auto-derived columns).
+  // Mirrors the v.11 mapping table exactly. task = TASK_TEMPLATES key.
+  const OUTPUT_MAP = {
+    'Content-Assessment Alignment': { task: 'Assessment Analytics', activity: 'Initiatives / Upgrades', metric: 'Business Impact' },
+    'Pedagogy Initiative': { task: 'Learning Outcome Initiative', activity: 'Initiatives / Upgrades', metric: 'Content Effectiveness' },
+    'TR-Doc': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'PPT': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Projects': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Objective Content (Coding question, MCQs)': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Other content format': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Branding Asset': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Issue Resolution': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Vernacular Content': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Testing & Learning Portal Configurations': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Video Session': { task: 'Recording & Production', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Agentic Workflow Initiative, R&D, Tools': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
+    'Feedback & Backpropagation': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
+    'Industry Upgrade': { task: 'Industry Review & Quality Check', activity: 'Initiatives / Upgrades', metric: 'Content Relevance' },
+    'Stakeholder Request Fulfillment': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
+    'Interviews/Offer roll-out': { task: 'Hiring', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
+    'Executive Reporting': { task: 'Reporting Analysis', activity: 'Executive Ops', metric: 'Executive Ops' },
+    'Performance-Goal Management': { task: 'Reporting Analysis', activity: 'Executive Ops', metric: 'Executive Ops' },
+    'HR & Employee Engagement': { task: 'Employee Engagement', activity: 'Executive Ops', metric: 'Executive Ops' },
+    'Upskilling & Learning hours': { task: 'Learning Hours', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
+  };
+
+  const OUTPUT_CATEGORIES = Object.keys(OUTPUT_MAP);
+
+  // Output count not applicable when metric is Executive Ops or Business Impact.
+  const COUNT_NA = new Set(
+    OUTPUT_CATEGORIES.filter((c) => ['Executive Ops', 'Business Impact'].includes(OUTPUT_MAP[c].metric))
+  );
+
+  const STATUSES = ['In-progress', 'Done', 'Blocked', 'Overdue', 'Backlog'];
+
+  // Fill-in-the-blanks template per task category.
+  const TASK_TEMPLATES = {
+    'Content Creation & Review': [
+      { id: 'course', label: 'Course', type: 'text', ph: 'e.g. Fullstack — Java' },
+      { id: 'module', label: 'Module', type: 'text', ph: 'e.g. Authentication' },
+      { id: 'topic', label: 'Topic', type: 'text', ph: 'e.g. JWT refresh tokens' },
+      { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. TR Doc Generator' },
+      { id: 'mode', label: 'Mode', type: 'choice', options: ['Creation', 'Review'] },
+    ],
+    'Industry Review & Quality Check': [
+      { id: 'course', label: 'Course', type: 'text', ph: 'e.g. DS&Algo' },
+      { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. Industry Insight Generator' },
+      { id: 'upgrade', label: 'Upgrade scale', type: 'choice', options: ['Patchwork', 'Minor', 'Major', 'Critical'] },
+    ],
+    'Recording & Production': [
+      { id: 'course', label: 'Course', type: 'text', ph: 'e.g. Aptitude' },
+      { id: 'module', label: 'Module', type: 'text', ph: 'e.g. Probability' },
+      { id: 'topic', label: 'Topic', type: 'text', ph: 'e.g. Bayes theorem' },
+      { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. Video Production Pipeline' },
+      { id: 'stage', label: 'Stage', type: 'choice', options: ['Recording', 'Editing', 'Review'] },
+    ],
+    'Business Requests & Coordination': [
+      { id: 'agenda', label: 'Agenda', type: 'text', ph: 'e.g. Q3 hiring forecast review' },
+      { id: 'items', label: 'Priority action items', type: 'textarea', ph: 'One per line…' },
+      { id: 'urgency', label: 'Urgency', type: 'choice', options: ['Patchwork', 'Minor', 'Major', 'Critical'] },
+    ],
+    'Process & Tooling': [
+      { id: 'work', label: 'Work / feedback description', type: 'textarea', ph: 'What you built / what feedback you resolved…' },
+      { id: 'tool', label: 'Tool used', type: 'text', ph: 'e.g. Claude Code' },
+      { id: 'impact', label: 'Impact (0–5)', type: 'choice', options: ['0', '1', '2', '3', '4', '5'], hint: 'Only if Agentic Workflow / R&D / Tools output category' },
+    ],
+    'Hiring': [
+      { id: 'role', label: 'Role name', type: 'text', ph: 'e.g. Sr Content Engineer — DS&ML' },
+      { id: 'status', label: 'Interview status', type: 'choice', options: ['Sourced', 'Screened', 'Panel', 'Offer', 'Joined', 'Dropped'] },
+    ],
+    'Reporting Analysis': [
+      { id: 'cadence', label: 'Reporting cadence', type: 'choice', options: ['Weekly', 'Monthly'] },
+    ],
+    'Employee Engagement': [
+      { id: 'activity', label: 'Activity name', type: 'text', ph: 'e.g. Friday team lunch' },
+      { id: 'purpose', label: 'Purpose', type: 'text', ph: 'e.g. Cross-team bonding' },
+    ],
+    'Learning Hours': [
+      { id: 'skill', label: 'Skill / 1-on-1 / impact', type: 'text', ph: 'e.g. Vector DBs · self-study' },
+      { id: 'usecase', label: 'Use-case / agenda', type: 'text', ph: 'e.g. Applying to RAG-lab v2' },
+    ],
+    'Assessment Analytics': [
+      { id: 'bucket', label: 'Assessment bucket', type: 'choice', options: ['Skill', 'Academic', 'Interview Intelligence'] },
+      { id: 'metric', label: 'Analysis metric / delta', type: 'text', ph: 'e.g. Pass-rate +4pts wow' },
+    ],
+    'Learning Outcome Initiative': [
+      { id: 'initiative', label: 'Initiative name', type: 'text', ph: 'e.g. Adaptive problem ladder' },
+      { id: 'usecase', label: 'Use-case', type: 'text', ph: 'e.g. DS&Algo cohort 4' },
+      { id: 'impact', label: 'Impact (0–5)', type: 'choice', options: ['0', '1', '2', '3', '4', '5'] },
+    ],
+  };
+
+  const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES };
+
   window.CDC = {
     today, fmt, daysAgo,
     ROLES, USERS,
+    TASK_CATALOG,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
     KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
     WORKLOGS, empIdForUser,

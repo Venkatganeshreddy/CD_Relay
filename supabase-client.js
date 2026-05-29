@@ -128,6 +128,31 @@
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
     },
+    // 6:30 PM check-in: owner acknowledges an open task. Records lastAckDate so
+    // the task drops out of the unacknowledged-escalation path; optional status
+    // change maps the xlsx label to the board status (Blocked also arms escalation).
+    async acknowledgeTask(id, { status, note } = {}) {
+      const STATUS_MAP = { 'In-progress': 'ACTIVE', 'Done': 'DONE', 'Blocked': 'BLOCKED', 'Overdue': 'ACTIVE', 'Backlog': 'BACKLOG' };
+      const t = (window.CDC.TASKS || []).find((x) => x.id === id);
+      const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+      const newStatus = status ? (STATUS_MAP[status] || 'ACTIVE') : (t ? t.status : 'ACTIVE');
+      if (t) {
+        t.lastAckDate = today; t.ackPending = false; t.lastAckStatus = status || null;
+        if (status === 'Blocked' && t.status !== 'BLOCKED' && t.status !== 'ESCALATED') {
+          t.blockedAt = new Date().toISOString(); t.escalIdx = 0;
+        }
+        if (note) { if (status === 'Backlog') t.backlogNote = note; else t.blockReason = note; }
+        t.status = newStatus;
+      }
+      await remote(() => sb.from('tasks').update({ status: newStatus, data: t || { id, status: newStatus } }).eq('id', id));
+      const ackId = rid('ack-');
+      await remote(() => sb.from('task_acknowledgements').insert({
+        id: ackId, task_id: id, owner_id: t ? t.owner : null, ack_date: today, status: status || null, note: note || null,
+      }));
+      this.logInteraction({ agent: 'Sentry', flow: 'task_ack', inputRef: `Task ${id}`, action: 'edit',
+        reason: `Acknowledged${status ? ` as ${status}` : ''}${note ? ` — ${note}` : ''}`, userId: t ? t.owner : null });
+      return ackId;
+    },
     async addMom(mom) {
       if (Array.isArray(window.CDC.MOMS)) window.CDC.MOMS.unshift(mom);
       await remote(() => sb.from('moms').insert({ id: mom.id, dept: mom.dept || null, data: mom }));

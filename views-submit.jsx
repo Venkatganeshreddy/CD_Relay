@@ -4,130 +4,10 @@
 
 const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
-// ── Catalog ─────────────────────────────────────────────────────────────
-const PRODUCTS = [
-  'NxtWave',
-  'NIAT - B1', 'NIAT - B2',
-  'Intensive Offline',
-  'Academy',
-  'Launchpad',
-];
-
-const STACKS = [
-  'FS — Java', 'FS — Python', 'FS — MERN',
-  'DS/ML', 'DSA', 'GenAI', 'English', 'Aptitude',
-];
-
-const OUTPUT_CATEGORIES = [
-  'Content-Assessment Alignment',
-  'Pedagogy Initiative',
-  'TR-Doc',
-  'PPT',
-  'Video Session',
-  'Projects',
-  'Objective Content (Coding Q, MCQs)',
-  'Other content format',
-  'Branding Asset',
-  'Vernacular Content',
-  'Testing & Learning Portal Configurations',
-  'Content Issue Resolution',
-  'Agentic Workflow Initiative, R&D, Tools',
-  'Feedback & Backpropagation',
-  'Industry Upgrade',
-  'Stakeholder Request Fulfillment',
-  'Interviews/Offer roll-out',
-  'Executive Reporting',
-  'HR & Employee Engagement',
-  'Upskilling & Learning hours',
-  'Performance-Goal Management',
-];
-
-const STATUSES = ['In-progress', 'Done', 'Blocked', 'Overdue'];
-
-// Output category → Task category mapping
-const OUTPUT_TO_TASK = {
-  'Content-Assessment Alignment': 'Content Creation & Review',
-  'Pedagogy Initiative': 'Learning Outcome Initiative',
-  'TR-Doc': 'Content Creation & Review',
-  'PPT': 'Content Creation & Review',
-  'Video Session': 'Recording & Production',
-  'Projects': 'Content Creation & Review',
-  'Objective Content (Coding Q, MCQs)': 'Content Creation & Review',
-  'Other content format': 'Content Creation & Review',
-  'Branding Asset': 'Content Creation & Review',
-  'Vernacular Content': 'Content Creation & Review',
-  'Testing & Learning Portal Configurations': 'Process & Tooling',
-  'Content Issue Resolution': 'Content Creation & Review',
-  'Agentic Workflow Initiative, R&D, Tools': 'Process & Tooling',
-  'Feedback & Backpropagation': 'Process & Tooling',
-  'Industry Upgrade': 'Industry Review & Quality Check',
-  'Stakeholder Request Fulfillment': 'Business Requests & Coordination',
-  'Interviews/Offer roll-out': 'Hiring',
-  'Executive Reporting': 'Reporting Analysis',
-  'HR & Employee Engagement': 'Employee Engagement',
-  'Upskilling & Learning hours': 'Learning Hours',
-  'Performance-Goal Management': 'Assessment Analytics',
-};
-
-// Categories that DO NOT require output count
-const COUNT_NA = new Set(['Executive Reporting', 'Stakeholder Request Fulfillment']);
-
-// Templates per task category. Each field: { id, label, type, options?, placeholder? }
-const TASK_TEMPLATES = {
-  'Content Creation & Review': [
-    { id: 'course', label: 'Course', type: 'text', ph: 'e.g. Fullstack — Java' },
-    { id: 'module', label: 'Module', type: 'text', ph: 'e.g. Authentication' },
-    { id: 'topic', label: 'Topic', type: 'text', ph: 'e.g. JWT refresh tokens' },
-    { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. TR Doc Generator' },
-    { id: 'mode', label: 'Mode', type: 'choice', options: ['Creation', 'Review'] },
-  ],
-  'Industry Review & Quality Check': [
-    { id: 'course', label: 'Course', type: 'text', ph: 'e.g. DS&Algo' },
-    { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. Industry Insight Generator' },
-    { id: 'upgrade', label: 'Upgrade scale', type: 'choice', options: ['Patchwork', 'Minor', 'Major', 'Critical'] },
-  ],
-  'Recording & Production': [
-    { id: 'course', label: 'Course', type: 'text', ph: 'e.g. Aptitude' },
-    { id: 'module', label: 'Module', type: 'text', ph: 'e.g. Probability' },
-    { id: 'topic', label: 'Topic', type: 'text', ph: 'e.g. Bayes theorem' },
-    { id: 'workflow', label: 'Agentic workflow used', type: 'text', ph: 'e.g. Video Production Pipeline' },
-    { id: 'stage', label: 'Stage', type: 'choice', options: ['Recording', 'Editing', 'Review'] },
-  ],
-  'Business Requests & Coordination': [
-    { id: 'agenda', label: 'Agenda', type: 'text', ph: 'e.g. Q3 hiring forecast review' },
-    { id: 'items', label: 'Priority action items', type: 'textarea', ph: 'One per line…' },
-    { id: 'urgency', label: 'Urgency', type: 'choice', options: ['Patchwork', 'Minor', 'Major', 'Critical'] },
-  ],
-  'Process & Tooling': [
-    { id: 'work', label: 'Work / feedback description', type: 'textarea', ph: 'What you built / what feedback you resolved…' },
-    { id: 'tool', label: 'Tool used', type: 'text', ph: 'e.g. Claude Code' },
-    { id: 'impact', label: 'Impact (0–5)', type: 'choice', options: ['0', '1', '2', '3', '4', '5'], hint: 'Only if Agentic Workflow / R&D / Tools output category' },
-  ],
-  'Hiring': [
-    { id: 'role', label: 'Role name', type: 'text', ph: 'e.g. Sr Content Engineer — DS&ML' },
-    { id: 'status', label: 'Interview status', type: 'choice', options: ['Sourced', 'Screened', 'Panel', 'Offer', 'Joined', 'Dropped'] },
-  ],
-  'Reporting Analysis': [
-    { id: 'cadence', label: 'Reporting cadence', type: 'choice', options: ['Weekly', 'Monthly'] },
-  ],
-  'Employee Engagement': [
-    { id: 'activity', label: 'Activity name', type: 'text', ph: 'e.g. Friday team lunch' },
-    { id: 'purpose', label: 'Purpose', type: 'text', ph: 'e.g. Cross-team bonding' },
-  ],
-  'Learning Hours': [
-    { id: 'skill', label: 'Skill / 1-on-1 / impact', type: 'text', ph: 'e.g. Vector DBs · self-study' },
-    { id: 'usecase', label: 'Use-case / agenda', type: 'text', ph: 'e.g. Applying to RAG-lab v2' },
-  ],
-  'Assessment Analytics': [
-    { id: 'bucket', label: 'Assessment bucket', type: 'choice', options: ['Skill', 'Academic', 'Interview Intelligence'] },
-    { id: 'metric', label: 'Analysis metric / delta', type: 'text', ph: 'e.g. Pass-rate +4pts wow' },
-  ],
-  'Learning Outcome Initiative': [
-    { id: 'initiative', label: 'Initiative name', type: 'text', ph: 'e.g. Adaptive problem ladder' },
-    { id: 'usecase', label: 'Use-case', type: 'text', ph: 'e.g. DS&Algo cohort 4' },
-    { id: 'impact', label: 'Impact (0–5)', type: 'choice', options: ['0', '1', '2', '3', '4', '5'] },
-  ],
-};
+// ── Catalog (shared, defined in data.js → window.CDC.TASK_CATALOG) ────────
+const { PRODUCTS, STACKS, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, OUTPUT_MAP } = window.CDC.TASK_CATALOG;
+// Output category → Task category (derived from the shared map).
+const OUTPUT_TO_TASK = Object.fromEntries(OUTPUT_CATEGORIES.map((c) => [c, OUTPUT_MAP[c].task]));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 function empIdFor(user) {
@@ -209,8 +89,8 @@ function SubmitView({ tweaks, currentUser, nav }) {
 
   function onCategorySubmit(cat) {
     pushUser(cat);
-    const taskCategory = OUTPUT_TO_TASK[cat];
-    setCurrent((c) => ({ ...c, outputCategory: cat, taskCategory }));
+    const m = OUTPUT_MAP[cat] || {};
+    setCurrent((c) => ({ ...c, outputCategory: cat, taskCategory: m.task, activityCategory: m.activity, metricCategory: m.metric }));
     typeThen(() => {
       if (COUNT_NA.has(cat)) {
         pushBot(`Skipping count — not applicable for "${cat}". What was achieved? Fill in the template below.`);
@@ -324,6 +204,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
         date: today, daysAgo: 0,
         products: t.products || [], stacks: t.stacks || [myStack],
         outputCategory: t.outputCategory || 'Other', taskCategory: t.taskCategory || '',
+        activityCategory: t.activityCategory || '', metricCategory: t.metricCategory || '',
         outputCount: t.outputCount || 0, template: t.template || {},
         hours: Number(t.hours) || 0, status: t.status || 'Done', reason: t.reason || '',
         submittedAt: 'just now',
@@ -373,11 +254,13 @@ function SubmitView({ tweaks, currentUser, nav }) {
       <div className="submit-banner">
         <div className="banner-icon"><Icon name="clock" size={14} /></div>
         <div style={{ flex: 1 }}>
-          <div className="banner-title">5:30 PM nudge · capture what you accomplished today</div>
+          <div className="banner-title">6:00 PM snapshot · review status & note your backlog</div>
           <div className="banner-sub">Logs against EmpID for tonight's intake. Pavan G sees the rollup in tomorrow's 06:00 IST digest.</div>
         </div>
         <Pill tone="accent" dot>auto-saving</Pill>
       </div>
+
+      <AckPanel currentUser={currentUser} />
 
       <div className="progress-track" style={{ marginBottom: 12 }}>
         <div className="progress-fill" style={{ width: `${progressPct}%` }} />
@@ -430,6 +313,88 @@ function SubmitView({ tweaks, currentUser, nav }) {
   );
 }
 window.SubmitView = SubmitView;
+
+// ── 6:00 PM daily snapshot ────────────────────────────────────────────────
+// Read-only snapshot of the signed-in user's tasks. They can ONLY change the
+// status (In-progress / Done / Blocked / Overdue / Backlog) and write a
+// backlog/blocked note. Saving records lastAckDate; anything left
+// unacknowledged feeds the escalation engine (climbs L1 → L2 → L3). Backlog
+// items are stored and stay visible in this snapshot + the Tasks "backlog" tab.
+const SNAPSHOT_STATUSES = ['In-progress', 'Done', 'Blocked', 'Overdue', 'Backlog'];
+const INTERNAL_TO_LABEL = { ACTIVE: 'In-progress', DONE: 'Done', BLOCKED: 'Blocked', ESCALATED: 'Blocked', BACKLOG: 'Backlog' };
+const NOTE_STATUSES = new Set(['Blocked', 'Overdue', 'Backlog']);
+
+function AckPanel({ currentUser }) {
+  const CDC = window.CDC;
+  const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+  const mine = () => (CDC.TASKS || []).filter((t) =>
+    t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
+  const [, force] = useS(0);
+  const [draft, setDraft] = useS({});   // taskId -> { status, note }
+
+  const tasks = mine();
+  if (tasks.length === 0) return null;
+
+  const baseOf = (t) => ({ status: INTERNAL_TO_LABEL[t.status] || 'In-progress', note: t.backlogNote || t.blockReason || '' });
+  const draftFor = (t) => draft[t.id] || baseOf(t);
+  const setField = (t, patch) => setDraft((d) => ({ ...d, [t.id]: { ...baseOf(t), ...(d[t.id] || {}), ...patch } }));
+
+  async function save(t) {
+    const d = draftFor(t);
+    const note = NOTE_STATUSES.has(d.status) ? (d.note || '').trim() : '';
+    if (CDC.db && CDC.db.acknowledgeTask) await CDC.db.acknowledgeTask(t.id, { status: d.status, note });
+    setDraft((dd) => { const c = { ...dd }; delete c[t.id]; return c; });
+    force((n) => n + 1);
+  }
+
+  const pending = tasks.filter((t) => t.lastAckDate !== todayStr);
+  const backlog = tasks.filter((t) => t.status === 'BACKLOG');
+
+  return (
+    <div className="card" style={{ marginBottom: 12, padding: 14 }}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontWeight: 600 }}>6:00 PM snapshot — your tasks
+          <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> · {pending.length} awaiting{backlog.length ? ` · ${backlog.length} in backlog` : ''}</span>
+        </div>
+        <Pill tone={pending.length ? 'amber' : 'green'} dot>{pending.length ? 'action needed' : 'all acknowledged'}</Pill>
+      </div>
+      <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>You can change the status and note the backlog. Tasks left unacknowledged escalate.</div>
+      <div className="col" style={{ gap: 8 }}>
+        {tasks.map((t) => {
+          const acked = t.lastAckDate === todayStr;
+          const d = draftFor(t);
+          const dirty = !!draft[t.id];
+          return (
+            <div key={t.id} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', opacity: acked && !dirty ? 0.65 : 1 }}>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{t.title}</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    {t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${t.due}` : ''}
+                    {acked && t.lastAckStatus ? ` · acknowledged: ${t.lastAckStatus}` : ''}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <select value={d.status} onChange={(e) => setField(t, { status: e.target.value })}
+                    style={{ fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    {SNAPSHOT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button className="btn" data-size="sm" data-variant="primary" onClick={() => save(t)}>Save</button>
+                </div>
+              </div>
+              {NOTE_STATUSES.has(d.status) && (
+                <input className="field-input" style={{ marginTop: 8, width: '100%' }}
+                  placeholder={d.status === 'Backlog' ? 'What is the backlog? (stored, visible later)' : `Reason it's ${d.status.toLowerCase()}…`}
+                  value={d.note} onChange={(e) => setField(t, { note: e.target.value })} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+window.AckPanel = AckPanel;
 
 // ── Message renderer ────────────────────────────────────────────────────
 function Message({ m }) {
@@ -547,7 +512,7 @@ function CategoryInput({ onCategorySubmit }) {
         {filtered.length === 0 && <div className="muted" style={{ fontSize: 12, padding: 4 }}>No matches.</div>}
       </div>
       <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
-        <span className="muted" style={{ fontSize: 11.5 }}>{sel ? `Task category: ${OUTPUT_TO_TASK[sel]}` : 'Pick one.'}</span>
+        <span className="muted" style={{ fontSize: 11.5 }}>{sel ? `${OUTPUT_MAP[sel].metric} · ${OUTPUT_MAP[sel].task}` : 'Pick one.'}</span>
         <button className="btn" data-variant="primary" disabled={!sel} onClick={() => onCategorySubmit(sel)}>Next <Icon name="arrow-up" size={11} /></button>
       </div>
     </div>
@@ -568,12 +533,12 @@ function CountInput({ onCountSubmit }) {
 function TemplateInput({ currentTask, onTemplateSubmit }) {
   const fields = TASK_TEMPLATES[currentTask.taskCategory] || [];
   const [vals, setVals] = useS(() => Object.fromEntries(fields.map((f) => [f.id, ''])));
-  const allFilled = fields.every((f) => (vals[f.id] || '').toString().trim().length > 0);
+  const filledCount = fields.filter((f) => (vals[f.id] || '').toString().trim()).length;
   return (
     <div>
       <div className="row" style={{ gap: 6, marginBottom: 8 }}>
         <Pill tone="accent" dot>{currentTask.taskCategory}</Pill>
-        <span className="muted" style={{ fontSize: 11.5 }}>Output: {currentTask.outputCategory}</span>
+        <span className="muted" style={{ fontSize: 11.5 }}>Output: {currentTask.outputCategory} · optional</span>
       </div>
       <div className="template-form">
         {fields.map((f) => (
@@ -596,8 +561,8 @@ function TemplateInput({ currentTask, onTemplateSubmit }) {
         ))}
       </div>
       <div className="row" style={{ justifyContent: 'space-between', marginTop: 12 }}>
-        <span className="muted" style={{ fontSize: 11.5 }}>{fields.filter((f) => (vals[f.id] || '').toString().trim()).length} of {fields.length} filled</span>
-        <button className="btn" data-variant="primary" disabled={!allFilled} onClick={() => onTemplateSubmit(vals)}>Next <Icon name="arrow-up" size={11} /></button>
+        <span className="muted" style={{ fontSize: 11.5 }}>{filledCount} of {fields.length} filled · optional</span>
+        <button className="btn" data-variant="primary" onClick={() => onTemplateSubmit(vals)}>{filledCount ? 'Next' : 'Skip'} <Icon name="arrow-up" size={11} /></button>
       </div>
     </div>
   );

@@ -122,7 +122,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
 
   // ── Sidebar groups (Daily Worklog / Department / Intelligence / System) ─
   const groupDaily = [
-    { id: 'submit', label: 'Submit today', icon: 'edit', badge: '5:30', badgeTone: 'accent' },
+    { id: 'submit', label: 'Submit today', icon: 'edit', badge: '6:00', badgeTone: 'accent' },
     { id: 'my-tasks', label: 'Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => tt.owner === currentUser.id && tt.status !== 'DONE' && tt.status !== 'REJECTED').length || null, badgeTone: 'amber' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
   ];

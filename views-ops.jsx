@@ -412,6 +412,8 @@ function TasksView({ tweaks, currentUser }) {
     const eff = t.status === 'ESCALATED' ? (t.escalPrevStatus || '') : t.status;
     if (eff === 'BLOCKED' && fullDaysSince(t.blockedAt || t.created) > 1) return `Blocked ${fullDaysSince(t.blockedAt || t.created)} days`;
     if (eff === 'ACTIVE' && fullDaysSince(t.created) > 2) return `In progress ${fullDaysSince(t.created)} days`;
+    // Prompted at a past 6:00 check-in and still not acknowledged.
+    if (t.ackPending && t.ackPromptDate && t.ackPromptDate < todayStr) return `Unacknowledged since ${t.ackPromptDate}`;
     return null;
   };
 
@@ -531,18 +533,37 @@ function TasksView({ tweaks, currentUser }) {
       reason: `Status → ${statusMeta(status).label} by ${me.name}`, userId: me.id });
     setStatusOv((s) => ({ ...s, [id]: status }));
   }
+  // xlsx status labels → internal board statuses. Overdue is derived from the
+  // due date, so it maps to ACTIVE (the overdue pill shows once due < today).
+  const STATUS_MAP = { 'In-progress': 'ACTIVE', 'Done': 'DONE', 'Blocked': 'BLOCKED', 'Overdue': 'ACTIVE', 'Backlog': 'BACKLOG' };
   function createTask(form) {
     const owner = CDC.lookup.user(form.owner);
+    const m = (CDC.TASK_CATALOG.OUTPUT_MAP || {})[form.outputCategory] || {};
+    const tmplSummary = form.template ? Object.values(form.template).filter(Boolean).join(' · ') : '';
+    const title = (form.title && form.title.trim()) ||
+      `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${tmplSummary ? ` — ${tmplSummary}` : ''}`;
+    const status = STATUS_MAP[form.status] || 'ACTIVE';
     const task = {
-      id: `task-${Date.now()}`, title: form.title.trim(), status: form.status,
+      id: `task-${Date.now()}`, title, status,
       reason: 'Manual', sourceReports: [], owner: form.owner,
       dept: owner ? owner.dept : me.dept, created: todayStr, due: form.due,
       confidence: null, source: 'manual', createdBy: me.id,
+      // Structured fields from the CD Task-flow sheet:
+      products: form.products || [], stacks: form.stacks || [], stack: (form.stacks || [])[0] || null,
+      outputCategory: form.outputCategory || null, taskCategory: m.task || '',
+      activityCategory: m.activity || '', metricCategory: m.metric || '',
+      outputCount: form.outputCount ?? null, template: form.template || {},
+      estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
+      blockReason: form.reason || '',
     };
+    if (status === 'BLOCKED') {
+      const chain = managerChain(form.owner);
+      task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = chain[0] || null;
+    }
     CDC.db.addTask(task);
     CDC.db.logInteraction({ agent: '—', flow: 'task_create', inputRef: `Task ${task.id}`, action: 'create',
-      reason: `Created "${task.title}" for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
-    setStatusOv((s) => ({ ...s, [task.id]: form.status }));
+      reason: `Created "${task.title}" (${m.metric || '—'} · ${m.task || '—'}) for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
+    setStatusOv((s) => ({ ...s, [task.id]: status }));
     setCreating(false);
   }
 
@@ -682,48 +703,168 @@ function TasksView({ tweaks, currentUser }) {
 window.TasksView = TasksView;
 
 function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
-  const [title, setTitle] = useState_o('');
+  const CAT = window.CDC.TASK_CATALOG;
   const [owner, setOwner] = useState_o(me.id);
+  const [products, setProducts] = useState_o([]);
+  const [stacks, setStacks] = useState_o([]);
+  const [outputCategory, setOutputCategory] = useState_o('');
+  const [catSearch, setCatSearch] = useState_o('');
+  const [outputCount, setOutputCount] = useState_o('');
+  const [template, setTemplate] = useState_o({});
+  const [estHours, setEstHours] = useState_o('');
+  const [status, setStatus] = useState_o('In-progress');
   const [due, setDue] = useState_o('');
-  const [status, setStatus] = useState_o('BACKLOG');
-  useEffect_o(() => { if (open) { setTitle(''); setOwner(me.id); setDue(''); setStatus('BACKLOG'); } }, [open]);
-  const label = (s) => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
+  const [reason, setReason] = useState_o('');
+  useEffect_o(() => {
+    if (open) {
+      setOwner(me.id); setProducts([]); setStacks([]); setOutputCategory(''); setCatSearch('');
+      setOutputCount(''); setTemplate({}); setEstHours(''); setStatus('In-progress'); setDue(''); setReason('');
+    }
+  }, [open]);
+
+  const map = outputCategory ? CAT.OUTPUT_MAP[outputCategory] : null;
+  const taskCategory = map ? map.task : '';
+  const countNA = outputCategory ? CAT.COUNT_NA.has(outputCategory) : false;
+  const fields = TASK_TEMPLATES_REF(CAT)[taskCategory] || [];
+  const needsReason = status === 'Blocked' || status === 'Overdue';
+  const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
+
+  // Task (template) and Output count are optional — count defaults to 0.
+  const valid = products.length > 0 && stacks.length > 0 && !!outputCategory &&
+    (!needsReason || reason.trim().length > 0);
+
+  const label = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+  const toggle = (set, val) => set((s) => s.includes(val) ? s.filter((x) => x !== val) : [...s, val]);
+
   return (
-    <Modal open={open} onClose={onClose} title="New task"
+    <Modal open={open} onClose={onClose} title="New task — CD Task flow"
       footer={<>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
-        <button className="btn" data-variant="primary" disabled={!title.trim()} onClick={() => onCreate({ title, owner, due: due || null, status })}>Create task</button>
+        <button className="btn" data-variant="primary" disabled={!valid}
+          onClick={() => onCreate({ owner, products, stacks, outputCategory,
+            outputCount: countNA ? null : Number(outputCount), template, estHours, status, due: due || null, reason })}>
+          Create task
+        </button>
       </>}
     >
-      <div className="col" style={{ gap: 12 }}>
+      <div className="col" style={{ gap: 12, maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
         <div>
-          <div style={label()}>Task</div>
-          <input className="tb-search" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to get done?" style={inp} />
+          <div style={label()}>Owner</div>
+          <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
+            <option value={me.id}>{me.name} (me)</option>
+            {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+          </select>
         </div>
+
+        <div>
+          <div style={label()}>Product-Audience <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· multi-select</span></div>
+          <div className="chip-grid">
+            {CAT.PRODUCTS.map((p) => (
+              <div key={p} className="chip" data-selected={products.includes(p)} onClick={() => toggle(setProducts, p)}>
+                {products.includes(p) && <Icon name="check" size={10} stroke={2.4} />}<span>{p}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={label()}>Stack <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· multi-select</span></div>
+          <div className="chip-grid">
+            {CAT.STACKS.map((s) => (
+              <div key={s} className="chip" data-selected={stacks.includes(s)} onClick={() => toggle(setStacks, s)}>
+                {stacks.includes(s) && <Icon name="check" size={10} stroke={2.4} />}<span>{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={label()}>Output category</div>
+          <input className="tb-search" placeholder="Search categories…" value={catSearch} onChange={(e) => setCatSearch(e.target.value)} style={inp} />
+          <div className="chip-grid" style={{ marginTop: 8, maxHeight: 160, overflowY: 'auto' }}>
+            {filteredCats.map((c) => (
+              <div key={c} className="chip" data-selected={outputCategory === c} onClick={() => { setOutputCategory(c); setTemplate({}); }}>
+                {outputCategory === c && <Icon name="check" size={10} stroke={2.4} />}<span>{c}</span>
+              </div>
+            ))}
+            {filteredCats.length === 0 && <div className="muted" style={{ fontSize: 12 }}>No matches.</div>}
+          </div>
+          {map && <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Auto: {map.metric} · {map.activity} · {map.task}</div>}
+        </div>
+
+        {outputCategory && !countNA && (
+          <div>
+            <div style={label()}>Output count</div>
+            <input type="number" min="0" step="1" value={outputCount} placeholder="0"
+              onChange={(e) => setOutputCount(e.target.value.replace(/[^\d]/g, ''))} style={inp} />
+          </div>
+        )}
+        {outputCategory && countNA && (
+          <div className="muted" style={{ fontSize: 11.5 }}>Output count N/A for {map.metric} categories.</div>
+        )}
+
+        {fields.length > 0 && (
+          <div>
+            <div style={label()}>Task — {taskCategory} <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· optional</span></div>
+            <div className="template-form">
+              {fields.map((f) => (
+                <React.Fragment key={f.id}>
+                  <label>{f.label}</label>
+                  {f.type === 'text' && (
+                    <input className="field-input" placeholder={f.ph} value={template[f.id] || ''}
+                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
+                  )}
+                  {f.type === 'textarea' && (
+                    <textarea className="field-input" style={{ height: 60, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={template[f.id] || ''}
+                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
+                  )}
+                  {f.type === 'choice' && (
+                    <div className="seg" style={{ justifySelf: 'start' }}>
+                      {f.options.map((o) => (
+                        <button key={o} type="button" data-active={template[f.id] === o}
+                          onClick={() => setTemplate((v) => ({ ...v, [f.id]: o }))}>{o}</button>
+                      ))}
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="row" style={{ gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={label()}>Owner</div>
-            <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
-              <option value={me.id}>{me.name} (me)</option>
-              {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
-            </select>
+            <div style={label()}>Estimated time (hrs)</div>
+            <input type="number" min="0" step="0.25" value={estHours} placeholder="e.g. 2.5"
+              onChange={(e) => setEstHours(e.target.value)} style={inp} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={label()}>Due date</div>
             <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
           </div>
         </div>
+
         <div>
           <div style={label()}>Status</div>
           <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
-            {TASK_STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+            {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
+
+        {needsReason && (
+          <div>
+            <div style={label()}>Reason ({status.toLowerCase()})</div>
+            <textarea className="field-input" style={{ width: '100%', height: 54, padding: 8, resize: 'vertical' }}
+              placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </div>
+        )}
       </div>
     </Modal>
   );
 }
+// Templates live on the shared catalog; small accessor keeps JSX tidy.
+function TASK_TEMPLATES_REF(CAT) { return CAT.TASK_TEMPLATES; }
 window.CreateTaskModal = CreateTaskModal;
 
 // ════════════════════════════════════════════════════════════════════════
