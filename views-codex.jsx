@@ -92,6 +92,9 @@ function WorkflowsTab({ canEdit }) {
               <dt>Agents</dt><dd>{selected.agents.join(' → ')}</dd>
               <dt>Outputs</dt><dd>{selected.outputs.map((o) => <span key={o} className="code" style={{ marginRight: 6 }}>{o}</span>)}</dd>
             </dl>
+            {selected.objective && (
+              <div><strong style={{ fontSize: 12.5 }}>Objective:</strong> <span className="muted" style={{ fontSize: 12.5 }}>{selected.objective}</span></div>
+            )}
             {selected.steps && (() => {
               const doneCount = selected.steps.filter((s) => s.done).length;
               return (
