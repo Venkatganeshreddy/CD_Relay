@@ -259,7 +259,7 @@ function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, d
             <div className="sb-group-title">Department</div>
             {groupDept.map(item)}
             <div className="sb-group-title row" style={{ justifyContent: 'space-between', cursor: 'default', paddingLeft: 16 }} onClick={() => setExpanded((e) => ({ ...e, depts: !e.depts }))}>
-              <span style={{ flex: 1, fontSize: 10 }}>Drill-down</span>
+              <span style={{ flex: 1, fontSize: 10 }}>Departments</span>
               <Icon name={expanded.depts ? 'chev-down' : 'chev-right'} size={10} />
             </div>
             {expanded.depts && depts.map((d) => (
@@ -404,7 +404,7 @@ function buildCrumbs(route, currentUser) {
     case 'department': {
       const d = CDC.lookup.dept(route.params.id);
       if (!d) return ['Department'];
-      return ['Department', 'Drill-down', d.short || d.name];
+      return ['Department', 'Departments', d.short || d.name];
     }
     default: return ['Relay'];
   }
