@@ -635,6 +635,18 @@ function TasksView({ tweaks, currentUser }) {
                 <tr key={t.id} style={decided === 'rejected' ? { opacity: 0.45 } : decided === 'approved' ? { background: 'color-mix(in oklch, var(--green-soft) 40%, transparent)' } : {}}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{t.title}</div>
+                    {(t.metricCategory || t.taskCategory) && (
+                      <div className="row" style={{ gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+                        {t.metricCategory && <Pill tone="accent">{t.metricCategory}</Pill>}
+                        {t.taskCategory && <span className="muted" style={{ fontSize: 11 }}>{t.taskCategory}</span>}
+                        {t.outputCategory && <span className="muted" style={{ fontSize: 11 }}>· {t.outputCategory}{t.outputCount != null ? ` ×${t.outputCount}` : ''}</span>}
+                      </div>
+                    )}
+                    {(((t.products && t.products.length) || (t.stacks && t.stacks.length) || t.estHours != null)) && (
+                      <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+                        {[(t.products || []).join(', '), (t.stacks || []).join(', '), t.estHours != null && t.estHours !== '' ? `${t.estHours}h est` : ''].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
                     <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.source === 'manual' ? 'Manual' : t.reason}</div>
                     {t.sourceReports && t.sourceReports.length > 0 && (
                       <div style={{ fontSize: 11, marginTop: 2 }}>

@@ -129,11 +129,13 @@
     { id: 'NW0005927', name: 'Mandala Uma Devi', initials: 'MD', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — GenAI', title: 'L1 · Content — GenAI', managerId: 'NW0001778' },
     { id: 'NW0006025', name: 'Yerramilli Phani Yeshwanth', initials: 'YY', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
     { id: 'NW0006123', name: 'Prashant Kumar Jha', initials: 'PJ', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
-    { id: 'NW0006717', name: 'Yedam Venkat Ganesh Reddy', initials: 'YR', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Central Ops', title: 'L1 · Central Ops', managerId: 'NW-VIJAY-CO' },
+    { id: 'NW0006717', name: 'Yedam Venkat Ganesh Reddy', initials: 'YR', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Central Ops', title: 'L1 · Central Ops', managerId: 'NW0002526' },
     { id: 'NW1006662', name: 'Chittharu Nagapravallika', initials: 'CN', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
     { id: 'NW1006940', name: 'Rishu Raj Singh', initials: 'RS', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
     { id: 'NW1006983', name: 'Dasari Pallavi', initials: 'DP', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Content — Fullstack', title: 'L1 · Content — Fullstack', managerId: 'NW0001771' },
-    { id: 'NW-VIJAY-CO', name: 'Vijay', initials: 'VJ', role: 'L2', level: 'L2', dept: 'd-fsgci', sub: 'Central Ops', title: 'L2 · Central Ops', managerId: 'NW0002526' },
+    // Latest roster additions (Team List CD): Assessment Intelligence intern + University Partnership L2.
+    { id: 'NW1006396', name: 'Pakala Akshitha', initials: 'PA', role: 'L1', level: 'L1', dept: 'd-fsgci', sub: 'Assessment Intelligence', title: 'L1 · Assessment Intelligence', managerId: 'NW0001240' },
+    { id: 'NW0006700', name: 'Sunil Tekale', initials: 'ST', role: 'L2', level: 'L2', dept: 'd-fsgci', sub: 'University Partnership', title: 'L2 · University Partnership', managerId: 'NW0002526' },
   ];
 
   // Normalize sub-department: DS&ML / DS&Algo (and a few others) carry the
