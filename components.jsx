@@ -136,25 +136,32 @@ window.Sparkline = Sparkline;
 
 // ── Modal ───────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, footer, width = 720 }) {
+  const bodyRef = useRef(null);
   useEffect(() => {
     if (!open) return;
     const h = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', h);
+    // Always open scrolled to the top (tall forms otherwise mount mid-scroll).
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Portal to <body> so the fixed scrim anchors to the viewport, not to any
+  // transformed ancestor (e.g. a `.fadein` view wrapper) that would otherwise
+  // become its containing block and mis-position / clip the modal.
+  const node = (
     <div className="modal-scrim" onClick={onClose}>
       <div className="modal fadein" style={{ width }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
           <button className="btn" data-variant="ghost" data-size="sm" onClick={onClose}><Icon name="x" size={12} /></button>
         </div>
-        <div className="modal-b">{children}</div>
+        <div className="modal-b" ref={bodyRef}>{children}</div>
         {footer && <div className="modal-f">{footer}</div>}
       </div>
     </div>
   );
+  return ReactDOM.createPortal(node, document.body);
 }
 window.Modal = Modal;
 

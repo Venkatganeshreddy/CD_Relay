@@ -737,9 +737,14 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
   const toggle = (set, val) => set((s) => s.includes(val) ? s.filter((x) => x !== val) : [...s, val]);
 
+  const sectionGap = { display: 'flex', flexDirection: 'column', gap: 16 };
+  const selCount = (n) => <span className="muted" style={{ textTransform: 'none', fontWeight: 400, fontSize: 11 }}>{n ? `· ${n} selected` : '· multi-select'}</span>;
   return (
-    <Modal open={open} onClose={onClose} title="New task — CD Task flow"
+    <Modal open={open} onClose={onClose} title="New task — CD Task flow" width={840}
       footer={<>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
+          {map ? `${map.metric} · ${map.task}` : 'Pick a product, stack & output category'}
+        </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
           onClick={() => onCreate({ owner, products, stacks, outputCategory,
@@ -748,41 +753,68 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
         </button>
       </>}
     >
-      <div className="col" style={{ gap: 12, maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
-        <div>
-          <div style={label()}>Owner</div>
-          <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
-            <option value={me.id}>{me.name} (me)</option>
-            {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <div style={label()}>Product-Audience <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· multi-select</span></div>
-          <div className="chip-grid">
-            {CAT.PRODUCTS.map((p) => (
-              <div key={p} className="chip" data-selected={products.includes(p)} onClick={() => toggle(setProducts, p)}>
-                {products.includes(p) && <Icon name="check" size={10} stroke={2.4} />}<span>{p}</span>
-              </div>
-            ))}
+      <div style={sectionGap}>
+        {/* Owner + scheduling on one compact row */}
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '2 1 220px' }}>
+            <div style={label()}>Owner</div>
+            <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
+              <option value={me.id}>{me.name} (me)</option>
+              {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={label()}>Est. time (hrs)</div>
+            <input type="number" min="0" step="0.25" value={estHours} placeholder="e.g. 2.5"
+              onChange={(e) => setEstHours(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: '1 1 140px' }}>
+            <div style={label()}>Due date</div>
+            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={label()}>Status</div>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
+              {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </div>
 
-        <div>
-          <div style={label()}>Stack <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· multi-select</span></div>
-          <div className="chip-grid">
-            {CAT.STACKS.map((s) => (
-              <div key={s} className="chip" data-selected={stacks.includes(s)} onClick={() => toggle(setStacks, s)}>
-                {stacks.includes(s) && <Icon name="check" size={10} stroke={2.4} />}<span>{s}</span>
-              </div>
-            ))}
+        {needsReason && (
+          <div>
+            <div style={label()}>Reason ({status.toLowerCase()})</div>
+            <textarea className="field-input" style={{ width: '100%', height: 50, padding: 8, resize: 'vertical' }}
+              placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </div>
+        )}
+
+        <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <div style={label()}>Product-Audience {selCount(products.length)}</div>
+            <div className="chip-grid">
+              {CAT.PRODUCTS.map((p) => (
+                <div key={p} className="chip" data-selected={products.includes(p)} onClick={() => toggle(setProducts, p)}>
+                  {products.includes(p) && <Icon name="check" size={10} stroke={2.4} />}<span>{p}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: '1 1 240px' }}>
+            <div style={label()}>Stack {selCount(stacks.length)}</div>
+            <div className="chip-grid">
+              {CAT.STACKS.map((s) => (
+                <div key={s} className="chip" data-selected={stacks.includes(s)} onClick={() => toggle(setStacks, s)}>
+                  {stacks.includes(s) && <Icon name="check" size={10} stroke={2.4} />}<span>{s}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         <div>
           <div style={label()}>Output category</div>
           <input className="tb-search" placeholder="Search categories…" value={catSearch} onChange={(e) => setCatSearch(e.target.value)} style={inp} />
-          <div className="chip-grid" style={{ marginTop: 8, maxHeight: 160, overflowY: 'auto' }}>
+          <div className="chip-grid" style={{ marginTop: 8, maxHeight: 132, overflowY: 'auto' }}>
             {filteredCats.map((c) => (
               <div key={c} className="chip" data-selected={outputCategory === c} onClick={() => { setOutputCategory(c); setTemplate({}); }}>
                 {outputCategory === c && <Icon name="check" size={10} stroke={2.4} />}<span>{c}</span>
@@ -790,21 +822,24 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
             ))}
             {filteredCats.length === 0 && <div className="muted" style={{ fontSize: 12 }}>No matches.</div>}
           </div>
-          {map && <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>Auto: {map.metric} · {map.activity} · {map.task}</div>}
+          {map && (
+            <div className="row" style={{ gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Pill tone="accent" dot>{map.metric}</Pill>
+              <span className="muted" style={{ fontSize: 11.5 }}>{map.activity} → {map.task}</span>
+              {!countNA && (
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={label()}>Count</span>
+                  <input type="number" min="0" step="1" value={outputCount} placeholder="0"
+                    onChange={(e) => setOutputCount(e.target.value.replace(/[^\d]/g, ''))}
+                    style={{ ...inp, width: 80, padding: '5px 8px' }} />
+                </span>
+              )}
+              {countNA && <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>count N/A</span>}
+            </div>
+          )}
         </div>
 
-        {outputCategory && !countNA && (
-          <div>
-            <div style={label()}>Output count</div>
-            <input type="number" min="0" step="1" value={outputCount} placeholder="0"
-              onChange={(e) => setOutputCount(e.target.value.replace(/[^\d]/g, ''))} style={inp} />
-          </div>
-        )}
-        {outputCategory && countNA && (
-          <div className="muted" style={{ fontSize: 11.5 }}>Output count N/A for {map.metric} categories.</div>
-        )}
-
-        {fields.length > 0 && (
+        {map && fields.length > 0 && (
           <div>
             <div style={label()}>Task — {taskCategory} <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· optional</span></div>
             <div className="template-form">
@@ -816,7 +851,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
                       onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
                   )}
                   {f.type === 'textarea' && (
-                    <textarea className="field-input" style={{ height: 60, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={template[f.id] || ''}
+                    <textarea className="field-input" style={{ height: 56, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={template[f.id] || ''}
                       onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
                   )}
                   {f.type === 'choice' && (
@@ -830,33 +865,6 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
                 </React.Fragment>
               ))}
             </div>
-          </div>
-        )}
-
-        <div className="row" style={{ gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={label()}>Estimated time (hrs)</div>
-            <input type="number" min="0" step="0.25" value={estHours} placeholder="e.g. 2.5"
-              onChange={(e) => setEstHours(e.target.value)} style={inp} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={label()}>Due date</div>
-            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
-          </div>
-        </div>
-
-        <div>
-          <div style={label()}>Status</div>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
-            {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-
-        {needsReason && (
-          <div>
-            <div style={label()}>Reason ({status.toLowerCase()})</div>
-            <textarea className="field-input" style={{ width: '100%', height: 54, padding: 8, resize: 'vertical' }}
-              placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
         )}
       </div>

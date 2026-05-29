@@ -417,6 +417,7 @@ body[data-mononum="on"] {
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   width: min(720px, 92vw); max-height: 86vh;
+  min-height: 0;            /* let max-height win over grid item min-height:auto */
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -425,7 +426,7 @@ body[data-mononum="on"] {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
 }
-.modal-b { padding: 16px 18px; overflow-y: auto; }
+.modal-b { padding: 16px 18px; overflow-y: auto; flex: 1; min-height: 0; }
 .modal-f { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Misc */
@@ -448,7 +449,7 @@ body[data-mononum="on"] {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); border: 2px solid var(--bg); background-clip: content-box; }
 
 /* Animation */
-@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 .fadein { animation: fadein 0.18s ease-out both; }
 @keyframes shimmer { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
 .skeleton { background: linear-gradient(90deg, var(--panel), var(--panel-2), var(--panel)); background-size: 400px 100%; animation: shimmer 1.4s infinite linear; border-radius: 4px; }
