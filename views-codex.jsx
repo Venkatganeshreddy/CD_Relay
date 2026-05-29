@@ -50,7 +50,12 @@ window.CodexView = CodexView;
 
 // ── Workflows tab ─────────────────────────────────────────────────────
 function WorkflowsTab({ canEdit }) {
-  const flows = window.CDC.CODEX_WORKFLOWS;
+  // Pin MoM, Task and Escalation flows to the top; keep the rest in place.
+  const PINNED = ['wf-mom', 'wf-task', 'wf-escalation'];
+  const flows = [...(window.CDC.CODEX_WORKFLOWS || [])].sort((a, b) => {
+    const ai = PINNED.indexOf(a.id), bi = PINNED.indexOf(b.id);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
   const [selected, setSelected] = useStCx(null);
   return (
     <>
