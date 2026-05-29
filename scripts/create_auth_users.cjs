@@ -12,7 +12,8 @@ const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PW = process.env.RELAY_DEFAULT_PASSWORD || 'Relay@Nxtwave1';
 if (!URL || !KEY) { console.error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'); process.exit(1); }
 
-// Manager accounts (Vijay omitted until his real email is provided).
+// Manager + Admin login accounts. Re-running skips ones that already exist,
+// so adding a new manager here and re-running only creates the new account.
 const EMAILS = [
   'pavangangireddy@nxtwave.co.in',
   'aryaa.sharma@nxtwave.co.in',
@@ -22,6 +23,7 @@ const EMAILS = [
   'poojitha.pachava@nxtwave.co.in',
   'rushikesh.konapure@nxtwave.co.in',
   'kakarla.pavanteja@nxtwave.co.in',
+  'sunil.tekale@nxtwave.co.in',     // new L2 · University Partnership
 ];
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' };
 

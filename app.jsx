@@ -565,6 +565,33 @@ function AdminView({ tweaks, currentUser }) {
   const [loading, setLoading] = useState_a(false);
   const [source, setSource] = useState_a('');
   const [empSearch, setEmpSearch] = useState_a('');
+  const [adding, setAdding] = useState_a(false);
+  const isManagerAdmin = ['L3', 'Admin'].includes(currentUser.level) || ['L3', 'ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role);
+
+  // Insert a new employee. Writes to Supabase (RLS allows L3/Admin via
+  // emp_admin) when signed in; always mirrors into CDC.USERS so it shows
+  // immediately across the app. Returns an error string or null.
+  async function saveEmployee(f) {
+    const deptName = (CDC.lookup.dept(f.dept) || {}).name || f.dept || '';
+    const initials = (f.name.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2) || '?').toUpperCase();
+    const title = `${f.role_level} · ${f.sub || deptName}`;
+    const data = { id: f.id, name: f.name, initials, role: f.role_level, level: f.role_level,
+      dept: f.dept || null, sub: f.sub || null, title, managerId: f.manager_id || null };
+    if (window.RELAY_SB) {
+      const { error } = await window.RELAY_SB.from('employees').insert({
+        id: f.id, email: f.email || null, name: f.name, initials, manager_id: f.manager_id || null,
+        dept: f.dept || null, sub: f.sub || null, role_level: f.role_level, title,
+        is_cross_dept: !!f.is_cross_dept, data,
+      });
+      if (error) return error.message || 'Insert failed';
+    }
+    // Mirror into the in-memory roster so it appears without a reload.
+    (CDC.USERS || []).push({ id: f.id, name: f.name, initials, role: f.role_level, level: f.role_level,
+      dept: f.dept || null, sub: f.sub || null, title, managerId: f.manager_id || null, crossDept: !!f.is_cross_dept });
+    setRows((prev) => [{ id: f.id, name: f.name, email: f.email || '(no login yet)', role_level: f.role_level,
+      dept: f.dept, sub: f.sub, title, manager_id: f.manager_id || null, is_cross_dept: !!f.is_cross_dept }, ...(prev || [])]);
+    return null;
+  }
 
   async function openEmployees() {
     setView('employees'); setSel(null); setLoading(true);
@@ -586,7 +613,10 @@ function AdminView({ tweaks, currentUser }) {
     return (
       <div className="fadein">
         <SectionHeader title="Employees" subtitle={`Pulled from the Supabase employees table · ${rows ? rows.length : 0} records · source: ${source || '…'}`}
-          actions={<button className="btn" data-size="sm" data-variant="ghost" onClick={() => setView(null)}>← Admin</button>} />
+          actions={<>
+            {isManagerAdmin && <button className="btn" data-size="sm" data-variant="primary" onClick={() => setAdding(true)}><Icon name="check" size={12} /> Add employee</button>}
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setView(null)}>← Admin</button>
+          </>} />
         {loading && <div className="muted">Loading…</div>}
         <div className="split" style={{ height: 'calc(100vh - 200px)' }}>
           <div className="split-list">
@@ -633,6 +663,8 @@ function AdminView({ tweaks, currentUser }) {
             })() : <div className="empty">Select an employee.</div>}
           </div>
         </div>
+        <AddEmployeeModal open={adding} onClose={() => setAdding(false)} onSave={saveEmployee}
+          people={CDC.USERS} depts={CDC.DEPARTMENTS} live={!!window.RELAY_SB} />
       </div>
     );
   }
@@ -659,6 +691,91 @@ function AdminView({ tweaks, currentUser }) {
   );
 }
 window.AdminView = AdminView;
+
+// ── Add-employee modal (Admin / L3) ───────────────────────────────────────
+function AddEmployeeModal({ open, onClose, onSave, people, depts, live }) {
+  const blank = { id: '', name: '', email: '', role_level: 'L1', dept: '', sub: '', manager_id: '', is_cross_dept: false };
+  const [f, setF] = useState_a(blank);
+  const [err, setErr] = useState_a('');
+  const [busy, setBusy] = useState_a(false);
+  useEffect_a(() => { if (open) { setF(blank); setErr(''); setBusy(false); } }, [open]);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const managers = (people || []).filter((u) => ['L2', 'L3', 'Admin'].includes(u.level));
+  const valid = /^\S+$/.test(f.id.trim()) && f.name.trim() && f.role_level;
+  const lbl = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
+  const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+
+  async function submit() {
+    setBusy(true); setErr('');
+    const error = await onSave({ ...f, id: f.id.trim(), name: f.name.trim(), email: f.email.trim() });
+    setBusy(false);
+    if (error) { setErr(error); return; }
+    onClose();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add employee" width={620}
+      footer={<>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
+          {err ? <span style={{ color: 'var(--red, #e5484d)' }}>{err}</span>
+            : live ? 'Saves to Supabase (live)' : 'Demo mode — saved locally only'}
+        </span>
+        <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
+        <button className="btn" data-variant="primary" disabled={!valid || busy} onClick={submit}>{busy ? 'Saving…' : 'Add employee'}</button>
+      </>}
+    >
+      <div className="col" style={{ gap: 12 }}>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 160px' }}>
+            <div style={lbl()}>EMP ID <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <input value={f.id} onChange={(e) => set('id', e.target.value)} placeholder="e.g. NW0006701" style={inp} />
+          </div>
+          <div style={{ flex: '2 1 220px' }}>
+            <div style={lbl()}>Name <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" style={inp} />
+          </div>
+        </div>
+        <div>
+          <div style={lbl()}>Email <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· used for login link</span></div>
+          <input value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="first.last@nxtwave.co.in" style={inp} />
+        </div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={lbl()}>Role level</div>
+            <select value={f.role_level} onChange={(e) => set('role_level', e.target.value)} style={inp}>
+              {['L0', 'L1', 'L2', 'L3', 'Admin'].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 200px' }}>
+            <div style={lbl()}>Department</div>
+            <select value={f.dept} onChange={(e) => set('dept', e.target.value)} style={inp}>
+              <option value="">—</option>
+              {(depts || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}>
+            <div style={lbl()}>Sub-department</div>
+            <input value={f.sub} onChange={(e) => set('sub', e.target.value)} placeholder="e.g. Content — Fullstack" style={inp} />
+          </div>
+          <div style={{ flex: '1 1 220px' }}>
+            <div style={lbl()}>Reports to</div>
+            <select value={f.manager_id} onChange={(e) => set('manager_id', e.target.value)} style={inp}>
+              <option value="">—</option>
+              {managers.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+            </select>
+          </div>
+        </div>
+        <label className="row" style={{ gap: 8, fontSize: 13, alignItems: 'center' }}>
+          <input type="checkbox" checked={f.is_cross_dept} onChange={(e) => set('is_cross_dept', e.target.checked)} />
+          Cross-department (sees all teams)
+        </label>
+      </div>
+    </Modal>
+  );
+}
+window.AddEmployeeModal = AddEmployeeModal;
 
 // ── Tweaks panel ────────────────────────────────────────────────────────
 function CDCTweaksPanel({ t, setTweak }) {
