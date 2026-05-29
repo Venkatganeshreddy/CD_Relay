@@ -731,9 +731,9 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const needsReason = status === 'Blocked' || status === 'Overdue';
   const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
 
-  // Task (template) and Output count are optional — count defaults to 0.
+  // Stack, Task (template) and Output count are optional — count defaults to 0.
   // Status and Due date are mandatory.
-  const valid = products.length > 0 && stacks.length > 0 && !!outputCategory &&
+  const valid = products.length > 0 && !!outputCategory &&
     !!status && !!due &&
     (!needsReason || reason.trim().length > 0);
 
@@ -747,7 +747,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
     <Modal open={open} onClose={onClose} title="New task — CD Task flow" width={840}
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
-          {!outputCategory ? 'Pick a product, stack & output category'
+          {!outputCategory ? 'Pick a product-audience & output category'
             : !due ? 'Due date is required'
             : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
             : `${map.metric} · ${map.task}`}
@@ -761,40 +761,16 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
       </>}
     >
       <div style={sectionGap}>
-        {/* Owner + scheduling on one compact row */}
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: '2 1 220px' }}>
-            <div style={label()}>Owner</div>
-            <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
-              <option value={me.id}>{me.name} (me)</option>
-              {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
-            </select>
-          </div>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={label()}>Est. time (hrs)</div>
-            <input type="number" min="0" step="0.25" value={estHours} placeholder="e.g. 2.5"
-              onChange={(e) => setEstHours(e.target.value)} style={inp} />
-          </div>
-          <div style={{ flex: '1 1 140px' }}>
-            <div style={label()}>Due date <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
-          </div>
-          <div style={{ flex: '1 1 120px' }}>
-            <div style={label()}>Status <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
-              {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+        {/* 1. Owner (EMP ID) */}
+        <div>
+          <div style={label()}>Owner <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· EMP ID auto-filled</span></div>
+          <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
+            <option value={me.id}>{me.name} (me)</option>
+            {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+          </select>
         </div>
 
-        {needsReason && (
-          <div>
-            <div style={label()}>Reason ({status.toLowerCase()})</div>
-            <textarea className="field-input" style={{ width: '100%', height: 50, padding: 8, resize: 'vertical' }}
-              placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-        )}
-
+        {/* 2. Product-Audience + Stack (stack optional) */}
         <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 320px' }}>
             <div style={label()}>Product-Audience {selCount(products.length)}</div>
@@ -807,7 +783,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
             </div>
           </div>
           <div style={{ flex: '1 1 240px' }}>
-            <div style={label()}>Stack {selCount(stacks.length)}</div>
+            <div style={label()}>Stack <span className="muted" style={{ textTransform: 'none', fontWeight: 400, fontSize: 11 }}>· optional{stacks.length ? ` · ${stacks.length} selected` : ''}</span></div>
             <div className="chip-grid">
               {CAT.STACKS.map((s) => (
                 <div key={s} className="chip" data-selected={stacks.includes(s)} onClick={() => toggle(setStacks, s)}>
@@ -818,6 +794,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
           </div>
         </div>
 
+        {/* 3. Output category → auto Metric/Task + Output count */}
         <div>
           <div style={label()}>Output category</div>
           <input className="tb-search" placeholder="Search categories…" value={catSearch} onChange={(e) => setCatSearch(e.target.value)} style={inp} />
@@ -872,6 +849,33 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
                 </React.Fragment>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* 5. Status · Reason · Estimated time */}
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 140px' }}>
+            <div style={label()}>Status <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
+              {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 140px' }}>
+            <div style={label()}>Due date <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={label()}>Est. time (hrs)</div>
+            <input type="number" min="0" step="0.25" value={estHours} placeholder="e.g. 2.5"
+              onChange={(e) => setEstHours(e.target.value)} style={inp} />
+          </div>
+        </div>
+
+        {needsReason && (
+          <div>
+            <div style={label()}>Reason ({status.toLowerCase()})</div>
+            <textarea className="field-input" style={{ width: '100%', height: 50, padding: 8, resize: 'vertical' }}
+              placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
         )}
       </div>

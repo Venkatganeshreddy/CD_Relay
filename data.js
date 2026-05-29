@@ -709,11 +709,24 @@
     };
   });
 
+  // True if `id` is `rootId` or reports (directly/indirectly) up to `rootId`.
+  function inMgmtSubtree(rootId, id) {
+    if (id === rootId) return true;
+    let u = USERS.find((x) => x.id === id), guard = 0;
+    while (u && u.managerId && guard++ < 10) {
+      if (u.managerId === rootId) return true;
+      u = USERS.find((x) => x.id === u.managerId);
+    }
+    return false;
+  }
+
   function filterWorklogs(userId) {
     const s = scopeForUser(userId);
     if (s.kind === 'all') return WORKLOGS;
     if (s.kind === 'dept') return WORKLOGS.filter((w) => w.dept === s.dept);
-    if (s.kind === 'sub') return WORKLOGS.filter((w) => w.userId === userId);
+    // L2 / L1: own + everyone in their management subtree (not sub-string match,
+    // so DS&ML / DS&Algo reportees show even if sub labels differ).
+    if (s.kind === 'sub') return WORKLOGS.filter((w) => inMgmtSubtree(userId, w.userId));
     return [];
   }
 
@@ -732,7 +745,7 @@
       if (!['L0', 'L1', 'L2'].includes(u.level)) return false;
       if (s.kind === 'all') return true;
       if (s.kind === 'dept') return u.dept === s.dept;
-      if (s.kind === 'sub') return u.sub === s.sub || u.id === userId;
+      if (s.kind === 'sub') return inMgmtSubtree(userId, u.id);
       return u.id === userId;
     });
   }
