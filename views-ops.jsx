@@ -730,7 +730,9 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
 
   // Task (template) and Output count are optional — count defaults to 0.
+  // Status and Due date are mandatory.
   const valid = products.length > 0 && stacks.length > 0 && !!outputCategory &&
+    !!status && !!due &&
     (!needsReason || reason.trim().length > 0);
 
   const label = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
@@ -743,7 +745,10 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
     <Modal open={open} onClose={onClose} title="New task — CD Task flow" width={840}
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
-          {map ? `${map.metric} · ${map.task}` : 'Pick a product, stack & output category'}
+          {!outputCategory ? 'Pick a product, stack & output category'
+            : !due ? 'Due date is required'
+            : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
+            : `${map.metric} · ${map.task}`}
         </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
@@ -769,11 +774,11 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
               onChange={(e) => setEstHours(e.target.value)} style={inp} />
           </div>
           <div style={{ flex: '1 1 140px' }}>
-            <div style={label()}>Due date</div>
+            <div style={label()}>Due date <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
             <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
           </div>
           <div style={{ flex: '1 1 120px' }}>
-            <div style={label()}>Status</div>
+            <div style={label()}>Status <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
             <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
               {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
