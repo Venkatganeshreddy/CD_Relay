@@ -36,13 +36,14 @@ function SubmitView({ tweaks, currentUser, nav }) {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [transcript.length, step, isTyping]);
 
-  // Kick off intro
+  // Kick off intro — EMP ID is taken from the login automatically (no confirm step).
   useE(() => {
     if (transcript.length > 0) return;
+    setCurrent((c) => ({ ...c, empId: myEmpId }));
     pushBot(`Hey ${currentUser.name.split(' ')[0]}! Let's capture today's work — should take under a minute.`);
     setTimeout(() => {
-      pushBot(`First, confirm your EmpID? I've auto-filled it from your login.`);
-      setStep('emp_id');
+      pushBot(`Which product-initiative(s) did you work on today? Multi-select.`);
+      setStep('product');
     }, 600);
   }, []);
 
@@ -214,12 +215,12 @@ function SubmitView({ tweaks, currentUser, nav }) {
   }
 
   function restart() {
-    setTasks([]); setCurrent({}); setStep('greet'); setTranscript([]);
+    setTasks([]); setCurrent({ empId: myEmpId }); setStep('greet'); setTranscript([]);
     setTimeout(() => {
       pushBot(`Hey ${currentUser.name.split(' ')[0]}! Let's capture today's work.`);
       typeThen(() => {
-        pushBot(`First, confirm your EmpID?`);
-        setStep('emp_id');
+        pushBot(`Which product-initiative(s) did you work on today? Multi-select.`);
+        setStep('product');
       });
     }, 80);
   }
