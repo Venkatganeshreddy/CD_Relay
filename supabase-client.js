@@ -73,22 +73,55 @@
       if (data && data.error) throw new Error(data.error);
       return data; // { content, model, usage }
     };
-    // Route Concierge's window.claude.complete through the Edge Function; if it's
-    // not deployed / errors / user isn't authed, fall back to the offline answer.
-    const offline = (window.claude && window.claude.complete) || null;
-    window.claude = window.claude || {};
-    window.claude.complete = async ({ messages }) => {
+  }
+
+  // ── Direct OpenRouter fallback (tier 2) — works without Supabase ────
+  // Calls OpenRouter's chat/completions API from the browser (CORS supported).
+  // Key is stored in localStorage under 'relay_openrouter_key'.
+  async function directOpenRouter({ messages, model }) {
+    const key = localStorage.getItem('relay_openrouter_key');
+    if (!key) throw new Error('no OpenRouter key');
+    const modelMap = { smart: 'anthropic/claude-sonnet-4-20250514', fast: 'anthropic/claude-3-5-haiku-20241022' };
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': location.origin, 'X-Title': 'Relay Concierge' },
+      body: JSON.stringify({ model: modelMap[model] || modelMap.smart, messages }),
+    });
+    if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`OpenRouter ${res.status}: ${t.slice(0, 120)}`); }
+    const data = await res.json();
+    const choice = data.choices && data.choices[0];
+    if (!choice || !choice.message) throw new Error('empty OpenRouter response');
+    return { content: choice.message.content, model: data.model, usage: data.usage };
+  }
+  window.CDC.directOpenRouter = directOpenRouter;
+
+  // ── Concierge completion: 3-tier fallback chain ─────────────────────
+  // 1. Edge Function (askAgent) — authed users with Supabase
+  // 2. Direct browser-to-OpenRouter — demo users with API key
+  // 3. Offline keyword shim — always works, canned responses
+  const offlineShim = (window.claude && window.claude.complete) || null;
+  window.claude = window.claude || {};
+  window.claude.complete = async ({ messages }) => {
+    // Tier 1: Edge Function
+    if (window.CDC.askAgent) {
       try {
         const r = await window.CDC.askAgent({ messages, model: 'smart' });
         if (r && r.content) return r.content;
-        throw new Error('empty response');
       } catch (e) {
-        console.warn('[Relay] agent call failed; using offline answer:', e.message || e);
-        if (offline) return offline({ messages });
-        throw e;
+        console.warn('[Relay] askAgent failed, trying OpenRouter:', e.message || e);
       }
-    };
-  }
+    }
+    // Tier 2: Direct OpenRouter
+    try {
+      const r = await directOpenRouter({ messages, model: 'smart' });
+      if (r && r.content) return r.content;
+    } catch (e) {
+      console.warn('[Relay] OpenRouter failed, falling back to offline shim:', e.message || e);
+    }
+    // Tier 3: Offline keyword shim
+    if (offlineShim) return offlineShim({ messages });
+    return '[error] No LLM backend available. Paste an OpenRouter API key in the Concierge header to enable real responses.';
+  };
 
   // ── Writes (Phase 4): optimistic-local always; remote when signed in ──────
   async function remote(fn) { if (sb && authed()) { try { const { error } = await fn(); if (error) console.warn('[Relay] write:', error.message); return !error; } catch (e) { console.warn('[Relay] write threw:', e.message); } } return false; }

@@ -13,6 +13,15 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   const [streamText, setStreamText] = useState_c('');
   const composerRef = useRef_c(null);
   const scrollRef = useRef_c(null);
+  const [apiKey, setApiKey] = useState_c(() => localStorage.getItem('relay_openrouter_key') || '');
+  const [showKeyInput, setShowKeyInput] = useState_c(false);
+  const hasKey = !!apiKey;
+
+  function handleKeyChange(val) {
+    setApiKey(val);
+    if (val) localStorage.setItem('relay_openrouter_key', val);
+    else localStorage.removeItem('relay_openrouter_key');
+  }
 
   // Build the in-scope corpus (RBAC applied)
   const corpus = useMemo_c(() => buildCorpus(currentUser), [currentUser]);
@@ -45,8 +54,8 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
 
     const sys = buildSystemPrompt(corpus, currentUser);
     let answer = '';
+    const t0 = Date.now();
     try {
-      // Real call to Claude Haiku.
       answer = await window.claude.complete({
         messages: [
           { role: 'user', content: `${sys}\n\nUser question: ${q}\n\nRespond now.` },
@@ -55,6 +64,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
     } catch (e) {
       answer = `[error] Could not reach the model right now (${e.message}). Try again in a moment, or ask your L3 if it keeps failing.`;
     }
+    const latencyMs = Date.now() - t0;
     // Simulate stream-in
     await fakeStream(answer, (partial) => setStreamText(partial));
 
@@ -63,7 +73,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
       ts: timeNow(),
       meta: {
         model: 'claude-sonnet-4-6',
-        latency: 412 + Math.round(Math.random() * 600),
+        latency: latencyMs,
         confidence: 0.82 + Math.random() * 0.12,
         scopeHash: scopeHashFor(currentUser),
         tokens: { in: 1240, out: Math.round(answer.length / 4) },
@@ -88,11 +98,26 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             </div>
           </div>
           <div className="row" style={{ gap: 6 }}>
-            <button className="btn" data-size="sm"><Icon name="plug" size={12} /> Connect Claude Desktop</button>
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5, background: hasKey ? 'var(--accent-soft)' : 'var(--panel)', border: '1px solid ' + (hasKey ? 'var(--accent-border)' : 'var(--border)'), color: hasKey ? 'var(--accent)' : 'var(--text-muted)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: hasKey ? 'var(--accent)' : 'var(--text-faint)' }} />
+              {hasKey ? 'LLM connected' : 'offline mode'}
+            </span>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setShowKeyInput((v) => !v)}>
+              <Icon name="plug" size={12} /> API key
+            </button>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { setMessages([]); setStreamText(''); }}>Clear</button>
           </div>
         </div>
       </div>
+
+      {showKeyInput && (
+        <div style={{ padding: '6px 24px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>OpenRouter key:</span>
+          <input type="password" value={apiKey} onChange={(e) => handleKeyChange(e.target.value)}
+            placeholder="sk-or-…" style={{ flex: 1, fontSize: 12.5, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', fontFamily: 'monospace', color: 'var(--text)' }} />
+          {apiKey && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => handleKeyChange('')}>Clear</button>}
+        </div>
+      )}
 
       <div className="chat" ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }}>
         {messages.length === 0 && !pending && (

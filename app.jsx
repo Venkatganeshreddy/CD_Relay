@@ -10,7 +10,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "confidence": true,
   "mononum": true,
   "userId": "NW0002526",
-  "env": "prod"
+  "env": "prod",
+  "openrouterKey": ""
 }/*EDITMODE-END*/;
 
 const ACCENT_COLORS = {
@@ -76,6 +77,18 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
         .then(() => location.reload()),
     };
   }, [authMode]);
+
+  // Hydrate openrouterKey from localStorage on mount
+  useEffect_a(() => {
+    const stored = localStorage.getItem('relay_openrouter_key');
+    if (stored && !t.openrouterKey) setTweak('openrouterKey', stored);
+  }, []);
+
+  // Mirror openrouterKey tweak to localStorage
+  useEffect_a(() => {
+    if (t.openrouterKey) localStorage.setItem('relay_openrouter_key', t.openrouterKey);
+    else localStorage.removeItem('relay_openrouter_key');
+  }, [t.openrouterKey]);
 
   // Apply theme to <html>
   useEffect_a(() => {
@@ -805,6 +818,9 @@ function CDCTweaksPanel({ t, setTweak }) {
 
       <TweakSection label="Environment" />
       <TweakRadio label="Active env" value={t.env} options={['beta', 'prod']} onChange={(v) => setTweak('env', v)} />
+
+      <TweakSection label="Concierge" />
+      <TweakText label="OpenRouter key" value={t.openrouterKey} placeholder="sk-or-…" onChange={(v) => setTweak('openrouterKey', v)} />
 
       <TweakSection label="User scope (RBAC)" />
       <TweakSelect label="Acting as" value={t.userId}
