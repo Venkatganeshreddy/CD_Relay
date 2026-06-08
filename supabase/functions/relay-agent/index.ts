@@ -6,7 +6,8 @@
 // Deploy:   supabase functions deploy relay-agent
 // Secret:   supabase secrets set OPENROUTER_API_KEY=sk-or-...   (rotate the one
 //           pasted in chat). Optional: LLM_MODEL_FAST / LLM_MODEL_SMART.
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+// Uses Deno.serve (built-in) instead of deno.land/std/http/server which is
+// deprecated and no longer boots on the newer Supabase Edge runtime.
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +23,7 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
