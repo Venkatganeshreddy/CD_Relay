@@ -283,10 +283,9 @@
         `Produce THREE things in this exact order: agenda, bullets, items.\n\n` +
         `1) agenda — a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n\n` +
         `2) bullets — a flat list of SUMMARY BULLETS describing WHAT was discussed (the substance, themes, context, decisions, flags). This is the discussion narrative, NOT a task list.\n` +
-        `  - You MUST produce at least 5 bullets (aim for 5 to 12). Each "text" under 25 words. No headings, no grouping — flat narrative order.\n` +
-        `  - Each bullet is an object {"text":"...","person":"<name|team|''>"}. Set "person" to the EXACT roster name (or team/sub name) most associated with that bullet — the person who said it, flagged it, owns the area, or is at the centre of that discussion. Use "" only when the bullet is general and not tied to any single person/team.\n` +
-        `  - Restate actions as past-tense discussion ("Team aligned on X", "Discussed Y", "Flagged Z risk") — drop the assignee from the text (it goes in the "person" field).\n` +
-        `  - Be concrete and specific (mention the area / tool / decision).\n` +
+        `  - You MUST produce at least 5 bullets (aim for 5 to 12). Each under 25 words. No headings, no grouping — flat narrative order.\n` +
+        `  - Even if every line in the transcript implies an action, bullets must still summarize the discussion context. Restate actions as past-tense discussion ("Team aligned on X", "Discussed Y", "Flagged Z risk") — drop the assignee.\n` +
+        `  - Be concrete and specific (mention the area / tool / decision). Mention names only when the speaker matters.\n` +
         `  - Do not invent. Skip anything not substantively in the transcript.\n` +
         `  - Bullets and items will OVERLAP in subject matter — that is expected. Bullets = WHAT was discussed; items = WHO does WHAT.\n\n` +
         `3) items — extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
@@ -297,21 +296,15 @@
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n\n` +
         `EXAMPLE (showing that bullets and items coexist):\n` +
         `Transcript: "Ravi: GenAI module shipped Friday but quiz scores dipped to 62%. Priya: I'll review the rubric. Team: let's also tighten the eval pack for DS&Algo next sprint."\n` +
-        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","bullets":[{"text":"GenAI module shipped Friday but quiz scores dipped to 62%.","person":"GenAI"},{"text":"Team aligned on reviewing the rubric to address the score drop.","person":"Priya"},{"text":"Discussed tightening the DS&Algo eval pack in the next sprint.","person":"DS&Algo"}],"items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
+        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","bullets":["GenAI module shipped Friday but quiz scores dipped to 62%.","Team aligned on reviewing the rubric to address the score drop.","Discussed tightening the DS&Algo eval pack in the next sprint."],"items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","bullets":[{"text":"...","person":"<name|team|''>"}],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble. Bullets array MUST have 5+ entries.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","bullets":["...","..."],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble. Bullets array MUST have 5+ entries.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try {
         const m = content.match(/\{[\s\S]*\}/);
         const p = JSON.parse(m[0]);
-        // Accept both new shape [{text, person}] and legacy [string].
         let bullets = Array.isArray(p.bullets)
-          ? p.bullets.map((b) => {
-              if (b && typeof b === 'object') {
-                return { text: String(b.text || '').trim(), person: String(b.person || '').trim() };
-              }
-              return { text: String(b || '').trim(), person: '' };
-            }).filter((b) => b.text)
+          ? p.bullets.map((b) => String(b || '').trim()).filter(Boolean)
           : [];
         const items = Array.isArray(p.items) ? p.items : [];
         // Safety net: if the model dumped everything into items and left bullets empty,
@@ -319,10 +312,9 @@
         if (bullets.length === 0 && items.length > 0) {
           bullets = items.slice(0, 8).map((i) => {
             const t = String(i.text || '').trim();
-            if (!t) return null;
-            const text = t.replace(/^(please\s+|we\s+(need|should|have)\s+to\s+|let'?s\s+(make sure\s+)?|someone\s+should\s+|need to\s+)/i, '')
-                          .replace(/^([a-z])/, (c) => c.toUpperCase());
-            return { text, person: String(i.assigneeHint || '').trim() };
+            if (!t) return '';
+            return t.replace(/^(please\s+|we\s+(need|should|have)\s+to\s+|let'?s\s+(make sure\s+)?|someone\s+should\s+|need to\s+)/i, '')
+                    .replace(/^([a-z])/, (c) => c.toUpperCase());
           }).filter(Boolean);
         }
         return { agenda: p.agenda || '', bullets, items };
