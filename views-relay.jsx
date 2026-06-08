@@ -154,13 +154,14 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
-  const [bullets, setBullets] = useStP([]);                     // [{ id, text }]
+  const [bullets, setBullets] = useStP([]);                     // [{ id, text, person }]
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
 
   // Bullet editing helpers (Summary tab) — mirrors the action-item editability.
-  const newBullet = (text = '') => ({ id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text });
+  const newBullet = (text = '', person = '') => ({ id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text, person });
   function addBullet() { setBullets((arr) => [...arr, newBullet('')]); }
   function editBulletText(id, text) { setBullets((arr) => arr.map((b) => b.id === id ? { ...b, text } : b)); }
+  function editBulletPerson(id, person) { setBullets((arr) => arr.map((b) => b.id === id ? { ...b, person } : b)); }
   function removeBullet(id) { setBullets((arr) => arr.filter((b) => b.id !== id)); }
   function moveBullet(id, dir) {
     setBullets((arr) => {
@@ -235,9 +236,12 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         derivedAgenda = (raw && raw.agenda) || '';
         const rawBullets = (raw && Array.isArray(raw.bullets)) ? raw.bullets : [];
         setBullets(rawBullets
-          .map((b) => String(b || '').trim())
-          .filter(Boolean)
-          .map((text, i) => ({ id: `b-${Date.now()}-${i}`, text })));
+          .map((b) => {
+            if (b && typeof b === 'object') return { text: String(b.text || '').trim(), person: String(b.person || '').trim() };
+            return { text: String(b || '').trim(), person: '' };
+          })
+          .filter((b) => b.text)
+          .map((b, i) => ({ id: `b-${Date.now()}-${i}`, text: b.text, person: b.person })));
         const rawItems = (raw && raw.items) || [];
         if (rawItems.length) {
           items = rawItems.map((it, i) => {
@@ -324,7 +328,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
       agenda,
-      summaryBullets: bullets.map((b) => b.text).filter((t) => t && t.trim()),
+      summaryBullets: bullets.filter((b) => b.text && b.text.trim()).map((b) => ({ text: b.text, person: b.person || '' })),
       summary: bullets.map((b) => b.text).filter((t) => t && t.trim()).join(' · ').slice(0, 240),
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
@@ -425,23 +429,41 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                       No summary bullets extracted yet. Add one below to start drafting the notes manually.
                     </div>
                   )}
+                  <datalist id="mom-bullet-people">
+                    {(CDC.USERS || []).map((u) => <option key={`p-${u.id}`} value={u.name} />)}
+                    {Array.from(new Set((CDC.USERS || []).map((u) => u.sub).filter(Boolean))).map((s) => <option key={`s-${s}`} value={s} />)}
+                    {(CDC.DEPARTMENTS || []).map((d) => <option key={`d-${d.id}`} value={d.name} />)}
+                  </datalist>
                   {bullets.map((b, i) => (
-                    <div key={b.id} className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
-                      <span style={{ marginTop: 8, fontSize: 14, color: 'var(--text-faint)', userSelect: 'none' }}>•</span>
-                      <textarea
-                        className="input-text"
-                        value={b.text}
-                        placeholder="What was discussed / landed / flagged"
-                        onChange={(e) => editBulletText(b.id, e.target.value)}
-                        rows={1}
-                        style={{ flex: 1, fontSize: 13, lineHeight: 1.5, resize: 'vertical', minHeight: 32, padding: '6px 8px' }}
-                      />
-                      <div className="row" style={{ gap: 2 }}>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'up')} disabled={i === 0} title="Move up" style={{ padding: '2px 6px', fontSize: 12 }}>↑</button>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'down')} disabled={i === bullets.length - 1} title="Move down" style={{ padding: '2px 6px', fontSize: 12 }}>↓</button>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeBullet(b.id)} title="Remove bullet">
-                          <Icon name="x" size={10} />
-                        </button>
+                    <div key={b.id} className="col" style={{ gap: 4, padding: '6px 4px 8px', borderBottom: '1px solid var(--border-faint)' }}>
+                      <div className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
+                        <span style={{ marginTop: 8, fontSize: 14, color: 'var(--text-faint)', userSelect: 'none' }}>•</span>
+                        <textarea
+                          className="input-text"
+                          value={b.text}
+                          placeholder="What was discussed / landed / flagged"
+                          onChange={(e) => editBulletText(b.id, e.target.value)}
+                          rows={1}
+                          style={{ flex: 1, fontSize: 13, lineHeight: 1.5, resize: 'vertical', minHeight: 32, padding: '6px 8px' }}
+                        />
+                        <div className="row" style={{ gap: 2 }}>
+                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'up')} disabled={i === 0} title="Move up" style={{ padding: '2px 6px', fontSize: 12 }}>↑</button>
+                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'down')} disabled={i === bullets.length - 1} title="Move down" style={{ padding: '2px 6px', fontSize: 12 }}>↓</button>
+                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeBullet(b.id)} title="Remove bullet">
+                            <Icon name="x" size={10} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="row" style={{ gap: 6, alignItems: 'center', paddingLeft: 18, fontSize: 11.5, color: 'var(--text-muted)' }}>
+                        <Icon name="user" size={10} />
+                        <span>Person:</span>
+                        <input
+                          list="mom-bullet-people"
+                          value={b.person || ''}
+                          placeholder="name or team (optional)"
+                          onChange={(e) => editBulletPerson(b.id, e.target.value)}
+                          style={{ flex: 1, maxWidth: 220, fontSize: 11.5, padding: '2px 6px', borderRadius: 5, border: '1px solid var(--border)' }}
+                        />
                       </div>
                     </div>
                   ))}
