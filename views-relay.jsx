@@ -203,28 +203,21 @@ function MomCardModal({ mom, onClose }) {
             {mom.summaryApproved && <span className="pill" data-tone="green" style={{ fontSize: 10 }}>approved</span>}
           </div>
           {(() => {
-            const s = mom.summarySections || {};
-            const lenses = [
-              { key: 'businessDirection', label: 'Business direction' },
-              { key: 'alignment',         label: 'Alignment' },
-              { key: 'guidelines',        label: 'Guidelines & insights' },
-            ].filter((l) => String(s[l.key] || '').trim());
-            if (lenses.length === 0) {
-              // Legacy MoMs only had a flat summary string.
-              return (
-                <div style={{ fontSize: 13, lineHeight: 1.65, padding: '10px 14px', background: 'var(--panel)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
-                  {mom.summary ? mom.summary : <span className="muted">No summary captured.</span>}
-                </div>
-              );
+            // Prefer the single flowing paragraph stored on `summary`.
+            // Legacy MoMs may have `summarySections` (3 lenses) — fold them
+            // back into one block with blank-line spacing so display stays
+            // consistent across old + new records.
+            let body = String(mom.summary || '').trim();
+            if (!body && mom.summarySections && typeof mom.summarySections === 'object') {
+              const s = mom.summarySections;
+              body = [s.businessDirection, s.alignment, s.guidelines]
+                .map((p) => String(p || '').trim())
+                .filter(Boolean)
+                .join('\n\n');
             }
             return (
-              <div className="col" style={{ gap: 10 }}>
-                {lenses.map((l) => (
-                  <div key={l.key} style={{ padding: '10px 14px', background: 'var(--panel)', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', marginBottom: 4 }}>{l.label}</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{s[l.key]}</div>
-                  </div>
-                ))}
+              <div style={{ fontSize: 13, lineHeight: 1.7, padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+                {body ? body : <span className="muted">No summary captured.</span>}
               </div>
             );
           })()}
@@ -274,9 +267,10 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
-  // Three-lens outcome summary: each is a short paragraph the user can edit independently.
-  const [summary, setSummary] = useStP({ businessDirection: '', alignment: '', guidelines: '' });
-  function editSummaryLens(lens, val) { setSummary((s) => ({ ...s, [lens]: val })); setSummaryApproved(false); }
+  // Outcome summary: single flowing paragraph (with blank-line breaks between
+  // the three themes Scribe extracts — business direction, alignment,
+  // guidelines/insights). Stored and edited as one string.
+  const [summary, setSummary] = useStP('');
   const [attendees, setAttendees] = useStP([]);                 // [{ name, userId|null }]
   const [attendeeQuery, setAttendeeQuery] = useStP('');         // current live-search input
   const [summaryApproved, setSummaryApproved] = useStP(false);  // explicit approve toggle
@@ -361,17 +355,17 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
+        // Scribe returns the 3 lenses for structure; we display them as one
+        // continuous paragraph with blank-line spacing between thoughts.
         const rawSummary = raw && raw.summary;
         if (rawSummary && typeof rawSummary === 'object') {
-          setSummary({
-            businessDirection: String(rawSummary.businessDirection || '').trim(),
-            alignment: String(rawSummary.alignment || '').trim(),
-            guidelines: String(rawSummary.guidelines || '').trim(),
-          });
-        } else if (typeof rawSummary === 'string' && rawSummary.trim()) {
-          setSummary({ businessDirection: '', alignment: rawSummary.trim(), guidelines: '' });
+          const merged = [rawSummary.businessDirection, rawSummary.alignment, rawSummary.guidelines]
+            .map((p) => String(p || '').trim()).filter(Boolean).join('\n\n');
+          setSummary(merged);
+        } else if (typeof rawSummary === 'string') {
+          setSummary(rawSummary.trim());
         } else {
-          setSummary({ businessDirection: '', alignment: '', guidelines: '' });
+          setSummary('');
         }
         const rawAttendees = (raw && Array.isArray(raw.attendees)) ? raw.attendees : [];
         setAttendees(rawAttendees
@@ -476,17 +470,10 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     });
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const loggedByName = (CDC.lookup && CDC.lookup.user(currentUser.id) || currentUser).name;
-    const summaryFlat = [summary.businessDirection, summary.alignment, summary.guidelines]
-      .map((s) => String(s || '').trim()).filter(Boolean).join('\n\n');
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
       agenda,
-      summary: summaryFlat,                                     // back-compat: joined string for table preview
-      summarySections: {
-        businessDirection: String(summary.businessDirection || '').trim(),
-        alignment: String(summary.alignment || '').trim(),
-        guidelines: String(summary.guidelines || '').trim(),
-      },
+      summary: String(summary || '').trim(),                    // single paragraph (may contain \n\n between thoughts)
       summaryApproved: !!summaryApproved,
       attendees: attendees.map((a) => a.userId).filter(Boolean),                          // roster matches → uid (existing table renderer expects uids)
       attendeesAll: attendees.map((a) => ({ name: a.name, userId: a.userId || null })),   // full list incl. externals
@@ -507,8 +494,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
   function resetState() {
     setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
-    setSummary({ businessDirection: '', alignment: '', guidelines: '' });
-    setAttendees([]); setAttendeeQuery(''); setSummaryApproved(false); setMomTab('summary');
+    setSummary(''); setAttendees([]); setAttendeeQuery(''); setSummaryApproved(false); setMomTab('summary');
   }
 
   if (!open) return null;
@@ -602,12 +588,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                 ).slice(0, 8) : [];
                 const hasRosterExact = matches.some((u) => u.name.toLowerCase() === q);
                 const canAddExternal = q && !hasRosterExact && !alreadyNames.has(q);
-                const lenses = [
-                  { key: 'businessDirection', label: 'Business direction', hint: 'The strategic intent the meeting set or reinforced — the "why this matters" thread.' },
-                  { key: 'alignment',         label: 'Alignment',          hint: 'What everyone aligned on — decisions reached, shared understanding, what is now settled.' },
-                  { key: 'guidelines',        label: 'Guidelines & insights', hint: 'Principles and learnings that emerged — things to remember going forward.' },
-                ];
-                const anyFilled = lenses.some((l) => (summary[l.key] || '').trim());
+                const summaryWords = String(summary || '').trim().split(/\s+/).filter(Boolean).length;
                 return (
                 <div className="col" style={{ gap: 16, maxHeight: 480, overflowY: 'auto', padding: 4 }}>
                   {/* Attendees with live dropdown */}
@@ -671,34 +652,24 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                     </div>
                   </div>
 
-                  {/* Three-lens outcome summary */}
-                  <div className="col" style={{ gap: 10 }}>
+                  {/* Single-paragraph outcome summary (blank-line breaks between thoughts) */}
+                  <div className="col" style={{ gap: 6 }}>
                     <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
                       <Icon name="sparkles" size={11} />
                       <span style={{ fontWeight: 500 }}>Outcome summary</span>
                       <span className="muted">·</span>
-                      <span className="muted">three short paragraphs you can edit</span>
+                      <span className="muted">business direction · alignment · guidelines, written as one paragraph</span>
+                      <span className="muted">·</span>
+                      <span className="muted">{summaryWords} words</span>
                     </div>
-                    {lenses.map((l) => {
-                      const text = summary[l.key] || '';
-                      const words = text.trim().split(/\s+/).filter(Boolean).length;
-                      return (
-                        <div key={l.key} className="col" style={{ gap: 4 }}>
-                          <div className="row" style={{ gap: 6, alignItems: 'baseline' }}>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>{l.label}</span>
-                            <span className="muted" style={{ fontSize: 10.5 }}>· {words} words</span>
-                          </div>
-                          <textarea
-                            className="input-text"
-                            value={text}
-                            placeholder={l.hint}
-                            onChange={(e) => editSummaryLens(l.key, e.target.value)}
-                            rows={3}
-                            style={{ fontSize: 13, lineHeight: 1.6, resize: 'vertical', minHeight: 70, padding: '8px 10px' }}
-                          />
-                        </div>
-                      );
-                    })}
+                    <textarea
+                      className="input-text"
+                      value={summary}
+                      placeholder="Outcome-oriented prose: the business direction, what everyone aligned on, and the guidelines/insights that emerged. Use a blank line to separate thoughts."
+                      onChange={(e) => { setSummary(e.target.value); setSummaryApproved(false); }}
+                      rows={11}
+                      style={{ fontSize: 13, lineHeight: 1.7, resize: 'vertical', minHeight: 220, padding: '12px 14px', whiteSpace: 'pre-wrap' }}
+                    />
                     <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
                       {summaryApproved && (
                         <span className="pill" data-tone="green" style={{ fontSize: 10.5 }}>
@@ -712,7 +683,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                       </button>
                       <button className="btn" data-size="sm"
                               data-variant={summaryApproved ? 'ghost' : 'primary'}
-                              onClick={() => setSummaryApproved(true)} disabled={!anyFilled || summaryApproved}
+                              onClick={() => setSummaryApproved(true)} disabled={!summary.trim() || summaryApproved}
                               title="Mark the summary as ready">
                         <Icon name="check" size={11} stroke={2.4} /> Approve summary
                       </button>
