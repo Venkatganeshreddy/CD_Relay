@@ -58,6 +58,8 @@ window.MonthlyView = MonthlyView;
 function SecondBrainView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const moms = CDC.MOMS;
+  const [openMomId, setOpenMomId] = useStP(null);
+  const openMom = openMomId ? (moms || []).find((m) => m.id === openMomId) : null;
   return (
     <div className="fadein">
       <SectionHeader
@@ -109,7 +111,7 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
           </thead>
           <tbody>
             {moms.map((m) => (
-              <tr key={m.id}>
+              <tr key={m.id} onClick={() => setOpenMomId(m.id)} style={{ cursor: 'pointer' }} title="Open MoM card">
                 <td>
                   <div style={{ fontWeight: 500 }}>{m.title}</div>
                   {m.summary && <div className="muted" style={{ fontSize: 11, lineHeight: 1.35 }}>{m.summary.slice(0, 100)}…</div>}
@@ -141,10 +143,105 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
         <Icon name="sparkles" size={20} />
         <div style={{ marginTop: 8, fontSize: 13 }}><strong>Graph view coming next sprint</strong> — force-directed node-link of people × meetings × decisions × tasks.</div>
       </div>
+
+      {openMom && <MomCardModal mom={openMom} onClose={() => setOpenMomId(null)} />}
     </div>
   );
 }
 window.SecondBrainView = SecondBrainView;
+
+// Read-only meeting notes card — opened when a MoM row is clicked.
+// Layout matches the user's reference image: Title / Agenda / Date / Attendees
+// / Notes (the outcome paragraph) / Action Items (Action -> Owner -> Due) /
+// Logged by.
+function MomCardModal({ mom, onClose }) {
+  const CDC = window.CDC;
+  const attendeesFull = Array.isArray(mom.attendeesAll) && mom.attendeesAll.length
+    ? mom.attendeesAll
+    : (mom.attendees || []).map((uid) => {
+        const u = CDC.lookup && CDC.lookup.user(uid);
+        return { name: u ? u.name : uid, userId: u ? u.id : null };
+      });
+  const items = Array.isArray(mom.actionItems) ? mom.actionItems : [];
+  const loggedByName = mom.loggedByName
+    || (mom.loggedBy && CDC.lookup && CDC.lookup.user(mom.loggedBy) || {}).name
+    || (mom.by && CDC.lookup && CDC.lookup.user(mom.by) || {}).name
+    || '—';
+  return (
+    <Modal open={true} onClose={onClose} title="Meeting notes" width={760}>
+      <div className="col" style={{ gap: 18, padding: '4px 2px' }}>
+        <div className="col" style={{ gap: 4 }}>
+          <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.3 }}>{mom.title}</div>
+          {mom.agenda && <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.45 }}>{mom.agenda}</div>}
+          <div className="row muted" style={{ gap: 10, fontSize: 11.5, marginTop: 2 }}>
+            <span><Icon name="calendar" size={11} /> {mom.date || '—'}</span>
+            {mom.duration && <span>· {mom.duration} min</span>}
+            {mom.channel && <span>· {mom.channel}</span>}
+          </div>
+        </div>
+
+        <div className="col" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
+            <Icon name="users" size={11} /><span style={{ fontWeight: 500 }}>Attendees</span>
+            <span className="muted">· {attendeesFull.length}</span>
+          </div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {attendeesFull.length === 0 && <span className="muted" style={{ fontSize: 11.5 }}>None recorded.</span>}
+            {attendeesFull.map((a, i) => (
+              <span key={`${a.name}-${i}`} className="pill" data-tone={a.userId ? 'green' : 'muted'}
+                    style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {a.userId && <Avatar user={CDC.lookup.user(a.userId)} size={14} />}
+                <span>{a.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="col" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
+            <Icon name="sparkles" size={11} /><span style={{ fontWeight: 500 }}>Notes</span>
+            {mom.summaryApproved && <span className="pill" data-tone="green" style={{ fontSize: 10 }}>approved</span>}
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.65, padding: '10px 14px', background: 'var(--panel)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+            {mom.summary ? mom.summary : <span className="muted">No summary captured.</span>}
+          </div>
+        </div>
+
+        <div className="col" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
+            <Icon name="tasks" size={11} /><span style={{ fontWeight: 500 }}>Action items</span>
+            <span className="muted">· {items.length}</span>
+          </div>
+          {items.length === 0 ? (
+            <span className="muted" style={{ fontSize: 11.5 }}>No action items.</span>
+          ) : (
+            <ol style={{ margin: 0, paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {items.map((it, i) => {
+                const ownerUser = CDC.lookup && CDC.lookup.user(it.owner);
+                return (
+                  <li key={i} style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                    <div>{it.text}</div>
+                    <div className="row muted" style={{ gap: 6, fontSize: 11, marginTop: 2 }}>
+                      <span>→ {ownerUser ? ownerUser.name : (it.ownerName || it.owner || 'Unassigned')}</span>
+                      {it.due && <span>· due {it.due}</span>}
+                      {it.status && <span>· {it.status}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border-faint)', paddingTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+          Logged by <strong style={{ color: 'var(--text-muted)' }}>{loggedByName}</strong>
+          {mom.source && <span> · via {mom.source}</span>}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+window.MomCardModal = MomCardModal;
 
 // ── MOM Loader ─────────────────────────────────────────────────────────
 function MomLoader({ open, onClose, currentUser, nav }) {
@@ -154,25 +251,30 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
-  const [bullets, setBullets] = useStP([]);                     // [{ id, text }]
+  const [summary, setSummary] = useStP('');                     // outcome-oriented paragraph
+  const [attendees, setAttendees] = useStP([]);                 // [{ name, userId|null }]
+  const [summaryApproved, setSummaryApproved] = useStP(false);  // explicit approve toggle
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
 
-  // Bullet editing helpers (Summary tab) — mirrors the action-item editability.
-  const newBullet = (text = '') => ({ id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text });
-  function addBullet() { setBullets((arr) => [...arr, newBullet('')]); }
-  function editBulletText(id, text) { setBullets((arr) => arr.map((b) => b.id === id ? { ...b, text } : b)); }
-  function removeBullet(id) { setBullets((arr) => arr.filter((b) => b.id !== id)); }
-  function moveBullet(id, dir) {
-    setBullets((arr) => {
-      const i = arr.findIndex((b) => b.id === id);
-      if (i < 0) return arr;
-      const j = dir === 'up' ? i - 1 : i + 1;
-      if (j < 0 || j >= arr.length) return arr;
-      const next = arr.slice();
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
+  // Resolve a name (from transcript / user input) to a roster user id, or null.
+  function resolveAttendee(name) {
+    const users = window.CDC.USERS || [];
+    const n = String(name || '').toLowerCase().trim();
+    if (!n) return null;
+    const u = users.find((x) => String(x.name).toLowerCase() === n)
+           || users.find((x) => String(x.name).toLowerCase().includes(n))
+           || users.find((x) => n.includes(String(x.name).toLowerCase()))
+           || users.find((x) => String(x.initials || '').toLowerCase() === n);
+    return u ? u.id : null;
   }
+  function addAttendee(name) {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return;
+    setAttendees((arr) => arr.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())
+      ? arr
+      : [...arr, { name: trimmed, userId: resolveAttendee(trimmed) }]);
+  }
+  function removeAttendee(idx) { setAttendees((arr) => arr.filter((_, i) => i !== idx)); }
 
   function readFile(file) {
     if (!file) return;
@@ -233,11 +335,13 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
-        const rawBullets = (raw && Array.isArray(raw.bullets)) ? raw.bullets : [];
-        setBullets(rawBullets
-          .map((b) => String(b || '').trim())
+        setSummary(String((raw && raw.summary) || '').trim());
+        const rawAttendees = (raw && Array.isArray(raw.attendees)) ? raw.attendees : [];
+        setAttendees(rawAttendees
+          .map((n) => String(n || '').trim())
           .filter(Boolean)
-          .map((text, i) => ({ id: `b-${Date.now()}-${i}`, text })));
+          .map((name) => ({ name, userId: resolveAttendee(name) })));
+        setSummaryApproved(false);
         const rawItems = (raw && raw.items) || [];
         if (rawItems.length) {
           items = rawItems.map((it, i) => {
@@ -253,6 +357,19 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       derivedAgenda = firstLine ? firstLine.slice(0, 90) : 'Team sync — action items';
     }
     setAgenda(derivedAgenda);
+    // Fallback attendees: extract speaker prefixes from transcript ("Name: ...") if Scribe didn't.
+    setAttendees((curr) => {
+      if (curr && curr.length) return curr;
+      const speakers = new Set();
+      transcript.split('\n').forEach((line) => {
+        const m = line.match(/^\s*\[?[^:\]]{0,12}\]?\s*([A-Z][A-Za-z .'-]{1,30}):/);
+        if (m) {
+          const nm = m[1].trim();
+          if (nm && !/^(team|everyone|all|chair|note)$/i.test(nm)) speakers.add(nm);
+        }
+      });
+      return Array.from(speakers).slice(0, 12).map((name) => ({ name, userId: resolveAttendee(name) }));
+    });
     if (!items) {
       // Fallback: heuristic extraction (or canned) so the demo still flows offline.
       setStep('dispatcher');
@@ -321,17 +438,24 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       });
     });
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
+    const loggedByName = (CDC.lookup && CDC.lookup.user(currentUser.id) || currentUser).name;
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
       agenda,
-      summaryBullets: bullets.map((b) => b.text).filter((t) => t && t.trim()),
-      summary: bullets.map((b) => b.text).filter((t) => t && t.trim()).join(' · ').slice(0, 240),
+      summary: (summary || '').trim(),
+      summaryApproved: !!summaryApproved,
+      attendees: attendees.map((a) => a.userId).filter(Boolean),                          // roster matches → uid (existing table renderer expects uids)
+      attendeesAll: attendees.map((a) => ({ name: a.name, userId: a.userId || null })),   // full list incl. externals
+      loggedBy: currentUser.id,
+      loggedByName,
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
         changed: it.owner !== it.aiOwner || it.text !== it.aiText || it.due !== it.aiDue })),
       rejected: actionItems.filter((it) => decisions[it.id] === 'rejected').map((it) => ({ text: it.text, note: rejectNotes[it.id] || '' })),
-      actionItems: approved.map((it) => ({ text: it.text, owner: it.owner })),
+      actionItems: approved.map((it) => ({
+        text: it.text, owner: it.owner, ownerName: nm(it.owner), due: it.due, status: 'approved',
+      })),
     };
     CDC.db && CDC.db.addMom(mom);
     setStep('done');
@@ -339,7 +463,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
   function resetState() {
     setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
-    setBullets([]); setMomTab('summary');
+    setSummary(''); setAttendees([]); setSummaryApproved(false); setMomTab('summary');
   }
 
   if (!open) return null;
@@ -419,35 +543,78 @@ function MomLoader({ open, onClose, currentUser, nav }) {
               </div>
 
               {momTab === 'summary' && (
-                <div className="col" style={{ gap: 8, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
-                  {bullets.length === 0 && (
-                    <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      No summary bullets extracted yet. Add one below to start drafting the notes manually.
+                <div className="col" style={{ gap: 14, maxHeight: 460, overflowY: 'auto', padding: 4 }}>
+                  {/* Attendees chips */}
+                  <div className="col" style={{ gap: 6 }}>
+                    <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      <Icon name="users" size={11} />
+                      <span style={{ fontWeight: 500 }}>Attendees</span>
+                      <span className="muted">·</span>
+                      <span className="muted">{attendees.length} found</span>
                     </div>
-                  )}
-                  {bullets.map((b, i) => (
-                    <div key={b.id} className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
-                      <span style={{ marginTop: 8, fontSize: 14, color: 'var(--text-faint)', userSelect: 'none' }}>•</span>
-                      <textarea
-                        className="input-text"
-                        value={b.text}
-                        placeholder="What was discussed / landed / flagged"
-                        onChange={(e) => editBulletText(b.id, e.target.value)}
-                        rows={1}
-                        style={{ flex: 1, fontSize: 13, lineHeight: 1.5, resize: 'vertical', minHeight: 32, padding: '6px 8px' }}
+                    <datalist id="mom-attendee-roster">
+                      {(window.CDC.USERS || []).map((u) => <option key={u.id} value={u.name} />)}
+                    </datalist>
+                    <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {attendees.map((a, i) => (
+                        <span key={`${a.name}-${i}`} className="pill" data-tone={a.userId ? 'green' : 'muted'}
+                              style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {a.userId && <Avatar user={window.CDC.lookup.user(a.userId)} size={14} />}
+                          <span>{a.name}</span>
+                          <button onClick={() => removeAttendee(i)} title="Remove"
+                                  style={{ background: 'transparent', border: 0, padding: '0 2px', cursor: 'pointer', color: 'inherit', fontSize: 12, lineHeight: 1 }}>×</button>
+                        </span>
+                      ))}
+                      <input
+                        list="mom-attendee-roster"
+                        placeholder="+ add attendee"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.target.value.trim()) {
+                            addAttendee(e.target.value); e.target.value = '';
+                          }
+                        }}
+                        style={{ fontSize: 11.5, padding: '3px 8px', borderRadius: 999, border: '1px dashed var(--border)', minWidth: 130 }}
                       />
-                      <div className="row" style={{ gap: 2 }}>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'up')} disabled={i === 0} title="Move up" style={{ padding: '2px 6px', fontSize: 12 }}>↑</button>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'down')} disabled={i === bullets.length - 1} title="Move down" style={{ padding: '2px 6px', fontSize: 12 }}>↓</button>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeBullet(b.id)} title="Remove bullet">
-                          <Icon name="x" size={10} />
-                        </button>
-                      </div>
                     </div>
-                  ))}
-                  <button className="btn" data-size="sm" data-variant="ghost" onClick={addBullet} style={{ alignSelf: 'flex-start' }}>
-                    + Add bullet
-                  </button>
+                  </div>
+
+                  {/* Summary paragraph editor */}
+                  <div className="col" style={{ gap: 6 }}>
+                    <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      <Icon name="sparkles" size={11} />
+                      <span style={{ fontWeight: 500 }}>Outcome summary</span>
+                      <span className="muted">·</span>
+                      <span className="muted">business direction · alignment · guidelines</span>
+                      <span className="muted">·</span>
+                      <span className="muted">{summary.trim().split(/\s+/).filter(Boolean).length} words</span>
+                    </div>
+                    <textarea
+                      className="input-text"
+                      value={summary}
+                      placeholder="Outcome-oriented paragraph: the business direction, what everyone aligned on, and the guidelines/insights that emerged."
+                      onChange={(e) => { setSummary(e.target.value); setSummaryApproved(false); }}
+                      rows={9}
+                      style={{ fontSize: 13, lineHeight: 1.6, resize: 'vertical', minHeight: 180, padding: '10px 12px' }}
+                    />
+                    <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                      {summaryApproved && (
+                        <span className="pill" data-tone="green" style={{ fontSize: 10.5 }}>
+                          <Icon name="check" size={9} stroke={2.4} /> approved · ready to commit
+                        </span>
+                      )}
+                      <button className="btn" data-size="sm" data-variant="ghost"
+                              onClick={() => setSummaryApproved(false)} disabled={!summaryApproved}
+                              title="Re-open for edits">
+                        Edit
+                      </button>
+                      <button className="btn" data-size="sm"
+                              data-variant={summaryApproved ? 'ghost' : 'primary'}
+                              onClick={() => setSummaryApproved(true)} disabled={!summary.trim() || summaryApproved}
+                              title="Mark the summary as ready">
+                        <Icon name="check" size={11} stroke={2.4} /> Approve summary
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

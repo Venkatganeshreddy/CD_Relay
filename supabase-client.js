@@ -280,45 +280,47 @@
       const roster = (window.CDC.USERS || [])
         .map((u) => `${u.name} — ${u.level} — ${u.sub || u.dept || ''}`).join('\n');
       const prompt = `You are Scribe, summarizing a meeting transcript for the team listed below.\n` +
-        `Produce THREE things in this exact order: agenda, bullets, items.\n\n` +
+        `Produce FOUR things in this exact order: agenda, attendees, summary, items.\n\n` +
         `1) agenda — a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n\n` +
-        `2) bullets — a flat list of SUMMARY BULLETS describing WHAT was discussed (the substance, themes, context, decisions, flags). This is the discussion narrative, NOT a task list.\n` +
-        `  - You MUST produce at least 5 bullets (aim for 5 to 12). Each under 25 words. No headings, no grouping — flat narrative order.\n` +
-        `  - Even if every line in the transcript implies an action, bullets must still summarize the discussion context. Restate actions as past-tense discussion ("Team aligned on X", "Discussed Y", "Flagged Z risk") — drop the assignee.\n` +
-        `  - Be concrete and specific (mention the area / tool / decision). Mention names only when the speaker matters.\n` +
-        `  - Do not invent. Skip anything not substantively in the transcript.\n` +
-        `  - Bullets and items will OVERLAP in subject matter — that is expected. Bullets = WHAT was discussed; items = WHO does WHAT.\n\n` +
-        `3) items — extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
+        `2) attendees — array of every distinct speaker name that appears in the transcript (e.g. lines like "Ravi: ...", "[10:02] Priya:" etc.). Use the speaker's name as it appears. Prefer the roster name when the transcript name clearly matches a roster entry. Skip generic labels like "Team" or "Everyone".\n\n` +
+        `3) summary — a SINGLE OUTCOME-ORIENTED PARAGRAPH (90 to 180 words) that weaves three things naturally into prose, in this order:\n` +
+        `  (a) the BUSINESS DIRECTION the meeting set or reinforced — the strategic intent, the "why this matters" thread.\n` +
+        `  (b) what EVERYONE ALIGNED ON — the decisions reached, the shared understanding, what is now settled.\n` +
+        `  (c) GUIDELINES & INSIGHTS that emerged — principles, learnings, things to remember going forward.\n` +
+        `Write it as flowing prose, NOT a bullet list and NOT with the labels "(a)", "(b)", "(c)" or "Business direction:". Use natural transitions ("The team agreed…", "A key insight was…", "Going forward…"). Do NOT restate action items here — those live in the items array.\n` +
+        `Outcome-oriented means: focus on conclusions and direction, not on the back-and-forth chat. Do not invent. Skip anything not substantively in the transcript.\n\n` +
+        `4) items — extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
         `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
         `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
         `- If a speaker volunteers ("I'll…", "I will…", "let me…"), assign that speaker.\n` +
         `- Never default to the meeting chair or whoever is handing out work; pick who must complete it.\n` +
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n\n` +
-        `EXAMPLE (showing that bullets and items coexist):\n` +
-        `Transcript: "Ravi: GenAI module shipped Friday but quiz scores dipped to 62%. Priya: I'll review the rubric. Team: let's also tighten the eval pack for DS&Algo next sprint."\n` +
-        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","bullets":["GenAI module shipped Friday but quiz scores dipped to 62%.","Team aligned on reviewing the rubric to address the score drop.","Discussed tightening the DS&Algo eval pack in the next sprint."],"items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
+        `EXAMPLE:\n` +
+        `Transcript: "Ravi: GenAI module shipped Friday but quiz scores dipped to 62%. Priya: I'll review the rubric. Pavan: we should tighten the eval pack for DS&Algo next sprint — that's where retention is leaking."\n` +
+        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","attendees":["Ravi","Priya","Pavan"],"summary":"The session reinforced that quality-of-learning is the headline direction this quarter — shipping is necessary but not sufficient if assessment outcomes slip. The team aligned that the GenAI launch is real but the 62% quiz scores are a leading signal that the rubric needs another pass before the next cohort, and they accepted that DS&Algo is now the bigger retention risk and deserves a tightened eval pack in the next sprint. A clear guideline emerging from the discussion: any module that ships should be paired with a rubric audit within a week, and eval packs are not optional polish — they are the early-warning system. Going forward, evaluation health travels with launch readiness, not after.","items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","bullets":["...","..."],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble. Bullets array MUST have 5+ entries.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","attendees":["Name", ...],"summary":"<single paragraph>","items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try {
         const m = content.match(/\{[\s\S]*\}/);
         const p = JSON.parse(m[0]);
-        let bullets = Array.isArray(p.bullets)
-          ? p.bullets.map((b) => String(b || '').trim()).filter(Boolean)
-          : [];
         const items = Array.isArray(p.items) ? p.items : [];
-        // Safety net: if the model dumped everything into items and left bullets empty,
-        // synthesize discussion bullets from the items so Summary tab is never blank.
-        if (bullets.length === 0 && items.length > 0) {
-          bullets = items.slice(0, 8).map((i) => {
-            const t = String(i.text || '').trim();
-            if (!t) return '';
-            return t.replace(/^(please\s+|we\s+(need|should|have)\s+to\s+|let'?s\s+(make sure\s+)?|someone\s+should\s+|need to\s+)/i, '')
-                    .replace(/^([a-z])/, (c) => c.toUpperCase());
-          }).filter(Boolean);
+        let summary = String(p.summary || '').trim();
+        let attendees = Array.isArray(p.attendees)
+          ? p.attendees.map((a) => String(a || '').trim()).filter(Boolean)
+          : [];
+        // Back-compat: if older bullets[] shape comes back, fold into a paragraph.
+        if (!summary && Array.isArray(p.bullets) && p.bullets.length) {
+          summary = p.bullets.map((b) => (b && typeof b === 'object') ? b.text : String(b || ''))
+                             .map((t) => String(t).trim()).filter(Boolean).join(' ');
         }
-        return { agenda: p.agenda || '', bullets, items };
-      } catch (_) { return { agenda: '', bullets: [], items: [] }; }
+        // Safety net: if summary is empty but we have items, synthesize a short paragraph.
+        if (!summary && items.length > 0) {
+          summary = 'The meeting captured the following commitments: ' +
+            items.slice(0, 6).map((i) => String(i.text || '').trim()).filter(Boolean).join('; ') + '.';
+        }
+        return { agenda: p.agenda || '', attendees, summary, items };
+      } catch (_) { return { agenda: '', attendees: [], summary: '', items: [] }; }
     },
     // Curator — close the learning loop: read where humans edited/rejected an
     // agent's drafts (engram_interactions), distill the recurring corrections
