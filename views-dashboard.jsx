@@ -413,8 +413,12 @@ window.ragRowProps = ragRowProps;
 function DepartmentView({ deptId, tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const dept = CDC.lookup.dept(deptId);
-  const health = CDC.DEPT_HEALTH[deptId];
-  if (!dept || !health) return <div className="empty">Department not found</div>;
+  if (!dept) return <div className="empty">Department not found</div>;
+  const health = CDC.DEPT_HEALTH[deptId] || {
+    score: null, status: 'muted', trend: 0,
+    reportRate: null, kpiOnTrack: null, openBlockers: 0, overdueTasks: 0,
+    sparkline: [], activeReports: 0, totalExpected: 0,
+  };
 
   // Determine sub-teams shown for this user
   let visibleSubs = dept.subs;
