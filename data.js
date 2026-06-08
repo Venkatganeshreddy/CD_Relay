@@ -1087,24 +1087,24 @@
     {
       id: 'mom-1', title: 'Content Leadership Sync — Q3 Hiring',
       attendees: ['NW0002526', 'NW0001771', 'NW0001778', 'NW0001771', 'NW0002849', 'NW0001240'],
-      date: '2026-05-25', duration: 47, channel: 'Teams · Content Leadership',
+      date: fmt(daysAgo(1)), duration: 47, channel: 'Teams · Content Leadership',
       source: 'Teams transcript', scribeRun: 'run-1214',
       summary: 'Reviewed Q3 hiring forecast. Aligned on +6 mentors for DS&ML cohort 4. Discussed mentor capacity ratio gap (1:48 actual vs 1:35 planned). Decided to bring Q3 hiring forward to next planning cycle.',
       actionItems: [
-        { id: 'ai-1', text: 'Submit Q3 hiring forecast bump (+6 mentors) for approval', owner: 'NW0002526', due: '2026-05-29', confidence: 0.94, status: 'pending_review' },
-        { id: 'ai-2', text: 'Investigate mentor capacity ratio drift', owner: 'NW0005433', due: '2026-06-02', confidence: 0.88, status: 'approved' },
-        { id: 'ai-3', text: 'Draft 1:35 capacity recovery plan', owner: 'NW0002023', due: '2026-06-05', confidence: 0.71, status: 'pending_review' },
+        { id: 'ai-1', text: 'Submit Q3 hiring forecast bump (+6 mentors) for approval', owner: 'NW0002526', due: fmt(daysAgo(-3)), confidence: 0.94, status: 'pending_review' },
+        { id: 'ai-2', text: 'Investigate mentor capacity ratio drift', owner: 'NW0005433', due: fmt(daysAgo(-7)), confidence: 0.88, status: 'approved' },
+        { id: 'ai-3', text: 'Draft 1:35 capacity recovery plan', owner: 'NW0002023', due: fmt(daysAgo(-10)), confidence: 0.71, status: 'pending_review' },
       ],
     },
     {
       id: 'mom-2', title: 'Platform Sync — NAT throttle + dashboard flicker',
       attendees: ['NW0001771', 'NW0002526', 'NW0002526'],
-      date: '2026-05-24', duration: 28, channel: 'Teams · Platform',
+      date: fmt(daysAgo(2)), duration: 28, channel: 'Teams · Platform',
       source: 'Teams transcript', scribeRun: 'run-1199',
       summary: 'AWS NAT throttle still under TAM investigation. Safari dashboard flicker hotfix shipped. Discussed escalation timeline.',
       actionItems: [
-        { id: 'ai-4', text: 'Escalate NAT throttle to AWS TAM if no resolution by 2026-05-29', owner: 'NW0001771', due: '2026-05-29', confidence: 0.92, status: 'approved' },
-        { id: 'ai-5', text: 'Document Safari hotfix in Codex', owner: 'NW0001771', due: '2026-05-27', confidence: 0.95, status: 'approved' },
+        { id: 'ai-4', text: 'Escalate NAT throttle to AWS TAM if no resolution', owner: 'NW0001771', due: fmt(daysAgo(-3)), confidence: 0.92, status: 'approved' },
+        { id: 'ai-5', text: 'Document Safari hotfix in Codex', owner: 'NW0001771', due: fmt(daysAgo(-1)), confidence: 0.95, status: 'approved' },
       ],
     },
   ];
