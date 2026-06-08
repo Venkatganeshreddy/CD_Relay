@@ -202,9 +202,32 @@ function MomCardModal({ mom, onClose }) {
             <Icon name="sparkles" size={11} /><span style={{ fontWeight: 500 }}>Notes</span>
             {mom.summaryApproved && <span className="pill" data-tone="green" style={{ fontSize: 10 }}>approved</span>}
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.65, padding: '10px 14px', background: 'var(--panel)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
-            {mom.summary ? mom.summary : <span className="muted">No summary captured.</span>}
-          </div>
+          {(() => {
+            const s = mom.summarySections || {};
+            const lenses = [
+              { key: 'businessDirection', label: 'Business direction' },
+              { key: 'alignment',         label: 'Alignment' },
+              { key: 'guidelines',        label: 'Guidelines & insights' },
+            ].filter((l) => String(s[l.key] || '').trim());
+            if (lenses.length === 0) {
+              // Legacy MoMs only had a flat summary string.
+              return (
+                <div style={{ fontSize: 13, lineHeight: 1.65, padding: '10px 14px', background: 'var(--panel)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+                  {mom.summary ? mom.summary : <span className="muted">No summary captured.</span>}
+                </div>
+              );
+            }
+            return (
+              <div className="col" style={{ gap: 10 }}>
+                {lenses.map((l) => (
+                  <div key={l.key} style={{ padding: '10px 14px', background: 'var(--panel)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', marginBottom: 4 }}>{l.label}</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{s[l.key]}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="col" style={{ gap: 6 }}>
@@ -251,8 +274,11 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
-  const [summary, setSummary] = useStP('');                     // outcome-oriented paragraph
+  // Three-lens outcome summary: each is a short paragraph the user can edit independently.
+  const [summary, setSummary] = useStP({ businessDirection: '', alignment: '', guidelines: '' });
+  function editSummaryLens(lens, val) { setSummary((s) => ({ ...s, [lens]: val })); setSummaryApproved(false); }
   const [attendees, setAttendees] = useStP([]);                 // [{ name, userId|null }]
+  const [attendeeQuery, setAttendeeQuery] = useStP('');         // current live-search input
   const [summaryApproved, setSummaryApproved] = useStP(false);  // explicit approve toggle
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
 
@@ -335,7 +361,18 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
-        setSummary(String((raw && raw.summary) || '').trim());
+        const rawSummary = raw && raw.summary;
+        if (rawSummary && typeof rawSummary === 'object') {
+          setSummary({
+            businessDirection: String(rawSummary.businessDirection || '').trim(),
+            alignment: String(rawSummary.alignment || '').trim(),
+            guidelines: String(rawSummary.guidelines || '').trim(),
+          });
+        } else if (typeof rawSummary === 'string' && rawSummary.trim()) {
+          setSummary({ businessDirection: '', alignment: rawSummary.trim(), guidelines: '' });
+        } else {
+          setSummary({ businessDirection: '', alignment: '', guidelines: '' });
+        }
         const rawAttendees = (raw && Array.isArray(raw.attendees)) ? raw.attendees : [];
         setAttendees(rawAttendees
           .map((n) => String(n || '').trim())
@@ -439,10 +476,17 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     });
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const loggedByName = (CDC.lookup && CDC.lookup.user(currentUser.id) || currentUser).name;
+    const summaryFlat = [summary.businessDirection, summary.alignment, summary.guidelines]
+      .map((s) => String(s || '').trim()).filter(Boolean).join('\n\n');
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
       agenda,
-      summary: (summary || '').trim(),
+      summary: summaryFlat,                                     // back-compat: joined string for table preview
+      summarySections: {
+        businessDirection: String(summary.businessDirection || '').trim(),
+        alignment: String(summary.alignment || '').trim(),
+        guidelines: String(summary.guidelines || '').trim(),
+      },
       summaryApproved: !!summaryApproved,
       attendees: attendees.map((a) => a.userId).filter(Boolean),                          // roster matches → uid (existing table renderer expects uids)
       attendeesAll: attendees.map((a) => ({ name: a.name, userId: a.userId || null })),   // full list incl. externals
@@ -463,7 +507,8 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
   function resetState() {
     setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
-    setSummary(''); setAttendees([]); setSummaryApproved(false); setMomTab('summary');
+    setSummary({ businessDirection: '', alignment: '', guidelines: '' });
+    setAttendees([]); setAttendeeQuery(''); setSummaryApproved(false); setMomTab('summary');
   }
 
   if (!open) return null;
@@ -542,19 +587,37 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                 ))}
               </div>
 
-              {momTab === 'summary' && (
-                <div className="col" style={{ gap: 14, maxHeight: 460, overflowY: 'auto', padding: 4 }}>
-                  {/* Attendees chips */}
+              {momTab === 'summary' && (() => {
+                // Live attendee dropdown: filter roster by query, exclude already-added.
+                const q = attendeeQuery.trim().toLowerCase();
+                const alreadyIds = new Set(attendees.map((a) => a.userId).filter(Boolean));
+                const alreadyNames = new Set(attendees.map((a) => a.name.toLowerCase()));
+                const matches = q ? (window.CDC.USERS || []).filter((u) =>
+                  !alreadyIds.has(u.id) && (
+                    String(u.name).toLowerCase().includes(q) ||
+                    String(u.initials || '').toLowerCase().startsWith(q) ||
+                    String(u.sub || '').toLowerCase().includes(q) ||
+                    String(u.dept || '').toLowerCase().includes(q)
+                  )
+                ).slice(0, 8) : [];
+                const hasRosterExact = matches.some((u) => u.name.toLowerCase() === q);
+                const canAddExternal = q && !hasRosterExact && !alreadyNames.has(q);
+                const lenses = [
+                  { key: 'businessDirection', label: 'Business direction', hint: 'The strategic intent the meeting set or reinforced — the "why this matters" thread.' },
+                  { key: 'alignment',         label: 'Alignment',          hint: 'What everyone aligned on — decisions reached, shared understanding, what is now settled.' },
+                  { key: 'guidelines',        label: 'Guidelines & insights', hint: 'Principles and learnings that emerged — things to remember going forward.' },
+                ];
+                const anyFilled = lenses.some((l) => (summary[l.key] || '').trim());
+                return (
+                <div className="col" style={{ gap: 16, maxHeight: 480, overflowY: 'auto', padding: 4 }}>
+                  {/* Attendees with live dropdown */}
                   <div className="col" style={{ gap: 6 }}>
                     <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
                       <Icon name="users" size={11} />
                       <span style={{ fontWeight: 500 }}>Attendees</span>
                       <span className="muted">·</span>
-                      <span className="muted">{attendees.length} found</span>
+                      <span className="muted">{attendees.length} added</span>
                     </div>
-                    <datalist id="mom-attendee-roster">
-                      {(window.CDC.USERS || []).map((u) => <option key={u.id} value={u.name} />)}
-                    </datalist>
                     <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       {attendees.map((a, i) => (
                         <span key={`${a.name}-${i}`} className="pill" data-tone={a.userId ? 'green' : 'muted'}
@@ -565,37 +628,77 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                                   style={{ background: 'transparent', border: 0, padding: '0 2px', cursor: 'pointer', color: 'inherit', fontSize: 12, lineHeight: 1 }}>×</button>
                         </span>
                       ))}
+                    </div>
+                    <div style={{ position: 'relative', maxWidth: 320 }}>
                       <input
-                        list="mom-attendee-roster"
-                        placeholder="+ add attendee"
+                        value={attendeeQuery}
+                        onChange={(e) => setAttendeeQuery(e.target.value)}
+                        placeholder="Type a name to add (roster suggestions appear below)"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && e.target.value.trim()) {
-                            addAttendee(e.target.value); e.target.value = '';
-                          }
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (matches[0]) { addAttendee(matches[0].name); setAttendeeQuery(''); }
+                            else if (canAddExternal) { addAttendee(attendeeQuery); setAttendeeQuery(''); }
+                          } else if (e.key === 'Escape') { setAttendeeQuery(''); }
                         }}
-                        style={{ fontSize: 11.5, padding: '3px 8px', borderRadius: 999, border: '1px dashed var(--border)', minWidth: 130 }}
+                        style={{ width: '100%', fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)' }}
                       />
+                      {q && (matches.length > 0 || canAddExternal) && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 2, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.08)', zIndex: 10, maxHeight: 240, overflowY: 'auto' }}>
+                          {matches.map((u) => (
+                            <button key={u.id} type="button"
+                                    onClick={() => { addAttendee(u.name); setAttendeeQuery(''); }}
+                                    style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'transparent', border: 0, cursor: 'pointer', textAlign: 'left', fontSize: 12 }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                              <Avatar user={u} size={18} />
+                              <span style={{ flex: 1 }}>{u.name}</span>
+                              <span className="muted" style={{ fontSize: 10.5 }}>{u.level} · {u.sub || u.dept}</span>
+                            </button>
+                          ))}
+                          {canAddExternal && (
+                            <button type="button"
+                                    onClick={() => { addAttendee(attendeeQuery); setAttendeeQuery(''); }}
+                                    style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'transparent', border: 0, borderTop: matches.length ? '1px solid var(--border-faint)' : 0, cursor: 'pointer', textAlign: 'left', fontSize: 12 }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                              <Icon name="plus" size={11} />
+                              <span>Add "<strong>{attendeeQuery}</strong>" as external attendee</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Summary paragraph editor */}
-                  <div className="col" style={{ gap: 6 }}>
+                  {/* Three-lens outcome summary */}
+                  <div className="col" style={{ gap: 10 }}>
                     <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11.5, color: 'var(--text-muted)' }}>
                       <Icon name="sparkles" size={11} />
                       <span style={{ fontWeight: 500 }}>Outcome summary</span>
                       <span className="muted">·</span>
-                      <span className="muted">business direction · alignment · guidelines</span>
-                      <span className="muted">·</span>
-                      <span className="muted">{summary.trim().split(/\s+/).filter(Boolean).length} words</span>
+                      <span className="muted">three short paragraphs you can edit</span>
                     </div>
-                    <textarea
-                      className="input-text"
-                      value={summary}
-                      placeholder="Outcome-oriented paragraph: the business direction, what everyone aligned on, and the guidelines/insights that emerged."
-                      onChange={(e) => { setSummary(e.target.value); setSummaryApproved(false); }}
-                      rows={9}
-                      style={{ fontSize: 13, lineHeight: 1.6, resize: 'vertical', minHeight: 180, padding: '10px 12px' }}
-                    />
+                    {lenses.map((l) => {
+                      const text = summary[l.key] || '';
+                      const words = text.trim().split(/\s+/).filter(Boolean).length;
+                      return (
+                        <div key={l.key} className="col" style={{ gap: 4 }}>
+                          <div className="row" style={{ gap: 6, alignItems: 'baseline' }}>
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>{l.label}</span>
+                            <span className="muted" style={{ fontSize: 10.5 }}>· {words} words</span>
+                          </div>
+                          <textarea
+                            className="input-text"
+                            value={text}
+                            placeholder={l.hint}
+                            onChange={(e) => editSummaryLens(l.key, e.target.value)}
+                            rows={3}
+                            style={{ fontSize: 13, lineHeight: 1.6, resize: 'vertical', minHeight: 70, padding: '8px 10px' }}
+                          />
+                        </div>
+                      );
+                    })}
                     <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
                       {summaryApproved && (
                         <span className="pill" data-tone="green" style={{ fontSize: 10.5 }}>
@@ -609,14 +712,15 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                       </button>
                       <button className="btn" data-size="sm"
                               data-variant={summaryApproved ? 'ghost' : 'primary'}
-                              onClick={() => setSummaryApproved(true)} disabled={!summary.trim() || summaryApproved}
+                              onClick={() => setSummaryApproved(true)} disabled={!anyFilled || summaryApproved}
                               title="Mark the summary as ready">
                         <Icon name="check" size={11} stroke={2.4} /> Approve summary
                       </button>
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {momTab === 'actions' && (
                 <div className="col" style={{ gap: 10, maxHeight: 420, overflowY: 'auto', padding: 4 }}>

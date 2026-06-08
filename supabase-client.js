@@ -283,12 +283,10 @@
         `Produce FOUR things in this exact order: agenda, attendees, summary, items.\n\n` +
         `1) agenda — a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n\n` +
         `2) attendees — array of every distinct speaker name that appears in the transcript (e.g. lines like "Ravi: ...", "[10:02] Priya:" etc.). Use the speaker's name as it appears. Prefer the roster name when the transcript name clearly matches a roster entry. Skip generic labels like "Team" or "Everyone".\n\n` +
-        `3) summary — a SINGLE OUTCOME-ORIENTED PARAGRAPH (90 to 180 words) that weaves three things naturally into prose, in this order:\n` +
-        `  (a) the BUSINESS DIRECTION the meeting set or reinforced — the strategic intent, the "why this matters" thread.\n` +
-        `  (b) what EVERYONE ALIGNED ON — the decisions reached, the shared understanding, what is now settled.\n` +
-        `  (c) GUIDELINES & INSIGHTS that emerged — principles, learnings, things to remember going forward.\n` +
-        `Write it as flowing prose, NOT a bullet list and NOT with the labels "(a)", "(b)", "(c)" or "Business direction:". Use natural transitions ("The team agreed…", "A key insight was…", "Going forward…"). Do NOT restate action items here — those live in the items array.\n` +
-        `Outcome-oriented means: focus on conclusions and direction, not on the back-and-forth chat. Do not invent. Skip anything not substantively in the transcript.\n\n` +
+        `3) summary — an OBJECT with THREE short paragraphs, one per outcome lens. Each paragraph is 2 to 5 sentences, written as flowing prose (NOT bullets), and outcome-oriented (focus on conclusions, not chat). Do not restate action items — those live in the items array. Do not invent. Skip any lens that wasn't substantively discussed by setting it to "".\n` +
+        `  - "businessDirection": the strategic intent the meeting set or reinforced — the "why this matters" thread, the direction the team is heading.\n` +
+        `  - "alignment": what everyone aligned on — the decisions reached, the shared understanding, what is now settled.\n` +
+        `  - "guidelines": guidelines & insights that emerged — principles, learnings, things to remember going forward.\n\n` +
         `4) items — extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
         `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
         `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
@@ -297,30 +295,40 @@
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n\n` +
         `EXAMPLE:\n` +
         `Transcript: "Ravi: GenAI module shipped Friday but quiz scores dipped to 62%. Priya: I'll review the rubric. Pavan: we should tighten the eval pack for DS&Algo next sprint — that's where retention is leaking."\n` +
-        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","attendees":["Ravi","Priya","Pavan"],"summary":"The session reinforced that quality-of-learning is the headline direction this quarter — shipping is necessary but not sufficient if assessment outcomes slip. The team aligned that the GenAI launch is real but the 62% quiz scores are a leading signal that the rubric needs another pass before the next cohort, and they accepted that DS&Algo is now the bigger retention risk and deserves a tightened eval pack in the next sprint. A clear guideline emerging from the discussion: any module that ships should be paired with a rubric audit within a week, and eval packs are not optional polish — they are the early-warning system. Going forward, evaluation health travels with launch readiness, not after.","items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
+        `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","attendees":["Ravi","Priya","Pavan"],"summary":{"businessDirection":"Quality-of-learning is the headline direction this quarter. Shipping is necessary but not sufficient if assessment outcomes slip — the team is steering toward measurable learner outcomes as the leading metric.","alignment":"The team agreed the 62% GenAI quiz scores are a leading signal that the rubric needs another pass before the next cohort. They also aligned that DS&Algo is now the larger retention risk and warrants a tightened eval pack in the next sprint.","guidelines":"Any module that ships should be paired with a rubric audit within a week. Eval packs are not optional polish — they are the early-warning system. Evaluation health travels with launch readiness, not after."},"items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","attendees":["Name", ...],"summary":"<single paragraph>","items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON in this exact shape: {"agenda":"<one crisp line>","attendees":["Name", ...],"summary":{"businessDirection":"<paragraph or \\"\\">","alignment":"<paragraph or \\"\\">","guidelines":"<paragraph or \\"\\">"},"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try {
         const m = content.match(/\{[\s\S]*\}/);
         const p = JSON.parse(m[0]);
         const items = Array.isArray(p.items) ? p.items : [];
-        let summary = String(p.summary || '').trim();
         let attendees = Array.isArray(p.attendees)
           ? p.attendees.map((a) => String(a || '').trim()).filter(Boolean)
           : [];
-        // Back-compat: if older bullets[] shape comes back, fold into a paragraph.
-        if (!summary && Array.isArray(p.bullets) && p.bullets.length) {
-          summary = p.bullets.map((b) => (b && typeof b === 'object') ? b.text : String(b || ''))
-                             .map((t) => String(t).trim()).filter(Boolean).join(' ');
+        // summary may be the new object shape {businessDirection,alignment,guidelines}
+        // or, for back-compat, a plain string. Normalize to the object.
+        let summary = { businessDirection: '', alignment: '', guidelines: '' };
+        if (p.summary && typeof p.summary === 'object') {
+          summary.businessDirection = String(p.summary.businessDirection || '').trim();
+          summary.alignment = String(p.summary.alignment || '').trim();
+          summary.guidelines = String(p.summary.guidelines || '').trim();
+        } else if (typeof p.summary === 'string' && p.summary.trim()) {
+          summary.alignment = p.summary.trim(); // treat legacy paragraph as the alignment lens
+        } else if (Array.isArray(p.bullets) && p.bullets.length) {
+          // even older shape — fold bullets into the alignment lens
+          summary.alignment = p.bullets
+            .map((b) => (b && typeof b === 'object') ? b.text : String(b || ''))
+            .map((t) => String(t).trim()).filter(Boolean).join(' ');
         }
-        // Safety net: if summary is empty but we have items, synthesize a short paragraph.
-        if (!summary && items.length > 0) {
-          summary = 'The meeting captured the following commitments: ' +
+        // Safety net: if all three lenses are empty but items exist, synthesize alignment.
+        const hasAny = summary.businessDirection || summary.alignment || summary.guidelines;
+        if (!hasAny && items.length > 0) {
+          summary.alignment = 'The meeting captured the following commitments: ' +
             items.slice(0, 6).map((i) => String(i.text || '').trim()).filter(Boolean).join('; ') + '.';
         }
         return { agenda: p.agenda || '', attendees, summary, items };
-      } catch (_) { return { agenda: '', attendees: [], summary: '', items: [] }; }
+      } catch (_) { return { agenda: '', attendees: [], summary: { businessDirection: '', alignment: '', guidelines: '' }, items: [] }; }
     },
     // Curator — close the learning loop: read where humans edited/rejected an
     // agent's drafts (engram_interactions), distill the recurring corrections
