@@ -46,7 +46,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: slug,
         messages,
-        max_tokens: max_tokens || 1024,
+        max_tokens: max_tokens || 4096,
         temperature: temperature ?? 0.3,
       }),
     });
