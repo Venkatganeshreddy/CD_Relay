@@ -135,8 +135,8 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
 
   // ── Sidebar groups (Daily Worklog / Department / Intelligence / System) ─
   const groupDaily = [
-    { id: 'submit', label: 'Submit today', icon: 'edit', badge: '6:00', badgeTone: 'accent' },
     { id: 'my-tasks', label: 'Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => tt.owner === currentUser.id && tt.status !== 'DONE' && tt.status !== 'REJECTED').length || null, badgeTone: 'amber' },
+    { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
   ];
   const groupDept = (isL2 || isL3orAdmin) ? [
@@ -219,7 +219,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'admin': return <AdminView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'submit': return <SubmitView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'submit': return <GlanceView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'worklogs': return <WorklogsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'architecture': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} initialTab="architecture" />;
     case 'codex': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -395,7 +395,7 @@ function buildCrumbs(route, currentUser) {
   const CDC = window.CDC;
   switch (route.name) {
     case 'dashboard': return ['Department', 'Dashboard'];
-    case 'submit': return ['Daily work', 'Submit today'];
+    case 'submit': return ['Daily work', 'Day-end glance'];
     case 'my-tasks': return ['Daily work', 'My tasks'];
     case 'worklogs': return ['Daily work', 'Worklogs'];
     case 'codex': return ['System', 'Codex'];

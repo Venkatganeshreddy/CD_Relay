@@ -4,6 +4,47 @@
 
 const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
+// ── Day-end glance view ─────────────────────────────────────────────────
+// Lightweight 6:00 PM snapshot: the signed-in user reviews their open tasks,
+// updates only the status (and adds a reason if Blocked / Overdue / Backlog),
+// and saves. Acknowledgement writes lastAckDate; the server-side escalation
+// engine (supabase/09_escalation.sql) walks tasks that miss the daily ack and
+// climbs the manager_id graph (L1 → L2 → L3) when the threshold is hit.
+function GlanceView({ tweaks, currentUser, nav }) {
+  const CDC = window.CDC;
+  const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+  const mine = (CDC.TASKS || []).filter((t) =>
+    t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
+  const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
+
+  return (
+    <div className="fadein">
+      <SectionHeader
+        title="Day-end glance"
+        subtitle={`Quick 6:00 PM check-in. Update each open task's status; add a reason if blocked. Tasks left unacknowledged escalate up the manager graph.`}
+        actions={
+          <>
+            <Pill tone={pending ? 'amber' : 'green'} dot>
+              {pending ? `${pending} awaiting ack` : 'all acknowledged'}
+            </Pill>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
+              <Icon name="tasks" size={11} /> Open Tasks
+            </button>
+          </>
+        }
+      />
+      {mine.length === 0 ? (
+        <div className="empty" style={{ padding: 24 }}>
+          You have no open tasks. New work from MoMs, reports, or your manager will show up here at 6:00 PM.
+        </div>
+      ) : (
+        <AckPanel currentUser={currentUser} />
+      )}
+    </div>
+  );
+}
+window.GlanceView = GlanceView;
+
 // ── Catalog (shared, defined in data.js → window.CDC.TASK_CATALOG) ────────
 const { PRODUCTS, STACKS, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, OUTPUT_MAP } = window.CDC.TASK_CATALOG;
 // Output category → Task category (derived from the shared map).
