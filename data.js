@@ -3,8 +3,18 @@
 // Plain JS, attached to window.CDC.
 
 (function () {
-  const today = new Date('2026-05-22T09:14:00+05:30');
-  const fmt = (d) => d.toISOString().slice(0, 10);
+  // Anchor "today" to the real current date so the app advances daily.
+  // All derived dates (daysAgo, fmt(today)) flow from this — every refresh
+  // shows the actual current day, week, and rolling windows.
+  const today = new Date();
+  // Format as YYYY-MM-DD in the user's local timezone (was UTC via toISOString,
+  // which flipped the date for IST users between 18:30 and midnight).
+  const fmt = (d) => {
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${dy}`;
+  };
   const daysAgo = (n) => {
     const d = new Date(today);
     d.setDate(d.getDate() - n);
@@ -1407,8 +1417,17 @@
 
   const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES };
 
+  // Live "today" — re-evaluated on every read so the app keeps in step with the
+  // real wall clock even if a tab stays open across midnight. Consumers still
+  // treat `CDC.today` as a Date value, but they now get a fresh one each time.
+  const liveDaysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d;
+  };
+
   window.CDC = {
-    today, fmt, daysAgo,
+    fmt, daysAgo: liveDaysAgo,
     ROLES, USERS,
     TASK_CATALOG,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
@@ -1420,4 +1439,11 @@
     stackForUser, reportersInScope, dailyStatus, consolidateByCategory, worklogsWithin,
     lookup,
   };
+  // `CDC.today` reads `new Date()` on every access so the app stays current
+  // across midnight without a page reload.
+  Object.defineProperty(window.CDC, 'today', {
+    get() { return new Date(); },
+    enumerable: true,
+    configurable: true,
+  });
 })();
