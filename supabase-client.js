@@ -281,6 +281,9 @@
         .map((u) => `${u.name} — ${u.level} — ${u.sub || u.dept || ''}`).join('\n');
       const prompt = `You are Scribe, summarizing a meeting transcript for the team listed below.\n` +
         `First, write a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n` +
+        `Then write a concise TL;DR summary of the meeting (2-4 sentences, no preamble — what was discussed and where it landed).\n` +
+        `Then list every concrete DECISION made in the meeting (commitments, choices, approvals, rejections) — short imperative bullets, no implicit ones.\n` +
+        `Then list the TOPICS discussed (3-8 short noun phrases — the subjects/areas the meeting covered).\n` +
         `Then extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
         `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
         `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
@@ -288,9 +291,9 @@
         `- Never default to the meeting chair or whoever is handing out work; pick who must complete it.\n` +
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON: {"agenda":"<one crisp line>","items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON: {"agenda":"<one crisp line>","summary":"<2-4 sentence TL;DR>","decisions":["..."],"topics":["..."],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
-      try { const m = content.match(/\{[\s\S]*\}/); const p = JSON.parse(m[0]); return { agenda: p.agenda || '', items: p.items || [] }; } catch (_) { return { agenda: '', items: [] }; }
+      try { const m = content.match(/\{[\s\S]*\}/); const p = JSON.parse(m[0]); return { agenda: p.agenda || '', summary: p.summary || '', decisions: Array.isArray(p.decisions) ? p.decisions : [], topics: Array.isArray(p.topics) ? p.topics : [], items: p.items || [] }; } catch (_) { return { agenda: '', summary: '', decisions: [], topics: [], items: [] }; }
     },
     // Curator — close the learning loop: read where humans edited/rejected an
     // agent's drafts (engram_interactions), distill the recurring corrections

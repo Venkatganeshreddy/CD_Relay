@@ -154,6 +154,10 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
+  const [momSummary, setMomSummary] = useStP('');
+  const [meetingDecisions, setMeetingDecisions] = useStP([]);   // string[] of decisions made in the meeting
+  const [topics, setTopics] = useStP([]);                       // string[] of topics discussed
+  const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
 
   function readFile(file) {
     if (!file) return;
@@ -214,6 +218,9 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
+        setMomSummary((raw && raw.summary) || '');
+        setMeetingDecisions((raw && Array.isArray(raw.decisions)) ? raw.decisions : []);
+        setTopics((raw && Array.isArray(raw.topics)) ? raw.topics : []);
         const rawItems = (raw && raw.items) || [];
         if (rawItems.length) {
           items = rawItems.map((it, i) => {
@@ -242,6 +249,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     }
     // Keep the AI's original suggestion (owner/text/due) so we can record what humans changed.
     setActionItems(items.map((it) => ({ ...it, aiOwner: it.aiOwner || it.owner, aiText: it.text, aiDue: it.due })));
+    setMomTab('summary');
     setStep('review');
   }
 
@@ -298,7 +306,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
-      agenda,
+      agenda, summary: momSummary, meetingDecisions, topics,
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
@@ -312,6 +320,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
   function resetState() {
     setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
+    setMomSummary(''); setMeetingDecisions([]); setTopics([]); setMomTab('summary');
   }
 
   if (!open) return null;
@@ -370,20 +379,92 @@ function MomLoader({ open, onClose, currentUser, nav }) {
             </div>
           )}
           {step === 'review' && (
-            <div className="col" style={{ gap: 10, padding: 4, maxHeight: 460, overflowY: 'auto' }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Action Items</div>
-                <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-                  <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.04, fontSize: 10.5, color: 'var(--text-faint)' }}>Agenda</span>
-                  <span style={{ marginLeft: 6 }}>{agenda}</span>
-                </div>
+            <div className="col" style={{ gap: 12, padding: 4 }}>
+              <div className="muted" style={{ fontSize: 12.5 }}>
+                <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.04, fontSize: 10.5, color: 'var(--text-faint)' }}>Agenda</span>
+                <span style={{ marginLeft: 6 }}>{agenda}</span>
               </div>
-              {actionItems.map((it) => (
-                <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} onEditText={editText} onEditDue={editDue} rejectNote={rejectNotes[it.id] || ''} onRejectNote={setRejectNote} />
-              ))}
-              <button className="btn" data-size="sm" data-variant="ghost" onClick={addActionItem} style={{ alignSelf: 'flex-start' }}>
-                <Icon name="sparkles" size={11} /> Add action item
-              </button>
+              <div className="row" style={{ gap: 6 }}>
+                {[
+                  { id: 'summary', label: 'Summary' },
+                  { id: 'actions', label: 'Action Items', count: actionItems.length },
+                  { id: 'pipeline', label: 'Pipeline' },
+                ].map((tabInfo) => (
+                  <button key={tabInfo.id} className="btn" data-size="sm"
+                    data-variant={momTab === tabInfo.id ? 'primary' : 'ghost'}
+                    onClick={() => setMomTab(tabInfo.id)}>
+                    {tabInfo.label}
+                    {tabInfo.count != null && <span className="mono muted" style={{ marginLeft: 6 }}>{tabInfo.count}</span>}
+                  </button>
+                ))}
+              </div>
+
+              {momTab === 'summary' && (
+                <div className="col" style={{ gap: 14, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)', marginBottom: 4 }}>TL;DR</div>
+                    {momSummary
+                      ? <div style={{ fontSize: 13, lineHeight: 1.5 }}>{momSummary}</div>
+                      : <div className="muted" style={{ fontSize: 12 }}>No summary extracted. Run Scribe with a longer transcript or deploy the relay-agent edge function.</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)', marginBottom: 4 }}>Decisions</div>
+                    {meetingDecisions.length === 0
+                      ? <div className="muted" style={{ fontSize: 12 }}>No explicit decisions captured.</div>
+                      : <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }}>
+                          {meetingDecisions.map((d, i) => <li key={i}>{d}</li>)}
+                        </ul>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)', marginBottom: 4 }}>Topics discussed</div>
+                    {topics.length === 0
+                      ? <div className="muted" style={{ fontSize: 12 }}>No topics extracted.</div>
+                      : <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                          {topics.map((t, i) => <Pill key={i} tone="outline">{t}</Pill>)}
+                        </div>}
+                  </div>
+                </div>
+              )}
+
+              {momTab === 'actions' && (
+                <div className="col" style={{ gap: 10, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
+                  {actionItems.length === 0 && (
+                    <div className="muted" style={{ fontSize: 12 }}>No action items extracted. Add one manually below.</div>
+                  )}
+                  {actionItems.map((it) => (
+                    <ActionItem key={it.id} item={it} state={decisions[it.id]} onDecide={decideItem} canReassign={canReassign} onReassign={reassign} people={CDC.USERS} onEditText={editText} onEditDue={editDue} rejectNote={rejectNotes[it.id] || ''} onRejectNote={setRejectNote} />
+                  ))}
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={addActionItem} style={{ alignSelf: 'flex-start' }}>
+                    <Icon name="sparkles" size={11} /> Add action item
+                  </button>
+                </div>
+              )}
+
+              {momTab === 'pipeline' && (
+                <div className="col" style={{ gap: 8, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
+                  {[
+                    { id: 'paste', title: '1 · Paste transcript', sub: 'or upload .vtt / .txt' },
+                    { id: 'scribe', title: '2 · Scribe extracts', sub: 'claude-sonnet-4-6' },
+                    { id: 'dispatcher', title: '3 · Dispatcher routes', sub: 'manager_id graph + role' },
+                    { id: 'review', title: '4 · Human review', sub: 'edit, approve, reject' },
+                    { id: 'done', title: '5 · Commit', sub: 'Tasks + Second Brain node' },
+                  ].map((s, i) => {
+                    const order = ['paste', 'scribe', 'dispatcher', 'review', 'done'];
+                    const current = order.indexOf(step);
+                    const sIdx = order.indexOf(s.id);
+                    const state = sIdx < current ? 'done' : sIdx === current ? 'running' : 'pending';
+                    return (
+                      <div key={s.id} className="mom-step" data-state={state}>
+                        <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : sIdx + 1}</span>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 500 }}>{s.title}</div>
+                          <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           {step === 'done' && (
@@ -396,30 +477,38 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         </div>
 
         <aside style={{ background: 'var(--panel)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)' }}>Pipeline</div>
-          {[
-            { id: 'paste', title: '1 · Paste transcript', sub: 'or upload .vtt / .txt' },
-            { id: 'scribe', title: '2 · Scribe extracts', sub: 'claude-sonnet-4-6' },
-            { id: 'dispatcher', title: '3 · Dispatcher routes', sub: 'manager_id graph + role' },
-            { id: 'review', title: '4 · Human review', sub: 'edit, approve, reject' },
-            { id: 'done', title: '5 · Commit', sub: 'Tasks + Second Brain node' },
-          ].map((s, i) => {
-            const current = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(step);
-            const sIdx = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(s.id);
-            const state = sIdx < current ? 'done' : sIdx === current ? 'running' : 'pending';
-            return (
-              <div key={s.id} className="mom-step" data-state={state}>
-                <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : sIdx + 1}</span>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{s.title}</div>
-                  <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
-                </div>
-              </div>
-            );
-          })}
+          {step !== 'review' && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)' }}>Pipeline</div>
+              {[
+                { id: 'paste', title: '1 · Paste transcript', sub: 'or upload .vtt / .txt' },
+                { id: 'scribe', title: '2 · Scribe extracts', sub: 'claude-sonnet-4-6' },
+                { id: 'dispatcher', title: '3 · Dispatcher routes', sub: 'manager_id graph + role' },
+                { id: 'review', title: '4 · Human review', sub: 'edit, approve, reject' },
+                { id: 'done', title: '5 · Commit', sub: 'Tasks + Second Brain node' },
+              ].map((s, i) => {
+                const current = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(step);
+                const sIdx = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(s.id);
+                const state = sIdx < current ? 'done' : sIdx === current ? 'running' : 'pending';
+                return (
+                  <div key={s.id} className="mom-step" data-state={state}>
+                    <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : sIdx + 1}</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{s.title}</div>
+                      <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
 
           {step === 'review' && (
             <>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)' }}>Commit</div>
+              <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.4 }}>
+                Approved action items become tasks for the assigned owner and a Second Brain node is created.
+              </div>
               <div className="divider" />
               <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
                 <span>Approved</span><span className="mono">{Object.values(decisions).filter((d) => d === 'approved').length}/{actionItems.length}</span>
