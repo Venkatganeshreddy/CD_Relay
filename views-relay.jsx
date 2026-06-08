@@ -154,17 +154,25 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [actionItems, setActionItems] = useStP([]);
   const [decisions, setDecisions] = useStP({});
   const [rejectNotes, setRejectNotes] = useStP({});  // id -> rejection note
-  const [sections, setSections] = useStP([]);                   // [{ id, title, bullets:[string] }]
+  const [bullets, setBullets] = useStP([]);                     // [{ id, text }]
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
 
-  // Section editing helpers (Summary tab) — mirrors the action-item editability.
-  const newSection = () => ({ id: `sec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: 'New section', bullets: [''] });
-  function addSection() { setSections((arr) => [...arr, newSection()]); }
-  function removeSection(id) { setSections((arr) => arr.filter((s) => s.id !== id)); }
-  function editSectionTitle(id, title) { setSections((arr) => arr.map((s) => s.id === id ? { ...s, title } : s)); }
-  function addBullet(id) { setSections((arr) => arr.map((s) => s.id === id ? { ...s, bullets: [...s.bullets, ''] } : s)); }
-  function editBullet(id, idx, text) { setSections((arr) => arr.map((s) => s.id === id ? { ...s, bullets: s.bullets.map((b, i) => i === idx ? text : b) } : s)); }
-  function removeBullet(id, idx) { setSections((arr) => arr.map((s) => s.id === id ? { ...s, bullets: s.bullets.filter((_, i) => i !== idx) } : s)); }
+  // Bullet editing helpers (Summary tab) — mirrors the action-item editability.
+  const newBullet = (text = '') => ({ id: `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text });
+  function addBullet() { setBullets((arr) => [...arr, newBullet('')]); }
+  function editBulletText(id, text) { setBullets((arr) => arr.map((b) => b.id === id ? { ...b, text } : b)); }
+  function removeBullet(id) { setBullets((arr) => arr.filter((b) => b.id !== id)); }
+  function moveBullet(id, dir) {
+    setBullets((arr) => {
+      const i = arr.findIndex((b) => b.id === id);
+      if (i < 0) return arr;
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= arr.length) return arr;
+      const next = arr.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
 
   function readFile(file) {
     if (!file) return;
@@ -225,12 +233,11 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
-        const rawSections = (raw && Array.isArray(raw.sections)) ? raw.sections : [];
-        setSections(rawSections.map((s, i) => ({
-          id: `sec-${Date.now()}-${i}`,
-          title: String(s.title || '').trim(),
-          bullets: (Array.isArray(s.bullets) ? s.bullets : []).map((b) => String(b || '').trim()).filter(Boolean),
-        })));
+        const rawBullets = (raw && Array.isArray(raw.bullets)) ? raw.bullets : [];
+        setBullets(rawBullets
+          .map((b) => String(b || '').trim())
+          .filter(Boolean)
+          .map((text, i) => ({ id: `b-${Date.now()}-${i}`, text })));
         const rawItems = (raw && raw.items) || [];
         if (rawItems.length) {
           items = rawItems.map((it, i) => {
@@ -316,8 +323,9 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     // Track the whole MOM: what AI suggested vs what was concluded/approved, incl. rejection notes.
     const mom = {
       id: momId, title: (agenda || (actionItems[0] ? actionItems[0].text : 'MOM')).slice(0, 60),
-      agenda, sections: sections.map(({ title, bullets }) => ({ title, bullets: bullets.filter((b) => b && b.trim()) })),
-      summary: sections.map((s) => s.title).filter(Boolean).join(' · '),
+      agenda,
+      summaryBullets: bullets.map((b) => b.text).filter((t) => t && t.trim()),
+      summary: bullets.map((b) => b.text).filter((t) => t && t.trim()).join(' · ').slice(0, 240),
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
@@ -331,7 +339,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   }
   function resetState() {
     setStep('paste'); setTranscript(''); setAgenda(''); setActionItems([]); setDecisions({}); setRejectNotes({});
-    setSections([]); setMomTab('summary');
+    setBullets([]); setMomTab('summary');
   }
 
   if (!open) return null;
@@ -411,51 +419,34 @@ function MomLoader({ open, onClose, currentUser, nav }) {
               </div>
 
               {momTab === 'summary' && (
-                <div className="col" style={{ gap: 12, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
-                  {sections.length === 0 && (
+                <div className="col" style={{ gap: 8, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
+                  {bullets.length === 0 && (
                     <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      No structured summary extracted yet. This needs the relay-agent Edge Function with the updated Scribe prompt. You can add sections manually below.
+                      No summary bullets extracted yet. Add one below to start drafting the notes manually.
                     </div>
                   )}
-                  {sections.map((s) => (
-                    <div key={s.id} className="mom-action-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-                      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                        <input
-                          className="input-text"
-                          value={s.title}
-                          placeholder="Section title (e.g. Workflow & Agentic Systems)"
-                          onChange={(e) => editSectionTitle(s.id, e.target.value)}
-                          style={{ flex: 1, fontWeight: 600, fontSize: 13.5 }}
-                        />
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeSection(s.id)} title="Remove section">
-                          <Icon name="x" size={11} />
-                        </button>
-                      </div>
-                      <div className="col" style={{ gap: 6, paddingLeft: 4 }}>
-                        {s.bullets.map((b, i) => (
-                          <div key={i} className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
-                            <span style={{ marginTop: 8, fontSize: 14, color: 'var(--text-faint)' }}>•</span>
-                            <textarea
-                              className="input-text"
-                              value={b}
-                              placeholder="Bullet — what was discussed / landed / flagged"
-                              onChange={(e) => editBullet(s.id, i, e.target.value)}
-                              rows={1}
-                              style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, resize: 'vertical', minHeight: 28 }}
-                            />
-                            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeBullet(s.id, i)} title="Remove bullet">
-                              <Icon name="x" size={10} />
-                            </button>
-                          </div>
-                        ))}
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => addBullet(s.id)} style={{ alignSelf: 'flex-start' }}>
-                          + Add bullet
+                  {bullets.map((b, i) => (
+                    <div key={b.id} className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
+                      <span style={{ marginTop: 8, fontSize: 14, color: 'var(--text-faint)', userSelect: 'none' }}>•</span>
+                      <textarea
+                        className="input-text"
+                        value={b.text}
+                        placeholder="What was discussed / landed / flagged"
+                        onChange={(e) => editBulletText(b.id, e.target.value)}
+                        rows={1}
+                        style={{ flex: 1, fontSize: 13, lineHeight: 1.5, resize: 'vertical', minHeight: 32, padding: '6px 8px' }}
+                      />
+                      <div className="row" style={{ gap: 2 }}>
+                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'up')} disabled={i === 0} title="Move up" style={{ padding: '2px 6px', fontSize: 12 }}>↑</button>
+                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => moveBullet(b.id, 'down')} disabled={i === bullets.length - 1} title="Move down" style={{ padding: '2px 6px', fontSize: 12 }}>↓</button>
+                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => removeBullet(b.id)} title="Remove bullet">
+                          <Icon name="x" size={10} />
                         </button>
                       </div>
                     </div>
                   ))}
-                  <button className="btn" data-size="sm" data-variant="ghost" onClick={addSection} style={{ alignSelf: 'flex-start' }}>
-                    <Icon name="sparkles" size={11} /> Add section
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={addBullet} style={{ alignSelf: 'flex-start' }}>
+                    + Add bullet
                   </button>
                 </div>
               )}

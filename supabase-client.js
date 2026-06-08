@@ -281,10 +281,11 @@
         .map((u) => `${u.name} — ${u.level} — ${u.sub || u.dept || ''}`).join('\n');
       const prompt = `You are Scribe, summarizing a meeting transcript for the team listed below.\n` +
         `First, write a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n` +
-        `Then organize the meeting into THEMATIC SECTIONS. Each section is a coherent topic area the meeting covered (examples: "Workflow & Agentic Systems", "Curriculum & Industry Intelligence", "Content & PPT Generation", "Coding Question & Assessment Systems", "Planning & Execution"). For each section provide:\n` +
-        `  - title: a short Title Case heading naming the theme\n` +
-        `  - bullets: 2 to 5 SHORT bullets (under 25 words each) capturing what was discussed, what landed, what was flagged. Be concrete; quote a name only if the speaker matters. Do NOT put action items or TODOs here — those belong in the items array below.\n` +
-        `Aim for 3 to 6 sections. Skip any section that has nothing real to say. Cover everything substantive in the transcript; do not invent.\n` +
+        `Then write a flat list of SUMMARY BULLETS capturing the substance of the meeting — what was discussed, what landed, what was flagged. Rules:\n` +
+        `  - Aim for 5 to 12 bullets total. Each under 25 words. No headings, no grouping — just a flat list in narrative order.\n` +
+        `  - Be concrete and specific (mention the area / tool / decision). Mention names only when the speaker matters.\n` +
+        `  - Do NOT include action items, TODOs, or assignments — those go in the items array below.\n` +
+        `  - Do not invent. Skip anything not substantively in the transcript.\n` +
         `Then extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
         `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
         `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
@@ -292,18 +293,16 @@
         `- Never default to the meeting chair or whoever is handing out work; pick who must complete it.\n` +
         `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n` +
         `Team roster (name — level — team):\n${roster}\n\n` +
-        `Return ONLY JSON: {"agenda":"<one crisp line>","sections":[{"title":"...","bullets":["...","..."]}],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
+        `Return ONLY JSON: {"agenda":"<one crisp line>","bullets":["...","..."],"items":[{"text":"...","assigneeHint":"<exact roster name, team, or ''>","confidence":0.0}]}. No preamble.\n\nTranscript:\n${transcript}`;
       const content = await this.run({ agent: 'Scribe', model: 'smart', inputLabel: 'MOM extract', messages: [{ role: 'user', content: prompt }] });
       try {
         const m = content.match(/\{[\s\S]*\}/);
         const p = JSON.parse(m[0]);
-        const sections = Array.isArray(p.sections)
-          ? p.sections
-              .filter((s) => s && (s.title || (Array.isArray(s.bullets) && s.bullets.length)))
-              .map((s) => ({ title: String(s.title || '').trim(), bullets: (Array.isArray(s.bullets) ? s.bullets : []).map((b) => String(b || '').trim()).filter(Boolean) }))
+        const bullets = Array.isArray(p.bullets)
+          ? p.bullets.map((b) => String(b || '').trim()).filter(Boolean)
           : [];
-        return { agenda: p.agenda || '', sections, items: p.items || [] };
-      } catch (_) { return { agenda: '', sections: [], items: [] }; }
+        return { agenda: p.agenda || '', bullets, items: p.items || [] };
+      } catch (_) { return { agenda: '', bullets: [], items: [] }; }
     },
     // Curator — close the learning loop: read where humans edited/rejected an
     // agent's drafts (engram_interactions), distill the recurring corrections
