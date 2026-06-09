@@ -226,6 +226,55 @@
       await remote(() => sb.from('farm_agents').insert({ id: agent.id, owner_id: agent.owner, data: agent }));
       return agent;
     },
+    // ── Admin reference-data writes (L3/Admin via 10_admin_write.sql RLS) ──────
+    async updateEmployee(id, patch) {
+      const u = (window.CDC.USERS || []).find((x) => x.id === id);
+      if (u) Object.assign(u, patch);
+      const cols = {};
+      if (patch.name != null) cols.name = patch.name;
+      if (patch.level != null) { cols.role_level = patch.level; }
+      if (patch.dept !== undefined) cols.dept = patch.dept;
+      if (patch.sub !== undefined) cols.sub = patch.sub;
+      if (patch.managerId !== undefined) cols.manager_id = patch.managerId;
+      if (patch.title != null) cols.title = patch.title;
+      cols.data = u || { id, ...patch };
+      const ok = await remote(() => sb.from('employees').update(cols).eq('id', id));
+      return { ok, user: u };
+    },
+    async addKpi(kpi) {
+      if (Array.isArray(window.CDC.KPIS)) window.CDC.KPIS.push(kpi);
+      await remote(() => sb.from('kpis').insert({ id: kpi.id, dept: kpi.dept || null, owner_id: kpi.owner || null, data: kpi }));
+      return kpi;
+    },
+    async updateKpi(id, patch) {
+      const k = (window.CDC.KPIS || []).find((x) => x.id === id);
+      if (k) Object.assign(k, patch);
+      await remote(() => sb.from('kpis').update({ dept: (k || patch).dept || null, owner_id: (k || patch).owner || null, data: k || { id, ...patch } }).eq('id', id));
+      return k;
+    },
+    async deleteKpi(id) {
+      const arr = window.CDC.KPIS; const i = arr ? arr.findIndex((x) => x.id === id) : -1;
+      if (i >= 0) arr.splice(i, 1);
+      await remote(() => sb.from('kpis').delete().eq('id', id));
+    },
+    // Master data: persist a department's edited fields into BOTH the
+    // departments table (drives lookup.dept) and the nested business_directions
+    // jsonb (drives the Master-data tree), and mirror both in-memory arrays.
+    async updateDepartment(deptId, patch) {
+      const d = (window.CDC.DEPARTMENTS || []).find((x) => x.id === deptId);
+      if (d) Object.assign(d, patch);
+      await remote(() => sb.from('departments').update({ data: d || { id: deptId, ...patch } }).eq('id', deptId));
+      // Reflect into the nested BD tree + persist that BD record.
+      let touchedBd = null;
+      for (const bd of (window.CDC.BUSINESS_DIRECTIONS || [])) {
+        for (const p of (bd.products || [])) {
+          const nd = (p.departments || []).find((x) => x.id === deptId);
+          if (nd) { Object.assign(nd, patch); touchedBd = bd; }
+        }
+      }
+      if (touchedBd) await remote(() => sb.from('business_directions').update({ data: touchedBd }).eq('id', touchedBd.id));
+      return d;
+    },
     async updateFlag(id, state) {
       const f = (window.CDC.FLAGS || []).find((x) => x.id === id); if (f) f.state = state;
       await remote(() => sb.from('flags').update({ state, data: f || { id, state } }).eq('id', id));

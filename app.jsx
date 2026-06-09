@@ -579,6 +579,7 @@ function AdminView({ tweaks, currentUser }) {
   const [source, setSource] = useState_a('');
   const [empSearch, setEmpSearch] = useState_a('');
   const [adding, setAdding] = useState_a(false);
+  const [editing, setEditing] = useState_a(null);
   const isManagerAdmin = ['L3', 'Admin'].includes(currentUser.level) || ['L3', 'ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role);
 
   // Insert a new employee. Writes to Supabase (RLS allows L3/Admin via
@@ -618,6 +619,22 @@ function AdminView({ tweaks, currentUser }) {
       } else { setRows(fallback()); setSource('bundled'); }
     } catch (e) { setRows(fallback()); setSource('bundled'); }
     setLoading(false);
+  }
+
+  // Edit an existing employee. Persists via db.updateEmployee (RLS emp_admin)
+  // and updates the table view in place. Returns an error string or null.
+  async function updateEmployeeRow(f) {
+    const deptName = (CDC.lookup.dept(f.dept) || {}).name || f.dept || '';
+    const title = `${f.role_level} · ${f.sub || deptName}`;
+    const patch = { name: f.name, level: f.role_level, role: f.role_level, dept: f.dept || null,
+      sub: f.sub || null, managerId: f.manager_id || null, title, crossDept: !!f.is_cross_dept };
+    try {
+      if (CDC.db && CDC.db.updateEmployee) await CDC.db.updateEmployee(f.id, patch);
+    } catch (e) { return e.message || 'Update failed'; }
+    setRows((prev) => (prev || []).map((x) => x.id === f.id
+      ? { ...x, name: f.name, role_level: f.role_level, dept: f.dept, sub: f.sub, title, manager_id: f.manager_id || null, is_cross_dept: !!f.is_cross_dept }
+      : x));
+    return null;
   }
 
   const nameOf = (id) => (rows || []).find((r) => r.id === id)?.name || (CDC.lookup.user(id) || {}).name || '—';
@@ -660,7 +677,10 @@ function AdminView({ tweaks, currentUser }) {
               const r = rows.find((x) => x.id === sel);
               return (
                 <div className="detail-b">
-                  <h3 style={{ margin: '0 0 10px', fontSize: 16 }}>{r.name}</h3>
+                  <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>{r.name}</h3>
+                    {isManagerAdmin && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(r)}><Icon name="edit" size={12} /> Edit</button>}
+                  </div>
                   <dl className="kv" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '8px 12px', fontSize: 13 }}>
                     <dt className="muted">EMP ID</dt><dd className="mono">{r.id}</dd>
                     <dt className="muted">Email</dt><dd className="mono">{r.email}</dd>
@@ -676,14 +696,16 @@ function AdminView({ tweaks, currentUser }) {
             })() : <div className="empty">Select an employee.</div>}
           </div>
         </div>
-        <AddEmployeeModal open={adding} onClose={() => setAdding(false)} onSave={saveEmployee}
+        <AddEmployeeModal open={adding || !!editing} initial={editing}
+          onClose={() => { setAdding(false); setEditing(null); }}
+          onSave={editing ? updateEmployeeRow : saveEmployee}
           people={CDC.USERS} depts={CDC.DEPARTMENTS} live={!!window.RELAY_SB} />
       </div>
     );
   }
 
-  if (view === 'masterdata') return <AdminMasterData CDC={CDC} onBack={() => setView(null)} />;
-  if (view === 'kpis') return <AdminKpiCatalog CDC={CDC} onBack={() => setView(null)} />;
+  if (view === 'masterdata') return <AdminMasterData CDC={CDC} canEdit={isManagerAdmin} onBack={() => setView(null)} />;
+  if (view === 'kpis') return <AdminKpiCatalog CDC={CDC} canEdit={isManagerAdmin} onBack={() => setView(null)} />;
   if (view === 'audit') return <AdminAuditLog CDC={CDC} onBack={() => setView(null)} />;
   if (view === 'imports') return <AdminImports CDC={CDC} onBack={() => setView(null)} />;
   if (view === 'mcp') return <AdminMcpTokens CDC={CDC} me={currentUser} onBack={() => setView(null)} />;
@@ -719,11 +741,18 @@ function AdminSubHeader({ title, subtitle, onBack, actions }) {
   );
 }
 
-// Master data — read-only tree of business directions → products → departments → sub-teams.
-function AdminMasterData({ CDC, onBack }) {
+// Master data — tree of business directions → products → departments → sub-teams.
+// L3/Admin can edit a department's name/short and its sub-teams (persists via db).
+function AdminMasterData({ CDC, canEdit, onBack }) {
+  const [, bump] = useState_a(0);
+  const [editDept, setEditDept] = useState_a(null);
   const bds = CDC.BUSINESS_DIRECTIONS || [];
   const deptCount = (CDC.DEPARTMENTS || []).length;
   const subCount = (CDC.DEPARTMENTS || []).reduce((s, d) => s + ((d.subs || []).length), 0);
+  async function save(patch) {
+    await CDC.db.updateDepartment(editDept.id, patch);
+    bump((n) => n + 1); setEditDept(null);
+  }
   return (
     <div className="fadein">
       <AdminSubHeader title="Master data" onBack={onBack}
@@ -735,15 +764,18 @@ function AdminMasterData({ CDC, onBack }) {
               {(bd.products || []).map((p) => (
                 <div key={p.id}>
                   <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 4 }}>{p.name}</div>
-                  <div className="col" style={{ gap: 4, paddingLeft: 10 }}>
+                  <div className="col" style={{ gap: 6, paddingLeft: 10 }}>
                     {(p.departments || []).map((d) => (
-                      <div key={d.id} style={{ fontSize: 12.5 }}>
-                        <span className="mono muted" style={{ fontSize: 10.5 }}>{d.id}</span>{' '}
-                        <strong>{d.name}</strong>
-                        <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-                          {(d.subs || []).map((s) => <span key={s} className="agent-tool" style={{ fontSize: 10.5 }}>{s}</span>)}
-                          {!(d.subs || []).length && <span className="muted" style={{ fontSize: 11 }}>flat — no sub-teams</span>}
+                      <div key={d.id} className="row" style={{ fontSize: 12.5, alignItems: 'flex-start', gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span className="mono muted" style={{ fontSize: 10.5 }}>{d.id}</span>{' '}
+                          <strong>{d.name}</strong>{d.short ? <span className="muted"> · {d.short}</span> : null}
+                          <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                            {(d.subs || []).map((s) => <span key={s} className="agent-tool" style={{ fontSize: 10.5 }}>{s}</span>)}
+                            {!(d.subs || []).length && <span className="muted" style={{ fontSize: 11 }}>flat — no sub-teams</span>}
+                          </div>
                         </div>
+                        {canEdit && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditDept(d)}><Icon name="edit" size={11} /></button>}
                       </div>
                     ))}
                   </div>
@@ -754,21 +786,79 @@ function AdminMasterData({ CDC, onBack }) {
         ))}
         {!bds.length && <div className="empty">No master data loaded.</div>}
       </div>
+      {editDept && <DeptModal open dept={editDept} onClose={() => setEditDept(null)} onSave={save} live={!!window.RELAY_SB} />}
     </div>
   );
 }
 
-// KPI catalog — read-only table of KPIs with target/current/status/owner.
-function AdminKpiCatalog({ CDC, onBack }) {
+function DeptModal({ open, dept, onClose, onSave, live }) {
+  const [name, setName] = useState_a('');
+  const [short, setShort] = useState_a('');
+  const [subs, setSubs] = useState_a([]);
+  const [newSub, setNewSub] = useState_a('');
+  const [busy, setBusy] = useState_a(false);
+  useEffect_a(() => { if (open && dept) { setName(dept.name || ''); setShort(dept.short || ''); setSubs([...(dept.subs || [])]); setNewSub(''); setBusy(false); } }, [open, dept]);
+  const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+  const lbl = { fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 };
+  const addSub = () => { const s = newSub.trim(); if (s && !subs.includes(s)) setSubs((a) => [...a, s]); setNewSub(''); };
+  async function submit() { setBusy(true); await onSave({ name: name.trim(), short: short.trim(), subs }); setBusy(false); }
+  return (
+    <Modal open={open} onClose={onClose} title="Edit department" width={560}
+      footer={<>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
+        <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
+        <button className="btn" data-variant="primary" disabled={!name.trim() || busy} onClick={submit}>{busy ? 'Saving…' : 'Save changes'}</button>
+      </>}>
+      <div className="col" style={{ gap: 12 }}>
+        <div className="muted mono" style={{ fontSize: 11 }}>{dept && dept.id}</div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '2 1 220px' }}><div style={lbl}>Name</div><input value={name} onChange={(e) => setName(e.target.value)} style={inp} /></div>
+          <div style={{ flex: '1 1 140px' }}><div style={lbl}>Short label</div><input value={short} onChange={(e) => setShort(e.target.value)} style={inp} /></div>
+        </div>
+        <div>
+          <div style={lbl}>Sub-teams</div>
+          <div className="col" style={{ gap: 4 }}>
+            {subs.map((s) => (
+              <div key={s} className="row" style={{ gap: 8, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12.5 }}>
+                <span style={{ flex: 1 }}>{s}</span>
+                <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setSubs((a) => a.filter((x) => x !== s))}>✕</button>
+              </div>
+            ))}
+            {!subs.length && <span className="muted" style={{ fontSize: 12 }}>No sub-teams (flat department).</span>}
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <input value={newSub} onChange={(e) => setNewSub(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSub()} placeholder="Add a sub-team…" style={{ ...inp, flex: 1 }} />
+            <button className="btn" data-size="sm" onClick={addSub}>Add</button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// KPI catalog — table of KPIs; L3/Admin can add, edit, delete (persists via db).
+function AdminKpiCatalog({ CDC, canEdit, onBack }) {
+  const [, bump] = useState_a(0);
+  const [modal, setModal] = useState_a(null); // null | 'new' | kpiObject
   const kpis = CDC.KPIS || [];
   const dept = (id) => (CDC.lookup.dept(id) || {}).short || (CDC.lookup.dept(id) || {}).name || id;
   const owner = (id) => (CDC.lookup.user(id) || {}).name || id || '—';
+  async function save(form) {
+    const k = { id: form.id, name: form.name, dept: form.dept || null, owner: form.owner || null,
+      target: Number(form.target) || 0, current: Number(form.current) || 0, unit: form.unit || '',
+      status: form.status || 'amber', trend: form.trend || [] };
+    if (form.__new) { k.id = `k-${Date.now()}`; await CDC.db.addKpi(k); }
+    else await CDC.db.updateKpi(form.id, k);
+    bump((n) => n + 1); setModal(null);
+  }
+  async function del(id) { await CDC.db.deleteKpi(id); bump((n) => n + 1); }
   return (
     <div className="fadein">
-      <AdminSubHeader title="KPI catalog" onBack={onBack} subtitle={`${kpis.length} KPIs · formulas versioned server-side`} />
+      <AdminSubHeader title="KPI catalog" onBack={onBack} subtitle={`${kpis.length} KPIs · formulas versioned server-side`}
+        actions={canEdit && <button className="btn" data-size="sm" data-variant="primary" onClick={() => setModal('new')}><Icon name="check" size={12} /> Add KPI</button>} />
       {kpis.length ? (
         <table className="tbl">
-          <thead><tr><th>KPI</th><th>Department</th><th className="num">Target</th><th className="num">Current</th><th>Status</th><th>Owner</th></tr></thead>
+          <thead><tr><th>KPI</th><th>Department</th><th className="num">Target</th><th className="num">Current</th><th>Status</th><th>Owner</th>{canEdit && <th></th>}</tr></thead>
           <tbody>
             {kpis.map((k) => (
               <tr key={k.id}>
@@ -778,12 +868,62 @@ function AdminKpiCatalog({ CDC, onBack }) {
                 <td className="num mono">{k.current}{k.unit}</td>
                 <td><Pill tone={k.status === 'green' ? 'green' : k.status === 'amber' ? 'amber' : 'red'} dot>{k.status}</Pill></td>
                 <td>{owner(k.owner)}</td>
+                {canEdit && <td className="num"><div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setModal(k)}><Icon name="edit" size={11} /></button>
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={() => del(k.id)}>✕</button>
+                </div></td>}
               </tr>
             ))}
           </tbody>
         </table>
-      ) : <div className="empty">No KPIs loaded.</div>}
+      ) : <div className="empty">No KPIs yet.{canEdit ? ' Add one above.' : ''}</div>}
+      {modal && <KpiModal open initial={modal === 'new' ? null : modal} depts={CDC.DEPARTMENTS} people={CDC.USERS}
+        onClose={() => setModal(null)} onSave={save} live={!!window.RELAY_SB} />}
     </div>
+  );
+}
+
+function KpiModal({ open, initial, depts, people, onClose, onSave, live }) {
+  const isNew = !initial;
+  const blank = { id: '', name: '', dept: '', owner: '', target: '', current: '', unit: '%', status: 'amber' };
+  const [f, setF] = useState_a(blank);
+  const [busy, setBusy] = useState_a(false);
+  useEffect_a(() => { if (open) { setF(initial ? { ...blank, ...initial } : blank); setBusy(false); } }, [open, initial]);
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const valid = f.name.trim() && f.dept;
+  const lbl = { fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 };
+  const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+  async function submit() { setBusy(true); await onSave({ ...f, __new: isNew }); setBusy(false); }
+  return (
+    <Modal open={open} onClose={onClose} title={isNew ? 'Add KPI' : 'Edit KPI'} width={560}
+      footer={<>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
+        <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
+        <button className="btn" data-variant="primary" disabled={!valid || busy} onClick={submit}>{busy ? 'Saving…' : isNew ? 'Add KPI' : 'Save changes'}</button>
+      </>}>
+      <div className="col" style={{ gap: 12 }}>
+        <div><div style={lbl}>Name *</div><input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Fullstack content velocity" style={inp} /></div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}><div style={lbl}>Department *</div>
+            <select value={f.dept} onChange={(e) => set('dept', e.target.value)} style={inp}>
+              <option value="">—</option>{(depts || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select></div>
+          <div style={{ flex: '1 1 200px' }}><div style={lbl}>Owner</div>
+            <select value={f.owner} onChange={(e) => set('owner', e.target.value)} style={inp}>
+              <option value="">—</option>{(people || []).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level}</option>)}
+            </select></div>
+        </div>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 90px' }}><div style={lbl}>Target</div><input type="number" value={f.target} onChange={(e) => set('target', e.target.value)} style={inp} /></div>
+          <div style={{ flex: '1 1 90px' }}><div style={lbl}>Current</div><input type="number" value={f.current} onChange={(e) => set('current', e.target.value)} style={inp} /></div>
+          <div style={{ flex: '1 1 70px' }}><div style={lbl}>Unit</div><input value={f.unit} onChange={(e) => set('unit', e.target.value)} placeholder="% /wk" style={inp} /></div>
+          <div style={{ flex: '1 1 110px' }}><div style={lbl}>Status</div>
+            <select value={f.status} onChange={(e) => set('status', e.target.value)} style={inp}>
+              {['green', 'amber', 'red'].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select></div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -906,14 +1046,15 @@ function AdminMcpTokens({ CDC, me, onBack }) {
 }
 
 // ── Add-employee modal (Admin / L3) ───────────────────────────────────────
-function AddEmployeeModal({ open, onClose, onSave, people, depts, live }) {
+function AddEmployeeModal({ open, onClose, onSave, people, depts, live, initial }) {
+  const editing = !!initial;
   const blank = { id: '', name: '', email: '', role_level: 'L1', dept: '', sub: '', manager_id: '', is_cross_dept: false };
   const [f, setF] = useState_a(blank);
   const [err, setErr] = useState_a('');
   const [busy, setBusy] = useState_a(false);
-  useEffect_a(() => { if (open) { setF(blank); setErr(''); setBusy(false); } }, [open]);
+  useEffect_a(() => { if (open) { setF(initial ? { ...blank, ...initial } : blank); setErr(''); setBusy(false); } }, [open, initial]);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const managers = (people || []).filter((u) => ['L2', 'L3', 'Admin'].includes(u.level));
+  const managers = (people || []).filter((u) => ['L2', 'L3', 'Admin'].includes(u.level) && u.id !== f.id);
   const valid = /^\S+$/.test(f.id.trim()) && f.name.trim() && f.role_level;
   const lbl = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
@@ -927,21 +1068,21 @@ function AddEmployeeModal({ open, onClose, onSave, people, depts, live }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add employee" width={620}
+    <Modal open={open} onClose={onClose} title={editing ? 'Edit employee' : 'Add employee'} width={620}
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
           {err ? <span style={{ color: 'var(--red, #e5484d)' }}>{err}</span>
             : live ? 'Saves to Supabase (live)' : 'Demo mode — saved locally only'}
         </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
-        <button className="btn" data-variant="primary" disabled={!valid || busy} onClick={submit}>{busy ? 'Saving…' : 'Add employee'}</button>
+        <button className="btn" data-variant="primary" disabled={!valid || busy} onClick={submit}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add employee'}</button>
       </>}
     >
       <div className="col" style={{ gap: 12 }}>
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 160px' }}>
             <div style={lbl()}>EMP ID <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <input value={f.id} onChange={(e) => set('id', e.target.value)} placeholder="e.g. NW0006701" style={inp} />
+            <input value={f.id} onChange={(e) => set('id', e.target.value)} placeholder="e.g. NW0006701" style={{ ...inp, opacity: editing ? 0.6 : 1 }} disabled={editing} />
           </div>
           <div style={{ flex: '2 1 220px' }}>
             <div style={lbl()}>Name <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
