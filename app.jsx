@@ -682,17 +682,23 @@ function AdminView({ tweaks, currentUser }) {
     );
   }
 
+  if (view === 'masterdata') return <AdminMasterData CDC={CDC} onBack={() => setView(null)} />;
+  if (view === 'kpis') return <AdminKpiCatalog CDC={CDC} onBack={() => setView(null)} />;
+  if (view === 'audit') return <AdminAuditLog CDC={CDC} onBack={() => setView(null)} />;
+  if (view === 'imports') return <AdminImports CDC={CDC} onBack={() => setView(null)} />;
+  if (view === 'mcp') return <AdminMcpTokens CDC={CDC} me={currentUser} onBack={() => setView(null)} />;
+
   return (
     <div className="fadein">
       <SectionHeader title="Admin" subtitle="Master data, employees, system settings." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {[
           { t: 'Employees', d: `${CDC.USERS.length} users · click to view details from Supabase`, action: openEmployees },
-          { t: 'Master data', d: 'Business directions, products, departments, sub-teams' },
-          { t: 'KPI catalog', d: 'KPIs · formulas versioned server-side' },
-          { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST' },
-          { t: 'MCP tokens', d: 'Personal access tokens for Claude Desktop / Cursor' },
-          { t: 'Audit log', d: 'Every read & write · ranged search' },
+          { t: 'Master data', d: 'Business directions, products, departments, sub-teams', action: () => setView('masterdata') },
+          { t: 'KPI catalog', d: 'KPIs · formulas versioned server-side', action: () => setView('kpis') },
+          { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST', action: () => setView('imports') },
+          { t: 'MCP tokens', d: 'Personal access tokens for Claude Desktop / Cursor', action: () => setView('mcp') },
+          { t: 'Audit log', d: 'Every read & write · ranged search', action: () => setView('audit') },
         ].map((c, i) => (
           <Card key={i} title={c.t}>
             <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>{c.d}</div>
@@ -704,6 +710,200 @@ function AdminView({ tweaks, currentUser }) {
   );
 }
 window.AdminView = AdminView;
+
+// Shared header for an Admin sub-view: title + "← Admin" back button.
+function AdminSubHeader({ title, subtitle, onBack, actions }) {
+  return (
+    <SectionHeader title={title} subtitle={subtitle}
+      actions={<>{actions}<button className="btn" data-size="sm" data-variant="ghost" onClick={onBack}>← Admin</button></>} />
+  );
+}
+
+// Master data — read-only tree of business directions → products → departments → sub-teams.
+function AdminMasterData({ CDC, onBack }) {
+  const bds = CDC.BUSINESS_DIRECTIONS || [];
+  const deptCount = (CDC.DEPARTMENTS || []).length;
+  const subCount = (CDC.DEPARTMENTS || []).reduce((s, d) => s + ((d.subs || []).length), 0);
+  return (
+    <div className="fadein">
+      <AdminSubHeader title="Master data" onBack={onBack}
+        subtitle={`${bds.length} business direction(s) · ${deptCount} departments · ${subCount} sub-teams`} />
+      <div className="col" style={{ gap: 12 }}>
+        {bds.map((bd) => (
+          <Card key={bd.id} title={bd.name}>
+            <div className="col" style={{ gap: 10 }}>
+              {(bd.products || []).map((p) => (
+                <div key={p.id}>
+                  <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 4 }}>{p.name}</div>
+                  <div className="col" style={{ gap: 4, paddingLeft: 10 }}>
+                    {(p.departments || []).map((d) => (
+                      <div key={d.id} style={{ fontSize: 12.5 }}>
+                        <span className="mono muted" style={{ fontSize: 10.5 }}>{d.id}</span>{' '}
+                        <strong>{d.name}</strong>
+                        <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                          {(d.subs || []).map((s) => <span key={s} className="agent-tool" style={{ fontSize: 10.5 }}>{s}</span>)}
+                          {!(d.subs || []).length && <span className="muted" style={{ fontSize: 11 }}>flat — no sub-teams</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+        {!bds.length && <div className="empty">No master data loaded.</div>}
+      </div>
+    </div>
+  );
+}
+
+// KPI catalog — read-only table of KPIs with target/current/status/owner.
+function AdminKpiCatalog({ CDC, onBack }) {
+  const kpis = CDC.KPIS || [];
+  const dept = (id) => (CDC.lookup.dept(id) || {}).short || (CDC.lookup.dept(id) || {}).name || id;
+  const owner = (id) => (CDC.lookup.user(id) || {}).name || id || '—';
+  return (
+    <div className="fadein">
+      <AdminSubHeader title="KPI catalog" onBack={onBack} subtitle={`${kpis.length} KPIs · formulas versioned server-side`} />
+      {kpis.length ? (
+        <table className="tbl">
+          <thead><tr><th>KPI</th><th>Department</th><th className="num">Target</th><th className="num">Current</th><th>Status</th><th>Owner</th></tr></thead>
+          <tbody>
+            {kpis.map((k) => (
+              <tr key={k.id}>
+                <td>{k.name}</td>
+                <td>{dept(k.dept)}</td>
+                <td className="num mono">{k.target}{k.unit}</td>
+                <td className="num mono">{k.current}{k.unit}</td>
+                <td><Pill tone={k.status === 'green' ? 'green' : k.status === 'amber' ? 'amber' : 'red'} dot>{k.status}</Pill></td>
+                <td>{owner(k.owner)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <div className="empty">No KPIs loaded.</div>}
+    </div>
+  );
+}
+
+// Audit log — unified, searchable feed of activity + engram (read & write) events.
+function AdminAuditLog({ CDC, onBack }) {
+  const [q, setQ] = useState_a('');
+  const [kind, setKind] = useState_a('all');
+  const events = useMemo_a(() => {
+    const acts = (CDC.ACTIVITY || []).map((a) => ({ id: a.id, ts: a.ts, kind: a.kind || 'event', text: a.text, src: 'activity' }));
+    const eng = (CDC.ENGRAM || []).map((e) => ({ id: e.id, ts: (e.ts || '').slice(11) || e.ts, kind: 'engram', text: `${e.agent || 'agent'} · ${e.action}${e.inputRef ? ` · ${e.inputRef}` : ''}${e.reason ? ` — ${e.reason}` : ''}`, src: 'engram' }));
+    return [...eng, ...acts];
+  }, [CDC.ACTIVITY, CDC.ENGRAM]);
+  const kinds = ['all', ...new Set(events.map((e) => e.kind))];
+  const filtered = events.filter((e) => {
+    if (kind !== 'all' && e.kind !== kind) return false;
+    const s = q.trim().toLowerCase();
+    return !s || (e.text || '').toLowerCase().includes(s);
+  });
+  return (
+    <div className="fadein">
+      <AdminSubHeader title="Audit log" onBack={onBack} subtitle={`${events.length} events · activity + engram (reads & writes)`} />
+      <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="tb-search" placeholder="Search events…" value={q} onChange={(e) => setQ(e.target.value)}
+          style={{ flex: 1, minWidth: 200, fontSize: 12.5, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' }} />
+        <div className="seg">{kinds.map((k) => <button key={k} data-active={kind === k} onClick={() => setKind(k)}>{k}</button>)}</div>
+      </div>
+      {filtered.length ? (
+        <div className="col" style={{ gap: 2 }}>
+          {filtered.map((e) => (
+            <div key={e.id} className="row" style={{ gap: 10, padding: '7px 4px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
+              <span className="mono muted" style={{ width: 56, flexShrink: 0 }}>{e.ts || '—'}</span>
+              <Pill tone="outline">{e.kind}</Pill>
+              <span style={{ flex: 1, minWidth: 0 }}>{e.text}</span>
+            </div>
+          ))}
+        </div>
+      ) : <div className="empty">No events match. The log fills as people submit reports and agents run.</div>}
+    </div>
+  );
+}
+
+// Imports — show data source + collection counts; re-pull from Supabase on demand.
+function AdminImports({ CDC, onBack }) {
+  const [busy, setBusy] = useState_a(false);
+  const [msg, setMsg] = useState_a('');
+  const counts = [
+    ['Employees', (CDC.USERS || []).length], ['Daily reports', (CDC.REPORTS || []).length],
+    ['Worklogs', (CDC.WORKLOGS || []).length], ['Tasks', (CDC.TASKS || []).length],
+    ['KPIs', (CDC.KPIS || []).length], ['Weekly summaries', (CDC.WEEKLY || []).length],
+  ];
+  async function reload() {
+    if (!CDC.loadFromSupabase) { setMsg('No Supabase client — running on bundled data.'); return; }
+    setBusy(true); setMsg('');
+    try { const ok = await CDC.loadFromSupabase(); setMsg(ok ? 'Reloaded from Supabase ✓' : 'Nothing returned (check sign-in / RLS).'); }
+    catch (e) { setMsg('Reload failed: ' + (e.message || e)); }
+    setBusy(false);
+  }
+  return (
+    <div className="fadein">
+      <AdminSubHeader title="Imports" onBack={onBack} subtitle="Daily reports + monthly KPIs · nightly @ 23:30 IST"
+        actions={<button className="btn" data-size="sm" data-variant="primary" disabled={busy} onClick={reload}><Icon name="runs" size={12} /> {busy ? 'Reloading…' : 'Reload now'}</button>} />
+      <Card title="Current data source">
+        <div className="row" style={{ gap: 8 }}>
+          <Pill tone={CDC.__source === 'supabase' ? 'green' : 'amber'} dot>{CDC.__source || 'unknown'}</Pill>
+          <span className="muted" style={{ fontSize: 12.5 }}>{CDC.__source === 'supabase' ? 'Live rows loaded via RLS-scoped queries.' : 'Bundled seed data (not signed in or RLS returned nothing).'}</span>
+        </div>
+        {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
+      </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 12 }}>
+        {counts.map(([label, n]) => (
+          <div key={label} className="kpi-tile"><div className="kpi-name">{label}</div><div className="kpi-value">{n}</div></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// MCP tokens — personal access tokens for Claude Desktop / Cursor. Issuance needs
+// a backend; until then these are local demo tokens stored in this browser only.
+function AdminMcpTokens({ CDC, me, onBack }) {
+  const KEY = 'relay_mcp_tokens';
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (_) { return []; } };
+  const [tokens, setTokens] = useState_a(read);
+  const [label, setLabel] = useState_a('');
+  const save = (list) => { localStorage.setItem(KEY, JSON.stringify(list)); setTokens(list); };
+  const rand = () => 'relay_pat_' + Array.from({ length: 32 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+  function create() {
+    const t = { id: rand().slice(0, 12), label: label.trim() || 'Claude Desktop', token: rand(), owner: me.id, created: (window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10)) };
+    save([t, ...tokens]); setLabel('');
+  }
+  const revoke = (id) => save(tokens.filter((t) => t.id !== id));
+  return (
+    <div className="fadein">
+      <AdminSubHeader title="MCP tokens" onBack={onBack} subtitle="Personal access tokens for Claude Desktop / Cursor" />
+      <Card title="Demo tokens (local to this browser)">
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          Real PAT issuance needs a backend token service. These tokens are generated and stored in <span className="mono">localStorage</span> for demo only — they don't authenticate against any server yet.
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <input className="input-text" style={{ flex: 1 }} placeholder="Label (e.g. My laptop · Cursor)" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <button className="btn" data-size="sm" data-variant="primary" onClick={create}><Icon name="check" size={12} /> Generate token</button>
+        </div>
+      </Card>
+      <div className="col" style={{ gap: 6, marginTop: 12 }}>
+        {tokens.map((t) => (
+          <div key={t.id} className="row" style={{ gap: 10, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12.5 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 500 }}>{t.label}</div>
+              <div className="mono muted" style={{ fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.token}</div>
+            </div>
+            <span className="muted mono" style={{ fontSize: 10.5 }}>{t.created}</span>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { navigator.clipboard && navigator.clipboard.writeText(t.token); }}>Copy</button>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => revoke(t.id)}>Revoke</button>
+          </div>
+        ))}
+        {!tokens.length && <div className="empty">No tokens yet. Generate one above.</div>}
+      </div>
+    </div>
+  );
+}
 
 // ── Add-employee modal (Admin / L3) ───────────────────────────────────────
 function AddEmployeeModal({ open, onClose, onSave, people, depts, live }) {
