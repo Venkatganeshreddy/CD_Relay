@@ -3,6 +3,34 @@
 
 const { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } = React;
 
+// ── Error boundary ──────────────────────────────────────────────────────
+// Catches render-time crashes anywhere below it so one bad component shows a
+// recoverable panel instead of white-screening the whole app.
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('[Relay] render error:', error, info); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div style={{ maxWidth: 520, margin: '80px auto', padding: 24, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)' }}>
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Something broke on this screen</div>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+          The rest of the app is fine. Reload to recover; if it keeps happening, note what you clicked.
+        </div>
+        <pre style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'pre-wrap', background: 'var(--panel)', padding: 10, borderRadius: 6, marginBottom: 12, maxHeight: 140, overflow: 'auto' }}>
+          {String(this.state.error && this.state.error.message || this.state.error)}
+        </pre>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn" data-variant="primary" onClick={() => this.setState({ error: null })}>Try again</button>
+          <button className="btn" data-variant="ghost" onClick={() => location.reload()}>Reload app</button>
+        </div>
+      </div>
+    );
+  }
+}
+window.ErrorBoundary = ErrorBoundary;
+
 // ── Icons (lightweight stroke set) ──────────────────────────────────────
 function Icon({ name, size = 14, stroke = 1.6 }) {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round' };

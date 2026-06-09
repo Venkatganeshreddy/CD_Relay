@@ -628,9 +628,11 @@ function AdminView({ tweaks, currentUser }) {
     const title = `${f.role_level} · ${f.sub || deptName}`;
     const patch = { name: f.name, level: f.role_level, role: f.role_level, dept: f.dept || null,
       sub: f.sub || null, managerId: f.manager_id || null, title, crossDept: !!f.is_cross_dept };
+    let res;
     try {
-      if (CDC.db && CDC.db.updateEmployee) await CDC.db.updateEmployee(f.id, patch);
+      if (CDC.db && CDC.db.updateEmployee) res = await CDC.db.updateEmployee(f.id, patch);
     } catch (e) { return e.message || 'Update failed'; }
+    if (CDC.db && CDC.db.authed && CDC.db.authed() && res && res.ok === false) return 'Saved locally, but the server rejected the update (permissions / RLS).';
     setRows((prev) => (prev || []).map((x) => x.id === f.id
       ? { ...x, name: f.name, role_level: f.role_level, dept: f.dept, sub: f.sub, title, manager_id: f.manager_id || null, is_cross_dept: !!f.is_cross_dept }
       : x));
@@ -749,9 +751,14 @@ function AdminMasterData({ CDC, canEdit, onBack }) {
   const bds = CDC.BUSINESS_DIRECTIONS || [];
   const deptCount = (CDC.DEPARTMENTS || []).length;
   const subCount = (CDC.DEPARTMENTS || []).reduce((s, d) => s + ((d.subs || []).length), 0);
+  // Returns an error string (shown in the modal) or null on success.
   async function save(patch) {
-    await CDC.db.updateDepartment(editDept.id, patch);
-    bump((n) => n + 1); setEditDept(null);
+    let res;
+    try { res = await CDC.db.updateDepartment(editDept.id, patch); }
+    catch (e) { return e.message || 'Save failed'; }
+    bump((n) => n + 1);
+    if (CDC.db.authed() && res && res.remoteOk === false) return 'Saved locally, but the server rejected the write (permissions / RLS).';
+    return null;
   }
   return (
     <div className="fadein">
@@ -797,15 +804,16 @@ function DeptModal({ open, dept, onClose, onSave, live }) {
   const [subs, setSubs] = useState_a([]);
   const [newSub, setNewSub] = useState_a('');
   const [busy, setBusy] = useState_a(false);
-  useEffect_a(() => { if (open && dept) { setName(dept.name || ''); setShort(dept.short || ''); setSubs([...(dept.subs || [])]); setNewSub(''); setBusy(false); } }, [open, dept]);
+  const [err, setErr] = useState_a('');
+  useEffect_a(() => { if (open && dept) { setName(dept.name || ''); setShort(dept.short || ''); setSubs([...(dept.subs || [])]); setNewSub(''); setBusy(false); setErr(''); } }, [open, dept]);
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
   const lbl = { fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 };
   const addSub = () => { const s = newSub.trim(); if (s && !subs.includes(s)) setSubs((a) => [...a, s]); setNewSub(''); };
-  async function submit() { setBusy(true); await onSave({ name: name.trim(), short: short.trim(), subs }); setBusy(false); }
+  async function submit() { setBusy(true); setErr(''); const e = await onSave({ name: name.trim(), short: short.trim(), subs }); setBusy(false); if (e) { setErr(e); return; } onClose(); }
   return (
     <Modal open={open} onClose={onClose} title="Edit department" width={560}
       footer={<>
-        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{err ? <span style={{ color: 'var(--red, #e5484d)' }}>{err}</span> : live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!name.trim() || busy} onClick={submit}>{busy ? 'Saving…' : 'Save changes'}</button>
       </>}>
@@ -843,15 +851,24 @@ function AdminKpiCatalog({ CDC, canEdit, onBack }) {
   const kpis = CDC.KPIS || [];
   const dept = (id) => (CDC.lookup.dept(id) || {}).short || (CDC.lookup.dept(id) || {}).name || id;
   const owner = (id) => (CDC.lookup.user(id) || {}).name || id || '—';
+  // Returns an error string (shown in the modal) or null on success.
   async function save(form) {
     const k = { id: form.id, name: form.name, dept: form.dept || null, owner: form.owner || null,
       target: Number(form.target) || 0, current: Number(form.current) || 0, unit: form.unit || '',
       status: form.status || 'amber', trend: form.trend || [] };
-    if (form.__new) { k.id = `k-${Date.now()}`; await CDC.db.addKpi(k); }
-    else await CDC.db.updateKpi(form.id, k);
-    bump((n) => n + 1); setModal(null);
+    let res;
+    try {
+      if (form.__new) { k.id = `k-${Date.now()}`; res = await CDC.db.addKpi(k); }
+      else res = await CDC.db.updateKpi(form.id, k);
+    } catch (e) { return e.message || 'Save failed'; }
+    bump((n) => n + 1);
+    if (CDC.db.authed() && res && res.remoteOk === false) return 'Saved locally, but the server rejected the write (permissions / RLS).';
+    return null;
   }
-  async function del(id) { await CDC.db.deleteKpi(id); bump((n) => n + 1); }
+  async function del(id) {
+    const res = await CDC.db.deleteKpi(id); bump((n) => n + 1);
+    if (CDC.db.authed() && res && res.remoteOk === false) alert('Deleted locally, but the server rejected it (permissions / RLS).');
+  }
   return (
     <div className="fadein">
       <AdminSubHeader title="KPI catalog" onBack={onBack} subtitle={`${kpis.length} KPIs · formulas versioned server-side`}
@@ -888,16 +905,17 @@ function KpiModal({ open, initial, depts, people, onClose, onSave, live }) {
   const blank = { id: '', name: '', dept: '', owner: '', target: '', current: '', unit: '%', status: 'amber' };
   const [f, setF] = useState_a(blank);
   const [busy, setBusy] = useState_a(false);
-  useEffect_a(() => { if (open) { setF(initial ? { ...blank, ...initial } : blank); setBusy(false); } }, [open, initial]);
+  const [err, setErr] = useState_a('');
+  useEffect_a(() => { if (open) { setF(initial ? { ...blank, ...initial } : blank); setBusy(false); setErr(''); } }, [open, initial]);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const valid = f.name.trim() && f.dept;
   const lbl = { fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 };
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
-  async function submit() { setBusy(true); await onSave({ ...f, __new: isNew }); setBusy(false); }
+  async function submit() { setBusy(true); setErr(''); const e = await onSave({ ...f, __new: isNew }); setBusy(false); if (e) { setErr(e); return; } onClose(); }
   return (
     <Modal open={open} onClose={onClose} title={isNew ? 'Add KPI' : 'Edit KPI'} width={560}
       footer={<>
-        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
+        <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>{err ? <span style={{ color: 'var(--red, #e5484d)' }}>{err}</span> : live ? 'Saves to Supabase (live)' : 'Demo mode — local only'}</span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid || busy} onClick={submit}>{busy ? 'Saving…' : isNew ? 'Add KPI' : 'Save changes'}</button>
       </>}>
@@ -1196,8 +1214,8 @@ function relayPickUser(setTweak, id) {
 
   if (authMode === 'authed') {
     const impersonating = !!(me && real && me.id !== real.id);
-    root.render(<App authMode="authed" me={me} realUser={real} impersonating={impersonating} />);
+    root.render(<ErrorBoundary><App authMode="authed" me={me} realUser={real} impersonating={impersonating} /></ErrorBoundary>);
   } else {
-    root.render(<LoginScreen onAuthed={() => location.reload()} onDemo={() => root.render(<App authMode="demo" me={null} />)} />);
+    root.render(<ErrorBoundary><LoginScreen onAuthed={() => location.reload()} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
   }
 })();
