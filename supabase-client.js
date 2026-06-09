@@ -190,6 +190,11 @@
       if (Array.isArray(window.CDC.MOMS)) window.CDC.MOMS.unshift(mom);
       await remote(() => sb.from('moms').insert({ id: mom.id, dept: mom.dept || null, data: mom }));
     },
+    async addFarmAgent(agent) {
+      if (Array.isArray(window.CDC.FARM_AGENTS)) window.CDC.FARM_AGENTS.unshift(agent);
+      await remote(() => sb.from('farm_agents').insert({ id: agent.id, owner_id: agent.owner, data: agent }));
+      return agent;
+    },
     async updateFlag(id, state) {
       const f = (window.CDC.FLAGS || []).find((x) => x.id === id); if (f) f.state = state;
       await remote(() => sb.from('flags').update({ state, data: f || { id, state } }).eq('id', id));

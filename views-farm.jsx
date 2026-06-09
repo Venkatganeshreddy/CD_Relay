@@ -9,8 +9,10 @@ function FarmView({ tweaks, currentUser, nav }) {
   const [filter, setFilter] = useStF('all');
   const [tagFilter, setTagFilter] = useStF('all');
   const [selected, setSelected] = useStF(null);
+  const [registerOpen, setRegisterOpen] = useStF(false);
+  const [version, setVersion] = useStF(0); // bump to recompute memos after in-place mutation
 
-  const tags = useMF(() => ['all', ...new Set(agents.flatMap((a) => a.tags))], [agents]);
+  const tags = useMF(() => ['all', ...new Set(agents.flatMap((a) => a.tags))], [agents, version]);
 
   const filtered = agents.filter((a) => {
     if (filter !== 'all' && a.health !== filter) return false;
@@ -36,7 +38,7 @@ function FarmView({ tweaks, currentUser, nav }) {
     return [...map.entries()].map(([uid, v]) => ({
       uid, user: CDC.lookup.user(uid), ...v,
     })).sort((a, b) => b.hoursSaved - a.hoursSaved);
-  }, [agents]);
+  }, [agents, version]);
 
   const byDept = useMF(() => {
     const map = new Map();
@@ -52,7 +54,7 @@ function FarmView({ tweaks, currentUser, nav }) {
       did, name: CDC.lookup.dept(did)?.short || CDC.lookup.dept(did)?.name || did,
       ...v,
     })).sort((a, b) => b.hoursSaved - a.hoursSaved);
-  }, [agents]);
+  }, [agents, version]);
 
   return (
     <div className="fadein">
@@ -62,7 +64,7 @@ function FarmView({ tweaks, currentUser, nav }) {
         actions={
           <>
             <button className="btn" data-size="sm"><Icon name="sheet" size={12} /> Export report</button>
-            <button className="btn" data-size="sm" data-variant="primary"><Icon name="sparkles" size={12} /> Register new agent</button>
+            <button className="btn" data-size="sm" data-variant="primary" onClick={() => setRegisterOpen(true)}><Icon name="sparkles" size={12} /> Register new agent</button>
           </>
         }
       />
@@ -178,10 +180,134 @@ function FarmView({ tweaks, currentUser, nav }) {
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.name || ''} width={720}>
         {selected && <FarmDetail a={selected} />}
       </Modal>
+
+      <RegisterAgentModal
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        currentUser={currentUser}
+        onCreated={(a) => { setFilter('all'); setTagFilter('all'); setVersion((v) => v + 1); setSelected(a); }}
+      />
     </div>
   );
 }
 window.FarmView = FarmView;
+
+function RegisterAgentModal({ open, onClose, currentUser, onCreated }) {
+  const CDC = window.CDC;
+  const blank = {
+    name: '', description: '', level: 'L1', scope: 'sub', stack: '',
+    deployUrl: '', tags: '', unitsProcessed: '', baselineHrsPerUnit: '', agentHrsPerUnit: '',
+  };
+  const [f, setF] = useStF(blank);
+  const [saving, setSaving] = useStF(false);
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  const canSave = f.name.trim() && !saving;
+
+  async function save() {
+    if (!canSave) return;
+    setSaving(true);
+    const units = num(f.unitsProcessed);
+    const baseline = num(f.baselineHrsPerUnit);
+    const agentPer = num(f.agentHrsPerUnit);
+    const today = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+    const period = today.slice(0, 7);
+    const agent = {
+      id: `fa-${Date.now()}`,
+      name: f.name.trim(),
+      owner: currentUser.id,
+      description: f.description.trim(),
+      level: f.level,
+      scope: f.scope,
+      deployUrl: f.deployUrl.trim(),
+      health: 'ok',
+      tags: f.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      stack: f.stack.trim(),
+      usage: { period, unitsProcessed: units, agentTime: +(agentPer * units).toFixed(1) },
+      gains: { baselineHrsPerUnit: baseline, agentHrsPerUnit: agentPer, hoursSaved: +Math.max(0, (baseline - agentPer) * units).toFixed(1) },
+      createdAt: today,
+    };
+    try {
+      if (CDC.db && CDC.db.addFarmAgent) await CDC.db.addFarmAgent(agent);
+      else if (Array.isArray(CDC.FARM_AGENTS)) CDC.FARM_AGENTS.unshift(agent);
+    } finally {
+      setSaving(false);
+      setF(blank);
+      onClose();
+      onCreated && onCreated(agent);
+    }
+  }
+
+  const lbl = { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-muted)', marginBottom: 4, display: 'block' };
+  return (
+    <Modal open={open} onClose={onClose} title="Register new agent" width={560}>
+      <div className="col" style={{ gap: 12 }}>
+        <div>
+          <label style={lbl}>Name *</label>
+          <input className="input-text" style={{ width: '100%' }} placeholder="e.g. TR-Doc Generator" value={f.name} onChange={set('name')} />
+        </div>
+        <div>
+          <label style={lbl}>Description</label>
+          <textarea className="input-text" style={{ width: '100%', minHeight: 60, resize: 'vertical' }} placeholder="What it does + rough impact" value={f.description} onChange={set('description')} />
+        </div>
+        <div className="row" style={{ gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Autonomy level</label>
+            <select className="input-text" style={{ width: '100%' }} value={f.level} onChange={set('level')}>
+              <option value="L0">L0 · suggest only</option>
+              <option value="L1">L1 · act with approval</option>
+              <option value="L2">L2 · auto within guardrails</option>
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Scope</label>
+            <select className="input-text" style={{ width: '100%' }} value={f.scope} onChange={set('scope')}>
+              <option value="sub">sub</option>
+              <option value="dept">dept</option>
+              <option value="org">org</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>Stack</label>
+          <input className="input-text" style={{ width: '100%' }} placeholder="e.g. Claude Sonnet · LangGraph" value={f.stack} onChange={set('stack')} />
+        </div>
+        <div>
+          <label style={lbl}>Deploy URL</label>
+          <input className="input-text" style={{ width: '100%' }} placeholder="https://…" value={f.deployUrl} onChange={set('deployUrl')} />
+        </div>
+        <div>
+          <label style={lbl}>Tags <span style={{ fontWeight: 400, textTransform: 'none' }}>(comma-separated)</span></label>
+          <input className="input-text" style={{ width: '100%' }} placeholder="content, fullstack" value={f.tags} onChange={set('tags')} />
+        </div>
+        <div className="row" style={{ gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Units / month</label>
+            <input className="input-text" type="number" min="0" style={{ width: '100%' }} placeholder="0" value={f.unitsProcessed} onChange={set('unitsProcessed')} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Baseline hrs/unit</label>
+            <input className="input-text" type="number" min="0" step="0.01" style={{ width: '100%' }} placeholder="0" value={f.baselineHrsPerUnit} onChange={set('baselineHrsPerUnit')} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Agent hrs/unit</label>
+            <input className="input-text" type="number" min="0" step="0.01" style={{ width: '100%' }} placeholder="0" value={f.agentHrsPerUnit} onChange={set('agentHrsPerUnit')} />
+          </div>
+        </div>
+        <div className="muted" style={{ fontSize: 11.5 }}>
+          Hours saved auto-computes as (baseline − agent) × units. Owner: <strong>{currentUser.name}</strong>.
+        </div>
+        <div className="row" style={{ gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+          <button className="btn" data-size="sm" data-variant="ghost" onClick={onClose}>Cancel</button>
+          <button className="btn" data-size="sm" data-variant="primary" disabled={!canSave} onClick={save}>
+            <Icon name="sparkles" size={12} /> {saving ? 'Saving…' : 'Register agent'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 function FarmCard({ agent: a, onClick }) {
   const u = window.CDC.lookup.user(a.owner);
