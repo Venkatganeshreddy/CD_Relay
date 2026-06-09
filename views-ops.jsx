@@ -507,7 +507,8 @@ function TasksView({ tweaks, currentUser }) {
   // > 2d) get a trigger, flip to ESCALATED, and climb one level up the chain
   // (L1 → L2 → L3). Each scan advances one more level until the top is reached.
   async function scanNow() {
-    let triggered = 0;
+    // Pass 1 — deterministic: pick which tasks trigger, climb the chain, flip status.
+    const hits = [];
     for (const t of allTasks) {
       const reason = escalationTrigger(t);
       if (!reason) continue;
@@ -521,10 +522,17 @@ function TasksView({ tweaks, currentUser }) {
       t.escalatedTo = target || t.escalatedTo;
       t.escalReason = reason;
       CDC.db.updateTask(t.id, 'ESCALATED');
-      const brief = (CDC.agents && target) ? await CDC.agents.runSentry({
-        task: { ...t, ownerName: nm(t.owner) }, event: 'escalated', target: nm(target),
-        targetLevel: (CDC.lookup.user(target) || {}).level, reason,
-      }) : null;
+      hits.push({ t, reason, target });
+    }
+    // Pass 2 — agent: draft all Sentry briefs in parallel (~one round-trip, not N).
+    const briefs = await Promise.all(hits.map(({ t, reason, target }) =>
+      (CDC.agents && target)
+        ? CDC.agents.runSentry({ task: { ...t, ownerName: nm(t.owner) }, event: 'escalated',
+            target: nm(target), targetLevel: (CDC.lookup.user(target) || {}).level, reason }).catch(() => null)
+        : Promise.resolve(null)));
+    // Pass 3 — notify + log with the resolved briefs.
+    hits.forEach(({ t, reason, target }, i) => {
+      const brief = briefs[i];
       const recipients = [];
       if (target) recipients.push(target);
       const originator = t.createdBy || t.uploadedBy;
@@ -535,8 +543,8 @@ function TasksView({ tweaks, currentUser }) {
       });
       CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${t.id}`, action: 'edit',
         reason: `${reason}; escalated${target ? ` to ${nm(target)}` : ' (top of chain)'} by Sentry scan`, userId: me.id });
-      triggered++;
-    }
+    });
+    const triggered = hits.length;
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_scan', inputRef: 'Tasks scan', action: 'run',
       reason: `Scan: ${triggered} task(s) escalated`, userId: me.id });
     setStatusOv((s) => ({ ...s }));
