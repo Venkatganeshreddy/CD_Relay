@@ -112,9 +112,14 @@
   // ── Per-million-token pricing (USD) for the models we call via OpenRouter.
   // Keep aligned with the modelMap above and Anthropic's published rates.
   // 'in' = prompt tokens, 'out' = completion tokens.
+  // Rates verified against OpenRouter (Jun 2026). The Edge Function routes
+  // 'smart'→sonnet-4.6 ($3/$15) and 'fast'→haiku-4.5 ($1/$5); run() prices by
+  // the alias. Slug keys cover the direct-OpenRouter fallback path.
   const MODEL_PRICES = {
-    smart:                                  { in: 3.00, out: 15.00 }, // Claude Sonnet 4
-    fast:                                   { in: 0.80, out:  4.00 }, // Claude 3.5 Haiku
+    smart:                                  { in: 3.00, out: 15.00 }, // Claude Sonnet 4.6
+    fast:                                   { in: 1.00, out:  5.00 }, // Claude Haiku 4.5
+    'anthropic/claude-sonnet-4.6':          { in: 3.00, out: 15.00 },
+    'anthropic/claude-haiku-4.5':           { in: 1.00, out:  5.00 },
     'anthropic/claude-sonnet-4-20250514':   { in: 3.00, out: 15.00 },
     'anthropic/claude-3-5-haiku-20241022':  { in: 0.80, out:  4.00 },
   };
