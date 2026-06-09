@@ -292,7 +292,7 @@
         (daysStuck != null ? `Stuck for: ~${daysStuck} day(s)\n` : '') +
         `Due: ${task.due || 'n/a'}`;
       try {
-        const content = await this.run({ agent: 'Sentry', model: 'fast', inputLabel: `${event} ${task.id}`, messages: [{ role: 'user', content: prompt }] });
+        const content = await this.run({ agent: 'Sentry', model: 'smart', inputLabel: `${event} ${task.id}`, messages: [{ role: 'user', content: prompt }] });
         const line = (content || '').trim().split('\n')[0].replace(/^["']|["']$/g, '').slice(0, 200);
         return line || null;
       } catch (_) { return null; }
