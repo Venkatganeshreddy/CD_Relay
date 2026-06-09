@@ -109,6 +109,22 @@
   // 1. Edge Function (askAgent) — authed users with Supabase
   // 2. Direct browser-to-OpenRouter — demo users with API key
   // 3. Offline keyword shim — always works, canned responses
+  // ── Per-million-token pricing (USD) for the models we call via OpenRouter.
+  // Keep aligned with the modelMap above and Anthropic's published rates.
+  // 'in' = prompt tokens, 'out' = completion tokens.
+  const MODEL_PRICES = {
+    smart:                                  { in: 3.00, out: 15.00 }, // Claude Sonnet 4
+    fast:                                   { in: 0.80, out:  4.00 }, // Claude 3.5 Haiku
+    'anthropic/claude-sonnet-4-20250514':   { in: 3.00, out: 15.00 },
+    'anthropic/claude-3-5-haiku-20241022':  { in: 0.80, out:  4.00 },
+  };
+  const priceFor = (m) => MODEL_PRICES[m] || MODEL_PRICES.smart;
+  const computeCost = (model, tokensIn, tokensOut) => {
+    const p = priceFor(model);
+    return ((tokensIn || 0) * p.in + (tokensOut || 0) * p.out) / 1_000_000;
+  };
+  window.CDC.computeCost = computeCost;
+
   const offlineShim = (window.claude && window.claude.complete) || null;
   window.claude = window.claude || {};
   window.claude.complete = async ({ messages }) => {
@@ -261,10 +277,14 @@
         content = r.content || ''; usage = r.usage || null;
       } catch (e) { outcome = 'ERROR'; errMsg = e.message || String(e); }
 
+      const tokensIn = usage ? (usage.prompt_tokens || 0) : 0;
+      const tokensOut = usage ? (usage.completion_tokens || 0) : 0;
+      const usedModel = model || 'smart';
       const run = {
-        id: rid('run-'), agent, model: model || 'smart', latencyMs: Date.now() - t0,
-        tokensIn: usage ? (usage.prompt_tokens || 0) : 0, tokensOut: usage ? (usage.completion_tokens || 0) : 0,
-        costUsd: 0, outcome, ts: nowStr(), scopeHash: 'live', input: inputLabel || '',
+        id: rid('run-'), agent, model: usedModel, latencyMs: Date.now() - t0,
+        tokensIn, tokensOut,
+        costUsd: computeCost(usedModel, tokensIn, tokensOut),
+        outcome, ts: nowStr(), scopeHash: 'live', input: inputLabel || '',
         output: (outcome === 'OK' ? content : errMsg || '').slice(0, 240),
       };
       const act = { id: rid('act-'), kind: 'agent', ts: nowStr().slice(11, 16),

@@ -1085,6 +1085,22 @@ function RunsView({ tweaks, currentUser }) {
   const avgLatency = Math.round(list.reduce((s, r) => s + r.latencyMs, 0) / Math.max(list.length, 1));
   const totalTokens = list.reduce((s, r) => s + (r.tokensIn + r.tokensOut), 0);
 
+  // Project monthly spend from the observed span of runs (newest → oldest ts).
+  // Falls back to "—" when there's not enough data for a meaningful rate.
+  const projectedMonthly = (() => {
+    if (list.length < 2 || totalCost <= 0) return null;
+    const times = list.map((r) => {
+      // `ts` is "YYYY-MM-DD HH:MM IST" — strip the suffix and parse as IST.
+      const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/.exec(r.ts || '');
+      if (!m) return NaN;
+      // Treat the stamp as IST (UTC+5:30) so the span is correct regardless of viewer TZ.
+      return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 5, +m[5] - 30);
+    }).filter((n) => !isNaN(n));
+    if (times.length < 2) return null;
+    const spanDays = Math.max(1 / 24, (Math.max(...times) - Math.min(...times)) / 86_400_000);
+    return (totalCost / spanDays) * 30;
+  })();
+
   return (
     <div className="fadein">
       <SectionHeader
@@ -1114,7 +1130,7 @@ function RunsView({ tweaks, currentUser }) {
         <div className="kpi-tile">
           <div className="kpi-name">Total cost</div>
           <div className="kpi-value">${totalCost.toFixed(3)}</div>
-          <div className="kpi-meta">Projected $4.20/mo at this rate</div>
+          <div className="kpi-meta">{projectedMonthly != null ? `Projected $${projectedMonthly.toFixed(2)}/mo at this rate` : 'Projection pending — need ≥ 2 runs'}</div>
         </div>
       </div>
 
