@@ -278,6 +278,25 @@
       const content = await this.run({ agent: 'Rollup', model: 'smart', inputLabel: `Weekly ${weekly.id}`, messages: [{ role: 'user', content: prompt }] });
       try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).sections || null; } catch (_) { return null; }
     },
+    // Sentry — draft a short escalation brief for a stuck/blocked task. Routing
+    // (who the next manager is) stays deterministic in the caller; Sentry only
+    // writes the human-facing rationale + recommended action. Returns a one-line
+    // string, or null on failure so the caller can fall back to a template.
+    async runSentry({ task, event, target, targetLevel, daysStuck, reason }) {
+      const prompt = `You are Sentry, the task-escalation agent for an ops team. ` +
+        `A task needs a manager's attention. Write ONE concise line (max 160 chars, no preamble, no quotes) ` +
+        `that tells ${target || 'the manager'}${targetLevel ? ` (${targetLevel})` : ''} why this is being ${event} and what to do next. ` +
+        `Be specific and action-oriented; do not restate the obvious.\n\n` +
+        `Task: "${task.title}"\nStatus: ${task.status}\nOwner: ${task.ownerName || task.owner}\n` +
+        `Why flagged: ${reason || task.blockReason || 'unspecified'}\n` +
+        (daysStuck != null ? `Stuck for: ~${daysStuck} day(s)\n` : '') +
+        `Due: ${task.due || 'n/a'}`;
+      try {
+        const content = await this.run({ agent: 'Sentry', model: 'fast', inputLabel: `${event} ${task.id}`, messages: [{ role: 'user', content: prompt }] });
+        const line = (content || '').trim().split('\n')[0].replace(/^["']|["']$/g, '').slice(0, 200);
+        return line || null;
+      } catch (_) { return null; }
+    },
     // Scribe — extract action items from a meeting transcript.
     async runScribe(transcript) {
       // Give Scribe the real roster so it (a) captures every item and (b) returns an

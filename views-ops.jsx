@@ -452,7 +452,7 @@ function TasksView({ tweaks, currentUser }) {
   };
   // Mark blocked → notify the IMMEDIATE reporting manager (+ originator). Escalation
   // climbs the hierarchy from here via escalate() / scanNow().
-  function block(id) {
+  async function block(id) {
     const t = allTasks.find((x) => x.id === id); if (!t) return;
     const chain = managerChain(t.owner);
     const mgr = chain[0] || null;
@@ -462,18 +462,23 @@ function TasksView({ tweaks, currentUser }) {
     CDC.db.updateTask(id, 'BLOCKED');  // persists data:t incl. escalation fields
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_block', inputRef: `Task ${id}`, action: 'edit',
       reason: `Blocked by ${me.name}; notified manager ${nm(mgr)}`, userId: me.id });
+    // Sentry agent drafts the escalation brief; routing (mgr) stays deterministic.
+    const brief = CDC.agents ? await CDC.agents.runSentry({
+      task: { ...t, ownerName: nm(t.owner) }, event: 'blocked', target: nm(mgr),
+      targetLevel: (CDC.lookup.user(mgr) || {}).level, reason: t.blockReason,
+    }) : null;
     const recipients = [];
     if (mgr) recipients.push(mgr);
     const originator = t.createdBy || t.uploadedBy;
     if (originator) recipients.push(originator);
     CDC.db.notify && CDC.db.notify(recipients, {
-      text: `🚫 Blocked: "${t.title}" (owner ${nm(t.owner)}) — flagged by ${me.name}`,
+      text: `🚫 Blocked: "${t.title}" (owner ${nm(t.owner)}) — flagged by ${me.name}${brief ? ` · Sentry: ${brief}` : ''}`,
       icon: '🚫', kind: 'task_blocked', refId: id,
     });
     setStatusOv((s) => ({ ...s, [id]: 'BLOCKED' }));
   }
   // Task remains blocked → escalate to the next hierarchy level (L1 → L2 → L3).
-  function escalate(id) {
+  async function escalate(id) {
     const t = allTasks.find((x) => x.id === id); if (!t) return;
     const chain = managerChain(t.owner);
     const nextIdx = (t.escalIdx ?? 0) + 1;
@@ -486,8 +491,12 @@ function TasksView({ tweaks, currentUser }) {
     if (t.status !== 'ESCALATED') t.escalPrevStatus = t.status;
     t.escalIdx = nextIdx; t.escalatedTo = target;
     CDC.db.updateTask(id, 'ESCALATED');
+    const brief = CDC.agents ? await CDC.agents.runSentry({
+      task: { ...t, ownerName: nm(t.owner) }, event: 'escalated', target: nm(target),
+      targetLevel: (CDC.lookup.user(target) || {}).level, reason: t.escalReason || t.blockReason,
+    }) : null;
     CDC.db.notify && CDC.db.notify([target], {
-      text: `⏫ Escalated: "${t.title}" still blocked — escalated to ${nm(target)} (${(CDC.lookup.user(target) || {}).level})`,
+      text: `⏫ Escalated: "${t.title}" still blocked — escalated to ${nm(target)} (${(CDC.lookup.user(target) || {}).level})${brief ? ` · Sentry: ${brief}` : ''}`,
       icon: '⏫', kind: 'task_escalated', refId: id,
     });
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${id}`, action: 'edit',
@@ -497,11 +506,11 @@ function TasksView({ tweaks, currentUser }) {
   // Scan: tasks crossing a time threshold (in-progress > 2d, blocked > 1d, overdue
   // > 2d) get a trigger, flip to ESCALATED, and climb one level up the chain
   // (L1 → L2 → L3). Each scan advances one more level until the top is reached.
-  function scanNow() {
+  async function scanNow() {
     let triggered = 0;
-    allTasks.forEach((t) => {
+    for (const t of allTasks) {
       const reason = escalationTrigger(t);
-      if (!reason) return;
+      if (!reason) continue;
       const chain = managerChain(t.owner);
       const top = chain.length - 1;
       const nextIdx = chain.length ? Math.min((t.escalIdx ?? -1) + 1, top) : -1;
@@ -512,18 +521,22 @@ function TasksView({ tweaks, currentUser }) {
       t.escalatedTo = target || t.escalatedTo;
       t.escalReason = reason;
       CDC.db.updateTask(t.id, 'ESCALATED');
+      const brief = (CDC.agents && target) ? await CDC.agents.runSentry({
+        task: { ...t, ownerName: nm(t.owner) }, event: 'escalated', target: nm(target),
+        targetLevel: (CDC.lookup.user(target) || {}).level, reason,
+      }) : null;
       const recipients = [];
       if (target) recipients.push(target);
       const originator = t.createdBy || t.uploadedBy;
       if (originator && originator !== target) recipients.push(originator);
       CDC.db.notify && CDC.db.notify(recipients, {
-        text: `⏫ Escalated: "${t.title}" — ${reason}${target ? ` → ${nm(target)} (${(CDC.lookup.user(target) || {}).level || '—'})` : ''}`,
+        text: `⏫ Escalated: "${t.title}" — ${reason}${target ? ` → ${nm(target)} (${(CDC.lookup.user(target) || {}).level || '—'})` : ''}${brief ? ` · Sentry: ${brief}` : ''}`,
         icon: '⏫', kind: 'task_escalated', refId: t.id,
       });
       CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_escalate', inputRef: `Task ${t.id}`, action: 'edit',
         reason: `${reason}; escalated${target ? ` to ${nm(target)}` : ' (top of chain)'} by Sentry scan`, userId: me.id });
       triggered++;
-    });
+    }
     CDC.db.logInteraction({ agent: 'Sentry', flow: 'task_scan', inputRef: 'Tasks scan', action: 'run',
       reason: `Scan: ${triggered} task(s) escalated`, userId: me.id });
     setStatusOv((s) => ({ ...s }));
