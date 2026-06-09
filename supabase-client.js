@@ -17,7 +17,17 @@
 
   const authed = () => !!(window.__RELAY && window.__RELAY.authed);
   const pad = (n) => String(n).padStart(2, '0');
-  const nowStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} IST`; };
+  // Format the current moment in IST regardless of where the runtime lives
+  // (Supabase Edge Functions run in UTC; users' browsers can be anywhere).
+  const IST_FMT = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+  const nowStr = () => {
+    const parts = IST_FMT.formatToParts(new Date()).reduce((a, p) => { a[p.type] = p.value; return a; }, {});
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} IST`;
+  };
   const rid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
   // ── Reads: load scoped rows into the existing window.CDC collections ──────

@@ -385,7 +385,7 @@ function WorklogDetail({ w }) {
       <div>
         <div className="detail-section">Audit</div>
         <dl className="kv">
-          <dt>Source</dt><dd className="mono code">chat-submit · 5:30pm</dd>
+          <dt>Source</dt><dd className="mono code">chat-submit · {w.submittedAt || '—'}</dd>
           <dt>Worklog ID</dt><dd className="mono">{w.id}</dd>
           <dt>Cited by</dt><dd className="muted">— (cross-references appear after weekly run)</dd>
         </dl>

@@ -63,6 +63,18 @@ function SubmitView({ tweaks, currentUser, nav }) {
   const myEmpId = useM(() => empIdFor(currentUser), [currentUser.id]);
   const myStack = useM(() => window.CDC.stackForUser(currentUser), [currentUser.id]);
 
+  // Live IST clock — ticks every 30s so the header subtitle stays current.
+  const [now, setNow] = useS(() => new Date());
+  useE(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    const onVis = () => document.visibilityState === 'visible' && setNow(new Date());
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+  const istFmt = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
+  const weekdayLabel = `${istFmt({ weekday: 'long' })}, ${istFmt({ month: 'long', day: 'numeric' })}`;
+  const timeStr = `${istFmt({ hour: 'numeric', minute: '2-digit', hour12: true })} IST`;
+
   // Session state
   const [tasks, setTasks] = useS([]);              // completed tasks this session
   const [current, setCurrent] = useS({});          // current task under construction
@@ -284,7 +296,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
     <div className="fadein">
       <SectionHeader
         title="Day-end check-in"
-        subtitle={`${weekdayLabel()} · ${timeStr()} · Logged for ${currentUser.name} (${myEmpId})`}
+        subtitle={`${weekdayLabel} · ${timeStr} · Logged for ${currentUser.name} (${myEmpId})`}
         actions={
           <>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('dashboard')}>Skip · go to dashboard</button>
@@ -789,9 +801,3 @@ function SessionRail({ tasks, current, step, currentUser }) {
   );
 }
 
-function weekdayLabel() {
-  return 'Thursday, May 22';
-}
-function timeStr() {
-  return '5:32 PM IST';
-}
