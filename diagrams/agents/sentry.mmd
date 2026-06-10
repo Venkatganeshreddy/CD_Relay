@@ -1,0 +1,43 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  s([Trigger · task blocked / escalate event]):::start
+
+  subgraph P1[Phase 1 · prompt]
+    a1[Build 1-line prompt<br/>task title · status · owner<br/>reason · daysStuck · due · target]:::proc
+    note[Routing · who is next manager<br/>stays deterministic in caller]:::store
+    a1 -.-> note
+  end
+  s --> a1
+
+  subgraph P2[Phase 2 · run core]
+    b1[memoryFor Sentry &rarr; askAgent smart]:::proc
+    b2[Edge Function relay-agent · JWT]:::edge
+    b3[OpenRouter &rarr; Claude Sonnet 4.6]:::model
+    b4[log ai_runs + activity]:::proc
+    b1 --> b2 --> b3
+    b1 -.-> b4
+  end
+  a1 --> b1
+
+  subgraph P3[Phase 3 · clean]
+    c1[trim &rarr; first line<br/>strip quotes &rarr; slice 200]:::proc
+    d1{line non-empty<br/>and no error?}:::dec
+    c1 --> d1
+  end
+  b3 --> c1
+
+  out([Return one escalation line]):::start
+  nul[Return null<br/>caller uses template line]:::stop
+  d1 -- yes --> out
+  d1 -- no --> nul
+
+  feed[(activity feed · escalation)]:::store
+  out --> feed
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0

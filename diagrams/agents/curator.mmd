@@ -1,0 +1,45 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  t1([Auto-trigger · 5 corrections<br/>for an agent]):::start
+  t2([Manual / scheduled pass]):::start
+
+  subgraph P1[Phase 1 · gather + group]
+    a1[ENGRAM.filter action != accept<br/>only edits / rejects teach]:::proc
+    a2[group by e.agent &rarr; byAgent]:::proc
+    a1 --> a2
+  end
+  t1 --> a1
+  t2 --> a1
+
+  loop{{for each agent group}}:::dec
+  a2 --> loop
+
+  subgraph P2[Phase 2 · distill per agent]
+    b0[build cases · up to 40<br/>AI draft vs human-kept vs reason]:::proc
+    b1[prompt · find recurring corrections<br/>&rarr; 3-7 imperative rules]:::proc
+    b2[memoryFor Curator &rarr; askAgent smart]:::proc
+    b3[Edge Function relay-agent · JWT]:::edge
+    b4[OpenRouter &rarr; Claude Sonnet 4.6]:::model
+    b5[regex curly &rarr; JSON.parse &rarr; .rules]:::proc
+    d1{parse ok and rules?}:::dec
+    b0 --> b1 --> b2 --> b3 --> b4 --> b5 --> d1
+  end
+  loop --> b0
+
+  skip[skip this agent · continue]:::stop
+  d1 -- no --> skip
+
+  write[Write relay_agents.data.memory<br/>rules · distilledFrom · ts<br/>local + remote update]:::store
+  d1 -- yes --> write
+
+  inject[memoryFor injects rules<br/>into that agent's NEXT run]:::proc
+  selfcorrect([Producers self-correct<br/>LOOP CLOSED]):::start
+  write --> inject --> selfcorrect
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0

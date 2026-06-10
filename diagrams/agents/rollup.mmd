@@ -1,0 +1,48 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  s([Trigger · WeeklyView<br/>Regenerate / Generate all]):::start
+
+  subgraph P1[Phase 1 · context gather + prompt]
+    a1[REPORTS.filter<br/>dept == weekly.dept AND not missing]:::proc
+    d1{reports in scope?}:::dec
+    a2[ctx = lines · id · sub · date · kind · text]:::proc
+    a3[empty scope marker]:::stop
+    a4[Build prompt · consolidate week<br/>cite source report ids]:::proc
+    a1 --> d1
+    d1 -- yes --> a2 --> a4
+    d1 -- no --> a3 --> a4
+  end
+  s --> a1
+
+  subgraph P2[Phase 2 · run core]
+    b1[memoryFor Rollup &rarr; askAgent smart]:::proc
+    b2[Edge Function relay-agent · JWT]:::edge
+    b3[OpenRouter &rarr; Claude Sonnet 4.6]:::model
+    b4[log ai_runs + activity]:::proc
+    b1 --> b2 --> b3
+    b1 -.-> b4
+  end
+  a4 --> b1
+
+  subgraph P3[Phase 3 · parse]
+    c1[regex curly &rarr; JSON.parse &rarr; .sections]:::proc
+    d2{parse ok?}:::dec
+    c1 --> d2
+  end
+  b3 --> c1
+
+  out([Return sections<br/>Highlights · Risks · Asks + cites]):::start
+  nul[Return null<br/>caller keeps existing draft]:::stop
+  d2 -- yes --> out
+  d2 -- no --> nul
+
+  draft[(weekly_summaries draft)]:::store
+  out --> draft
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0
