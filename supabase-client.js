@@ -157,6 +157,27 @@
   // ── Writes (Phase 4): optimistic-local always; remote when signed in ──────
   async function remote(fn) { if (sb && authed()) { try { const { error } = await fn(); if (error) console.warn('[Relay] write:', error.message); return !error; } catch (e) { console.warn('[Relay] write threw:', e.message); } } return false; }
 
+  // Auto-Curator: once CURATOR_AUTO_THRESHOLD human corrections (edits/rejects)
+  // accumulate for an agent, run the Curator for it in the background so its
+  // learned rules refresh without a manual pass. Counter resets on trigger;
+  // curatorRunning guards against overlapping runs. Gated on authed() so we use
+  // the real Edge Function (and don't log ERROR runs in offline demo mode).
+  const CURATOR_AUTO_THRESHOLD = 5;
+  const curatorPending = {};   // agent → corrections since its last auto-run
+  const curatorRunning = {};   // agent → run in flight?
+  function maybeRunCurator(agent) {
+    if (!agent || !authed()) return;
+    if (!(window.CDC.agents && window.CDC.agents.runCurator)) return;
+    curatorPending[agent] = (curatorPending[agent] || 0) + 1;
+    if (curatorPending[agent] < CURATOR_AUTO_THRESHOLD || curatorRunning[agent]) return;
+    curatorPending[agent] = 0;
+    curatorRunning[agent] = true;
+    Promise.resolve()
+      .then(() => window.CDC.agents.runCurator(agent))
+      .catch((e) => console.warn('[Relay] auto-Curator failed:', e.message || e))
+      .finally(() => { curatorRunning[agent] = false; });
+  }
+
   window.CDC.db = {
     authed,
     // Records a human review of an agent draft — the Engram learning signal.
@@ -168,6 +189,8 @@
       };
       if (Array.isArray(window.CDC.ENGRAM)) window.CDC.ENGRAM.unshift(row);
       await remote(() => sb.from('engram_interactions').insert({ id: row.id, agent: row.agent, user_id: userId || null, human_action: action, data: row }));
+      // Only corrections carry a teaching signal; accepts don't move the counter.
+      if (action && action !== 'accept') maybeRunCurator(row.agent);
       return row;
     },
     async updateWeekly(weeklyObj, patch) {
