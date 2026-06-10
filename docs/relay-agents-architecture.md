@@ -104,6 +104,24 @@ producers, which self-correct on their next run.
 | Observability | `ai_runs` + `activity` rows → Supabase Postgres (jsonb), RLS-scoped |
 | State source | `window.CDC.USERS` (roster) + `relay_agents.data.memory` (Curator rules), loaded from Postgres at boot |
 
+## Per-agent flow diagrams
+
+Each agent's real code path: trigger → prompt → `run()` core → Edge Function →
+Claude Sonnet 4.6 → parse → output (with fail-soft fallback). Sources +
+regeneration command in [`diagrams/agents/`](../diagrams/agents/README.md).
+
+### Scribe — meeting transcript → action items
+![Scribe flow](../diagrams/agents/scribe.png)
+
+### Rollup — daily reports → weekly summary
+![Rollup flow](../diagrams/agents/rollup.png)
+
+### Sentry — stuck task → escalation line
+![Sentry flow](../diagrams/agents/sentry.png)
+
+### Curator — corrections → learned rules (self-evolving loop)
+![Curator flow](../diagrams/agents/curator.png)
+
 ## Source
 
 - `supabase-client.js:311-481` — agents engine (`run`, `runRollup`, `runSentry`, `runScribe`, `runCurator`, `memoryFor`)
