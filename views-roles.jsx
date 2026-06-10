@@ -719,6 +719,27 @@ function GuidelineView({ tweaks, currentUser, nav }) {
                       ? <span>last run {lastRun.ts.replace(/^.* /, '') || lastRun.ts} · <span style={{ color: lastRun.outcome === 'OK' ? 'var(--green)' : lastRun.outcome === 'ERROR' ? 'var(--rose)' : 'inherit' }}>{lastRun.outcome}</span></span>
                       : <span>{a.runsToday ? `${a.runsToday} runs today` : 'idle'} · {a.model || ''}</span>}
                   </div>
+                  {(() => {
+                    // Auto-Curator learning progress: how many corrections have
+                    // accrued since this agent's rules were last refreshed, vs the
+                    // threshold that auto-fires Curator. Curator itself is excluded.
+                    if (a.name === 'Curator') return null;
+                    const thr = window.CDC.CURATOR_AUTO_THRESHOLD || 5;
+                    const mem = a.memory;
+                    const since = (window.CDC.ENGRAM || []).filter((e) =>
+                      e.agent === a.name && e.action && e.action !== 'accept' &&
+                      (!mem || !mem.ts || e.ts > mem.ts)).length;
+                    return (
+                      <div className="row" style={{ gap: 5, marginTop: 4, fontSize: 10, color: 'var(--text-faint)', alignItems: 'center' }}>
+                        <Icon name="refresh" size={9} />
+                        <span>
+                          {mem && mem.rules ? `${mem.rules.length} learned rule${mem.rules.length === 1 ? '' : 's'}` : 'no rules yet'}
+                          {mem && mem.ts ? ` · refreshed ${mem.ts.replace(/^.* /, '') || mem.ts}` : ''}
+                          {' · '}<span style={{ color: since >= thr ? 'var(--green)' : 'inherit' }}>{Math.min(since, thr)}/{thr}</span> to next refresh
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 );
               })}

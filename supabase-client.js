@@ -163,6 +163,7 @@
   // curatorRunning guards against overlapping runs. Gated on authed() so we use
   // the real Edge Function (and don't log ERROR runs in offline demo mode).
   const CURATOR_AUTO_THRESHOLD = 5;
+  window.CDC.CURATOR_AUTO_THRESHOLD = CURATOR_AUTO_THRESHOLD;   // read by agent cards UI
   const curatorPending = {};   // agent → corrections since its last auto-run
   const curatorRunning = {};   // agent → run in flight?
   function maybeRunCurator(agent) {
