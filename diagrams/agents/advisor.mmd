@@ -1,0 +1,56 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  s1([Trigger · Run Advisor now<br/>RecommendationsPanel · L2+]):::start
+  s2([Trigger · weekly cron<br/>Mon 06:30 IST · advisor-cron]):::start
+
+  subgraph P1[Phase 1 · build grounded brief]
+    a1[Knowledge · departments + hierarchy]:::proc
+    a2[Captures · 14d worklog load · missing reports<br/>open flags · KPIs · latest weekly digest · MOM items]:::proc
+    a3[ctx = compact text brief · capped 9k]:::proc
+    a1 --> a3
+    a2 --> a3
+  end
+  s1 --> a1
+  s2 --> a1
+
+  subgraph P2[Phase 2 · run core]
+    b1[Advisor prompt · 4 kinds<br/>operational · process · priorities · people]:::proc
+    b2[Edge Function relay-agent · JWT<br/>· or advisor-cron service role]:::edge
+    b3[OpenRouter &rarr; Claude Sonnet 4.6]:::model
+    b4[log ai_runs + activity]:::proc
+    b1 --> b2 --> b3
+    b1 -.-> b4
+  end
+  a3 --> b1
+
+  subgraph P3[Phase 3 · parse + ground]
+    c1[regex curly &rarr; JSON.parse &rarr; .items]:::proc
+    d1{items valid &amp;<br/>kind allowed?}:::dec
+    c1 --> d1
+  end
+  b3 --> c1
+
+  out([Insert cards · kind · title · detail<br/>dept · severity · refs]):::start
+  nul[Return null<br/>no cards this run]:::stop
+  d1 -- yes --> out
+  d1 -- no --> nul
+
+  store[(recommendations)]:::store
+  out --> store
+
+  subgraph P4[Triage · human]
+    e1{accept process card?}:::dec
+    e2[addGuidelineProposal]:::proc
+    e1 -- yes --> e2
+  end
+  store --> e1
+  gp[(guideline_proposals<br/>Curator review surface)]:::store
+  e2 --> gp
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0

@@ -28,7 +28,7 @@ function CodexView({ tweaks, currentUser, nav, initialTab }) {
       <div className="row" style={{ gap: 6, marginBottom: 16 }}>
         {[
           { id: 'architecture', label: 'Architecture' },
-          { id: 'flows', label: 'Agent Flows', count: 5 },
+          { id: 'flows', label: 'Agent Flows', count: 6 },
           { id: 'workflows', label: 'Workflows', count: window.CDC.CODEX_WORKFLOWS.length },
           { id: 'guidelines', label: 'Guidelines', count: window.CDC.CODEX_GUIDELINES.length },
         ].map((tabInfo) => (
@@ -115,6 +115,16 @@ const FLOW_DEFS = [
     feeds: 'GraphRAG recall → Concierge grounded answers (cited). Scribe action items link back to graph nodes.',
     model: 'Claude Haiku 4.5 (fast) via relay-agent',
     source: 'r-cartographer · wf-mom · SecondBrainView (views-relay.jsx:58)',
+  },
+  {
+    id: 'advisor', label: 'Advisor', file: 'advisor.mmd',
+    blurb: 'The emergent layer — reads Knowledge + recent captures and proposes recommendation cards.',
+    trigger: 'Recommendations · Run Advisor now (L2+) · or weekly cron (Mon 06:30 IST · advisor-cron)',
+    input: 'Knowledge (depts + hierarchy) + captures (worklog load · missing reports · flags · KPIs · latest weekly digest · MOM items)',
+    output: 'cards: operational · process · priorities · people (title · detail · dept · severity · refs)',
+    feeds: 'recommendations → human triage; accepted process cards → guideline_proposals (Curator review surface).',
+    model: 'Claude Sonnet 4.6 (smart)',
+    source: 'supabase-client.js · runAdvisor() · supabase/functions/advisor-cron',
   },
 ];
 
