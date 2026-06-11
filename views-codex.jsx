@@ -28,7 +28,7 @@ function CodexView({ tweaks, currentUser, nav, initialTab }) {
       <div className="row" style={{ gap: 6, marginBottom: 16 }}>
         {[
           { id: 'architecture', label: 'Architecture' },
-          { id: 'flows', label: 'Agent Flows', count: 4 },
+          { id: 'flows', label: 'Agent Flows', count: 5 },
           { id: 'workflows', label: 'Workflows', count: window.CDC.CODEX_WORKFLOWS.length },
           { id: 'guidelines', label: 'Guidelines', count: window.CDC.CODEX_GUIDELINES.length },
         ].map((tabInfo) => (
@@ -58,12 +58,12 @@ window.CodexView = CodexView;
 const FLOW_DEFS = [
   {
     id: 'system', label: 'System loop', file: 'producers-combined.mmd',
-    blurb: 'How the three producers chain outputs into stores — and how Curator closes the learning loop.',
-    trigger: 'MOM upload · Weekly “Regenerate” · task-blocked event',
-    input: 'Pasted transcript · in-scope daily reports · blocked-task facts',
-    output: 'tasks · weekly_summaries · activity feed',
-    feeds: 'Engram corrections on those outputs → Curator → rules injected into each producer’s NEXT run.',
-    model: 'Claude Sonnet 4.6 (smart) via relay-agent',
+    blurb: 'The whole cast as a flow-of-flows: which trigger → which agent → which store, and how every store feeds the next agent. Curator closes the learning loop.',
+    trigger: 'Daily reports · MOM commit · task goes blocked · user chat',
+    input: 'Reports (Rollup) · transcript (Scribe + Cartographer) · blocked tasks (Sentry) · graph + stores (Concierge)',
+    output: 'weekly_summaries · tasks · Second Brain graph · activity feed',
+    feeds: 'Every human approve / edit / reject → engram_interactions → Curator distils rules → memoryFor injects them into each producer’s NEXT run. Loop closed.',
+    model: 'Sonnet 4.6 (producers) · Haiku 4.5 (Dispatcher, Cartographer) via relay-agent',
     source: 'supabase-client.js:311–503 · views-relay.jsx:306–491',
   },
   {
@@ -106,6 +106,16 @@ const FLOW_DEFS = [
     model: 'Claude Sonnet 4.6 (smart)',
     source: 'supabase-client.js · runCurator()',
   },
+  {
+    id: 'secondbrain', label: 'Second Brain', file: 'second-brain.mmd',
+    blurb: 'Meeting memory graph — Cartographer ingests every committed MOM, Concierge queries it for grounded answers.',
+    trigger: 'MOM committed (MOM Loader) · nightly refresh',
+    input: 'Committed MOM transcript + roster + existing graph nodes',
+    output: 'graph nodes + edges (people × meetings × decisions × tasks)',
+    feeds: 'GraphRAG recall → Concierge grounded answers (cited). Scribe action items link back to graph nodes.',
+    model: 'Claude Haiku 4.5 (fast) via relay-agent',
+    source: 'r-cartographer · wf-mom · SecondBrainView (views-relay.jsx:58)',
+  },
 ];
 
 // Substring → explainer, surfaced when a node is clicked. Matched against the
@@ -118,10 +128,18 @@ const FLOW_GLOSSARY = [
   { match: ['ai_runs', 'activity'], title: 'ai_runs + activity', detail: 'Every run is logged: ai_runs powers the AI runs view, activity powers the feed. Best-effort (local optimistic + remote).' },
   { match: ['tasks'], title: 'tasks (+ engram_interactions)', detail: 'Owner-assigned action items. Created with owner = assignee; visible in TasksView under the MINE filter for that person.' },
   { match: ['weekly_summaries', 'weekly'], title: 'weekly_summaries draft', detail: 'Highlights / Risks / Asks with cited report ids. Human approves / edits → publish.' },
-  { match: ['Dispatcher'], title: 'Dispatcher', detail: 'Deterministic 5-tier routing of each action item to an employee (assigneeHint → person). Code, not an LLM call.' },
+  { match: ['Dispatcher', 'DISPATCHER'], title: 'Dispatcher', detail: 'Deterministic 5-tier routing of each action item to an employee (assigneeHint → person). Code, not an LLM call. Haiku 4.5 only when an inference is needed.' },
   { match: ['Fallback', 'fallback', 'canned', 'template'], title: 'Fail-soft fallback', detail: 'On LLM/parse failure: deterministic extract, canned demo items, or a template line. The flow never hard-fails the UI.' },
   { match: ['parse', 'JSON.parse', 'regex'], title: 'Parse step', detail: 'Regex-extract the JSON block from the model output, JSON.parse it. On failure → fallback (fail-soft).' },
-  { match: ['relay_agents', 'memory'], title: 'relay_agents.data.memory', detail: 'Where Curator writes the distilled rules (+ distilledFrom + ts). Updated local + remote.' },
+  { match: ['relay_agents', 'memory', 'learned rules'], title: 'relay_agents.data.memory', detail: 'Where Curator writes the distilled rules (+ distilledFrom + ts). memoryFor() reads it back into each producer’s next run. Updated local + remote.' },
+  { match: ['ROLLUP'], title: 'Rollup', detail: 'Consolidates the week’s in-scope daily reports into a weekly draft (Highlights / Risks / Asks + cites). Sonnet 4.6. Open the Rollup tab for its control-flow.' },
+  { match: ['SCRIBE'], title: 'Scribe', detail: 'Extracts structured action items from a committed MOM transcript. Sonnet 4.6. Open the Scribe tab for its control-flow.' },
+  { match: ['SENTRY'], title: 'Sentry', detail: 'Drafts one escalation line for a blocked/overdue task; routing target stays deterministic. Open the Sentry tab.' },
+  { match: ['CURATOR'], title: 'Curator', detail: 'Distils human corrections (edits/rejects) into 3–7 imperative rules per agent — the self-evolving loop. Open the Curator tab.' },
+  { match: ['CARTOGRAPHER', 'Cartographer'], title: 'Cartographer', detail: 'Builds + maintains the Second Brain memory graph from committed MOMs. Haiku 4.5. Trigger: after Scribe + nightly. Open the Second Brain tab.' },
+  { match: ['CONCIERGE', 'Concierge'], title: 'Concierge', detail: 'Permission-scoped grounded chat. Reads scoped reports / KPIs / tasks + the Second Brain graph (GraphRAG) and cites sources.' },
+  { match: ['Second Brain', 'graph nodes', 'nodes + edges', 'memory graph'], title: 'Second Brain graph', detail: 'People × meetings × decisions × tasks (≈412 nodes / 1,084 edges). GraphRAG-searchable; grounds Concierge answers.' },
+  { match: ['GraphRAG'], title: 'GraphRAG search', detail: 'Embed the query, traverse the memory graph, return the connected sub-graph as cited context for Concierge.' },
 ];
 
 function lazyScript(src, globalName) {
@@ -337,6 +355,7 @@ function AgentFlowsTab({ canEdit, nav }) {
             <div className="col" style={{ gap: 6, fontSize: 11.5 }}>
               {[
                 ['#34d058', 'trigger / return / loop closed'],
+                ['#6f8cff', 'agent'],
                 ['#2b6cb0', 'process step (code)'],
                 ['#caa53d', 'decision / loop'],
                 ['#9a6cff', 'Edge Function (JWT)'],

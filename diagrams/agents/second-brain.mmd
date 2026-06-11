@@ -1,0 +1,46 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  s([Trigger · MOM committed<br/>MOM Loader / Add MOM]):::start
+  n([Nightly refresh pass]):::start
+
+  subgraph P1[Phase 1 · extract]
+    a1[CARTOGRAPHER<br/>roster + committed MOM]:::agent
+    a2[Edge Function relay-agent · JWT]:::edge
+    a3[OpenRouter &rarr; Claude Haiku 4.5]:::model
+    a4[entities · events · relationships]:::proc
+    a1 --> a2 --> a3 --> a4
+  end
+  s --> a1
+  n --> a1
+
+  subgraph P2[Phase 2 · upsert graph]
+    b1[dedupe entities vs existing nodes]:::proc
+    b2[upsert nodes + edges<br/>people × meetings × decisions × tasks]:::proc
+    b1 --> b2
+  end
+  a4 --> b1
+
+  sbg[(Second Brain graph<br/>nodes + edges)]:::store
+  b2 --> sbg
+
+  sblink[Scribe action items<br/>linked to graph nodes]:::store
+  sbg -.-> sblink
+
+  subgraph P3[Phase 3 · query]
+    c1[GraphRAG search<br/>embed + traverse]:::proc
+    c2[CONCIERGE<br/>grounded answer + cites]:::agent
+    c1 --> c2
+  end
+  q([User asks Concierge<br/>who owns X · what was decided]):::start
+  sbg --> c1
+  q --> c1
+  c2 --> ans([Answer grounded<br/>in meeting memory]):::start
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef agent fill:#1a2d6b,stroke:#6f8cff,color:#dde6ff,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px

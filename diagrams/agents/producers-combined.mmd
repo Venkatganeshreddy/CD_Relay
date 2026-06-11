@@ -1,55 +1,56 @@
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
-flowchart TD
-  ts([Trigger · MOM Loader<br/>paste transcript]):::start
-  tr([Trigger · WeeklyView<br/>Regenerate]):::start
-  tn([Trigger · task blocked<br/>escalate event]):::start
+flowchart LR
+  %% ---- triggers / sources (green) ----
+  rep([People submit<br/>daily reports]):::start
+  mom([MOM transcript<br/>MOM Loader]):::start
 
-  subgraph IN[Phase 1 · per-agent prompt assembly]
-    sp[Scribe · roster + 4-output<br/>prompt + 1-shot example]:::proc
-    rp[Rollup · dept reports in scope<br/>consolidate prompt + cite ids]:::proc
-    np[Sentry · 1-line escalation prompt<br/>task facts + target]:::proc
-  end
-  ts --> sp
-  tr --> rp
-  tn --> np
+  %% ---- agents (indigo) ----
+  rollup[ROLLUP<br/>consolidate the week]:::agent
+  scribe[SCRIBE<br/>extract action items]:::agent
+  disp[DISPATCHER<br/>route items to owners]:::agent
+  carto[CARTOGRAPHER<br/>build memory graph]:::agent
+  sentry[SENTRY<br/>draft escalation]:::agent
+  concierge[CONCIERGE<br/>grounded chat]:::agent
+  curator[CURATOR<br/>distil corrections to rules]:::agent
 
-  subgraph CORE[Phase 2 · shared run core]
-    mem[memoryFor agent<br/>inject Curator rules]:::proc
-    ask[askAgent model=smart]:::proc
-    log[log ai_runs + activity]:::proc
-    edge[Edge Function relay-agent<br/>JWT · OPENROUTER_API_KEY]:::edge
-    model[OpenRouter &rarr; Claude Sonnet 4.6]:::model
-    mem --> ask --> edge --> model
-    ask -.-> log
-  end
-  sp --> mem
-  rp --> mem
-  np --> mem
+  %% ---- stores (brown) ----
+  weekly[(weekly_summaries<br/>draft)]:::store
+  tasks[(tasks)]:::store
+  sbg[(Second Brain<br/>graph)]:::store
+  feed[(activity feed)]:::store
+  engram[(engram_interactions)]:::store
+  rules[(relay_agents.memory<br/>learned rules)]:::store
 
-  subgraph OUT[Phase 3 · per-agent parse + output]
-    dp{parse / clean ok?}:::dec
-    so([Scribe &rarr; agenda·attendees<br/>summary·items]):::start
-    ro([Rollup &rarr; sections<br/>Highlights·Risks·Asks + cites]):::start
-    no([Sentry &rarr; one escalation line]):::start
-    fb[Fallback · empty shape / null<br/>template / canned items]:::stop
-    dp -- yes --> so
-    dp -- yes --> ro
-    dp -- yes --> no
-    dp -- no --> fb
-  end
-  model --> dp
+  %% ---- produce: each trigger to its own output to its store ----
+  rep -->|last 7 days| rollup -->|Highlights Risks Asks| weekly
+  mom -->|transcript| scribe -->|action items| disp -->|owner-assigned| tasks
+  mom -->|same commit| carto -->|entities events edges| sbg
+  tasks -->|blocked or overdue| sentry -->|escalation line| feed
 
-  tasks[(tasks + engram_interactions)]:::store
-  draft[(weekly_summaries draft)]:::store
-  feed[(activity feed · escalation)]:::store
-  so --> tasks
-  ro --> draft
-  no --> feed
+  %% ---- read side: Concierge grounds on the stores ----
+  sbg -->|GraphRAG recall| concierge
+  tasks -.->|scoped read| concierge
+  weekly -.->|scoped read| concierge
+
+  %% ---- human review feeds the learning loop ----
+  weekly -->|approve or edit| engram
+  tasks -->|approve or reject| engram
+  feed -->|kept or changed| engram
+  engram -->|5+ corrections| curator -->|3 to 7 rules| rules
+
+  %% ---- loop closed: rules injected into each producer's next run ----
+  rules -.->|memoryFor inject| rollup
+  rules -.->|memoryFor inject| scribe
+  rules -.->|memoryFor inject| sentry
+  rules -.->|memoryFor inject| carto
+  done([LOOP CLOSED<br/>producers self-correct]):::start
+  rules --> done
 
   classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
-  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
+  classDef agent fill:#1a2d6b,stroke:#6f8cff,color:#dde6ff,stroke-width:1.5px
   classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
   classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
   classDef edge fill:#2a1a3f,stroke:#9a6cff,color:#e7defb
   classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
   classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0
+  classDef stop fill:#5a1722,stroke:#f85149,color:#ffe9ec,stroke-width:1.5px
