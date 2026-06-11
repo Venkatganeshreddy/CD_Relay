@@ -4,7 +4,7 @@
 //   - Workflows (one card per core flow, validate-then-activate on edit)
 //   - Guidelines (versioned, with edit history)
 
-const { useState: useStCx } = React;
+const { useState: useStCx, useEffect: useEfCx, useRef: useRfCx } = React;
 
 function CodexView({ tweaks, currentUser, nav, initialTab }) {
   const [tab, setTab] = useStCx(initialTab || 'architecture');
@@ -28,6 +28,7 @@ function CodexView({ tweaks, currentUser, nav, initialTab }) {
       <div className="row" style={{ gap: 6, marginBottom: 16 }}>
         {[
           { id: 'architecture', label: 'Architecture' },
+          { id: 'flows', label: 'Agent Flows', count: 4 },
           { id: 'workflows', label: 'Workflows', count: window.CDC.CODEX_WORKFLOWS.length },
           { id: 'guidelines', label: 'Guidelines', count: window.CDC.CODEX_GUIDELINES.length },
         ].map((tabInfo) => (
@@ -41,12 +42,246 @@ function CodexView({ tweaks, currentUser, nav, initialTab }) {
       </div>
 
       {tab === 'architecture' && <ArchitectureView tweaks={tweaks} currentUser={currentUser} nav={nav} embedded />}
+      {tab === 'flows' && <AgentFlowsTab canEdit={canEdit} nav={nav} />}
       {tab === 'workflows' && <WorkflowsTab canEdit={canEdit} />}
       {tab === 'guidelines' && <GuidelinesTab canEdit={canEdit} nav={nav} />}
     </div>
   );
 }
 window.CodexView = CodexView;
+
+// ── Agent Flows tab ───────────────────────────────────────────────────
+// Live-renders the Mermaid control-flow sources in diagrams/agents/ so the
+// in-app diagram is the same artifact the repo ships. Real prod names:
+// Edge Function relay-agent, Claude Sonnet 4.6, the actual tables.
+
+const FLOW_DEFS = [
+  {
+    id: 'system', label: 'System loop', file: 'producers-combined.mmd',
+    blurb: 'How the three producers chain outputs into stores — and how Curator closes the learning loop.',
+    trigger: 'MOM upload · Weekly “Regenerate” · task-blocked event',
+    input: 'Pasted transcript · in-scope daily reports · blocked-task facts',
+    output: 'tasks · weekly_summaries · activity feed',
+    feeds: 'Engram corrections on those outputs → Curator → rules injected into each producer’s NEXT run.',
+    model: 'Claude Sonnet 4.6 (smart) via relay-agent',
+    source: 'supabase-client.js:311–503 · views-relay.jsx:306–491',
+  },
+  {
+    id: 'scribe', label: 'Scribe', file: 'scribe.mmd',
+    blurb: 'Meeting transcript → structured action items.',
+    trigger: 'MOM Loader · paste transcript (len > 20, agents available)',
+    input: 'Transcript text + roster (USERS → name·level·sub)',
+    output: 'agenda · attendees · summary (3 lenses) · items',
+    feeds: 'Dispatcher (deterministic 5-tier route) → tasks + engram_interactions → TasksView (MINE filter).',
+    model: 'Claude Sonnet 4.6 (smart)',
+    source: 'views-relay.jsx · MomLoader',
+  },
+  {
+    id: 'rollup', label: 'Rollup', file: 'rollup.mmd',
+    blurb: 'A week of daily reports → consolidated weekly summary.',
+    trigger: 'WeeklyView · Regenerate / Generate all',
+    input: 'REPORTS where dept == weekly.dept AND not missing',
+    output: 'sections: Highlights · Risks · Asks (+ cited source report ids)',
+    feeds: 'weekly_summaries draft → human approve / edit → publish.',
+    model: 'Claude Sonnet 4.6 (smart)',
+    source: 'supabase-client.js · runRollup()',
+  },
+  {
+    id: 'sentry', label: 'Sentry', file: 'sentry.mmd',
+    blurb: 'A stuck task → one human-readable escalation line.',
+    trigger: 'task blocked / escalate event',
+    input: 'task facts: title · status · owner · reason · daysStuck · due · target',
+    output: 'one escalation line (routing target stays deterministic in caller)',
+    feeds: 'activity feed (escalation). Null result → caller uses a template line.',
+    model: 'Claude Sonnet 4.6 (smart)',
+    source: 'supabase-client.js · runSentry()',
+  },
+  {
+    id: 'curator', label: 'Curator (loop)', file: 'curator.mmd',
+    blurb: 'Human corrections → learned rules. The self-evolving loop that tunes the other three.',
+    trigger: 'auto · 5 corrections for an agent · or manual/scheduled pass',
+    input: 'engram_interactions where action != accept (only edits / rejects teach)',
+    output: 'relay_agents.data.memory: 3–7 imperative rules + distilledFrom + ts',
+    feeds: 'memoryFor() injects those rules into that agent’s NEXT run → producers self-correct. LOOP CLOSED.',
+    model: 'Claude Sonnet 4.6 (smart)',
+    source: 'supabase-client.js · runCurator()',
+  },
+];
+
+// Substring → explainer, surfaced when a node is clicked. Matched against the
+// node's text so it survives Mermaid's id-mangling.
+const FLOW_GLOSSARY = [
+  { match: ['relay-agent', 'Edge Function'], title: 'Edge Function · relay-agent', detail: 'JWT-gated OpenRouter proxy (verify_jwt on). API key lives in env OPENROUTER_API_KEY, never in the browser. supabase/functions/relay-agent/index.ts' },
+  { match: ['Claude Sonnet', 'OpenRouter'], title: 'Model · Claude Sonnet 4.6', detail: 'anthropic/claude-sonnet-4.6 via OpenRouter (LLM_MODEL_SMART). The “fast” alias is Haiku 4.5.' },
+  { match: ['memoryFor'], title: 'memoryFor()', detail: 'Pulls the agent’s Curator-distilled rules from relay_agents.data.memory and injects them into the system prompt before each run. This is the loop-closing step.' },
+  { match: ['engram', 'ENGRAM'], title: 'engram_interactions', detail: 'AI-draft vs human-kept vs reason. The correction signal Curator learns from — only edits/rejects teach, accepts are ignored.' },
+  { match: ['ai_runs', 'activity'], title: 'ai_runs + activity', detail: 'Every run is logged: ai_runs powers the AI runs view, activity powers the feed. Best-effort (local optimistic + remote).' },
+  { match: ['tasks'], title: 'tasks (+ engram_interactions)', detail: 'Owner-assigned action items. Created with owner = assignee; visible in TasksView under the MINE filter for that person.' },
+  { match: ['weekly_summaries', 'weekly'], title: 'weekly_summaries draft', detail: 'Highlights / Risks / Asks with cited report ids. Human approves / edits → publish.' },
+  { match: ['Dispatcher'], title: 'Dispatcher', detail: 'Deterministic 5-tier routing of each action item to an employee (assigneeHint → person). Code, not an LLM call.' },
+  { match: ['Fallback', 'fallback', 'canned', 'template'], title: 'Fail-soft fallback', detail: 'On LLM/parse failure: deterministic extract, canned demo items, or a template line. The flow never hard-fails the UI.' },
+  { match: ['parse', 'JSON.parse', 'regex'], title: 'Parse step', detail: 'Regex-extract the JSON block from the model output, JSON.parse it. On failure → fallback (fail-soft).' },
+  { match: ['relay_agents', 'memory'], title: 'relay_agents.data.memory', detail: 'Where Curator writes the distilled rules (+ distilledFrom + ts). Updated local + remote.' },
+];
+
+function lazyScript(src, globalName) {
+  return new Promise((resolve, reject) => {
+    if (window[globalName]) return resolve(window[globalName]);
+    let s = document.querySelector('script[data-lazy="' + src + '"]');
+    if (s) { s.addEventListener('load', () => resolve(window[globalName])); s.addEventListener('error', reject); return; }
+    s = document.createElement('script');
+    s.src = src; s.async = true; s.setAttribute('data-lazy', src);
+    s.onload = () => resolve(window[globalName]);
+    s.onerror = () => reject(new Error('failed to load ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+function MermaidFlow({ file, onNode }) {
+  const ref = useRfCx(null);
+  const [err, setErr] = useStCx(null);
+  const [loading, setLoading] = useStCx(true);
+
+  useEfCx(() => {
+    let cancelled = false; let panzoom = null;
+    setErr(null); setLoading(true);
+    (async () => {
+      try {
+        await lazyScript('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js', 'mermaid');
+        await lazyScript('https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js', 'svgPanZoom');
+        const res = await fetch('diagrams/agents/' + file, { cache: 'no-cache' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const src = await res.text();
+        if (cancelled) return;
+        window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { htmlLabels: true } });
+        const renderId = 'mmd-' + file.replace(/\W/g, '');
+        const { svg } = await window.mermaid.render(renderId, src);
+        if (cancelled || !ref.current) return;
+        ref.current.innerHTML = svg;
+        const svgEl = ref.current.querySelector('svg');
+        if (svgEl) {
+          svgEl.removeAttribute('height'); svgEl.style.maxWidth = 'none';
+          svgEl.style.width = '100%'; svgEl.style.height = '100%';
+          if (window.svgPanZoom) {
+            panzoom = window.svgPanZoom(svgEl, { controlIconsEnabled: true, fit: true, center: true, minZoom: 0.3, maxZoom: 8, zoomScaleSensitivity: 0.35 });
+          }
+          svgEl.querySelectorAll('.node').forEach((n) => {
+            n.style.cursor = 'pointer';
+            n.addEventListener('click', () => { if (onNode) onNode((n.textContent || '').trim()); });
+          });
+        }
+        setLoading(false);
+      } catch (e) { if (!cancelled) { setErr(e.message || String(e)); setLoading(false); } }
+    })();
+    return () => { cancelled = true; if (panzoom) { try { panzoom.destroy(); } catch (_) {} } };
+  }, [file]);
+
+  if (err) return (
+    <div className="empty" style={{ padding: 24 }}>
+      Couldn’t render the diagram ({err}). Source: <span className="code">diagrams/agents/{file}</span>
+    </div>
+  );
+  return (
+    <>
+      {loading && <div className="muted" style={{ position: 'absolute', top: 14, left: 16, fontSize: 12, zIndex: 2 }}>rendering {file}…</div>}
+      <div ref={ref} style={{ width: '100%', height: '100%' }} />
+    </>
+  );
+}
+
+function AgentFlowsTab({ canEdit, nav }) {
+  const [active, setActive] = useStCx('system');
+  const [node, setNode] = useStCx(null);
+  const def = FLOW_DEFS.find((f) => f.id === active) || FLOW_DEFS[0];
+
+  const onNode = (text) => {
+    if (!text) return;
+    const g = FLOW_GLOSSARY.find((e) => e.match.some((m) => text.includes(m)));
+    setNode(g ? { title: g.title, detail: g.detail } : { title: text, detail: 'Step in the ' + def.label + ' flow.' });
+  };
+
+  return (
+    <div className="col" style={{ gap: 12 }}>
+      <div className="muted" style={{ fontSize: 12.5, padding: '0 4px' }}>
+        Live-rendered from <span className="code">diagrams/agents/*.mmd</span> — the same control-flow the code runs.
+        Trigger → prompt → <span className="code">run()</span> → Edge Function <span className="code">relay-agent</span> → Claude Sonnet 4.6 → parse → output, with fail-soft fallback.
+        Drag to pan · scroll to zoom · click a node for detail.
+      </div>
+
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {FLOW_DEFS.map((f) => (
+          <button key={f.id} className="btn" data-size="sm"
+            data-variant={active === f.id ? 'primary' : 'ghost'}
+            onClick={() => { setActive(f.id); setNode(null); }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }}>
+        <div className="card" style={{ position: 'relative', height: 600, overflow: 'hidden', background: '#0a1422', borderRadius: 8 }}>
+          <MermaidFlow key={def.file} file={def.file} onNode={onNode} />
+        </div>
+
+        <div className="col" style={{ gap: 12 }}>
+          <Card>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{def.label}</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{def.blurb}</div>
+            <dl className="kv" style={{ fontSize: 12 }}>
+              <dt>Trigger</dt><dd>{def.trigger}</dd>
+              <dt>Input</dt><dd>{def.input}</dd>
+              <dt>Output</dt><dd>{def.output}</dd>
+              <dt>Feeds into</dt><dd>{def.feeds}</dd>
+              <dt>Model</dt><dd>{def.model}</dd>
+            </dl>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" data-size="sm" data-variant="ghost"
+                onClick={() => nav.go('copilot', { prefill: 'Walk me through the ' + def.label + ' agent flow — its trigger, inputs and outputs.' })}>
+                <Icon name="sparkles" size={11} /> Ask Concierge
+              </button>
+            </div>
+            <div className="muted mono" style={{ fontSize: 10.5, marginTop: 8 }}>{def.source}</div>
+          </Card>
+
+          {node && (
+            <Card>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <strong style={{ fontSize: 12.5 }}>{node.title}</strong>
+                <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setNode(null)}>✕</button>
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>{node.detail}</div>
+            </Card>
+          )}
+
+          <Card>
+            <div style={{ fontSize: 11.5, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.05 }}>Legend</div>
+            <div className="col" style={{ gap: 6, fontSize: 11.5 }}>
+              {[
+                ['#34d058', 'trigger / return / loop closed'],
+                ['#2b6cb0', 'process step (code)'],
+                ['#caa53d', 'decision / loop'],
+                ['#9a6cff', 'Edge Function (JWT)'],
+                ['#2bb0a8', 'LLM · Claude Sonnet 4.6'],
+                ['#f85149', 'stop / fallback / skip'],
+                ['#b8860b', 'persisted table'],
+              ].map(([c, label]) => (
+                <div key={label} className="row" style={{ gap: 8, alignItems: 'center' }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: c, flexShrink: 0 }} />
+                  <span className="muted">{label}</span>
+                </div>
+              ))}
+            </div>
+            {canEdit && (
+              <div className="muted" style={{ fontSize: 10.5, marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                Edit <span className="code">diagrams/agents/{def.file}</span> in the repo to update this diagram.
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Workflows tab ─────────────────────────────────────────────────────
 function WorkflowsTab({ canEdit }) {
