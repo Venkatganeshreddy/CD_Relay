@@ -152,6 +152,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     ...(isL3orAdmin ? [{ id: 'farm', label: 'Agent Farm', icon: 'plug' }] : []),
   ];
   const groupSystem = (isL3orAdmin) ? [
+    { id: 'knowledge', label: 'Knowledge', icon: 'sheet' },
     { id: 'codex', label: 'Codex', icon: 'admin' },
     { id: 'engram', label: 'Engram', icon: 'sparkles', badge: window.CDC.PROPOSALS.filter((p) => p.state === 'pending').length, badgeTone: 'amber' },
     { id: 'expense', label: 'Tool Expense Tracker', icon: 'runs' },
@@ -222,6 +223,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'submit': return <GlanceView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'worklogs': return <WorklogsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'architecture': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} initialTab="architecture" />;
+    case 'knowledge': return <KnowledgeView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'codex': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'expense': return <ExpenseView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'engram': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;

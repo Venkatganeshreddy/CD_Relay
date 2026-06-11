@@ -126,25 +126,355 @@ function wd_streamText(r) {
 
 function SecondBrainView({ tweaks, currentUser, nav }) {
   const [tab, setTab] = useStP('digest');
+  const CDC = window.CDC;
+  const openRecs = (CDC.RECOMMENDATIONS || []).filter((r) => r.status === 'new').length;
   return (
     <div className="fadein">
       <SectionHeader
         title="Second Brain"
-        subtitle="The department at a glance — weekly digests and meeting memory."
+        subtitle="What the department captured — and what the Advisor suggests because of it."
         actions={
           <div className="seg">
             <button data-active={tab === 'digest'} onClick={() => setTab('digest')}>Weekly digest</button>
+            <button data-active={tab === 'recs'} onClick={() => setTab('recs')}>Recommendations{openRecs ? ` (${openRecs})` : ''}</button>
             <button data-active={tab === 'memory'} onClick={() => setTab('memory')}>Meeting memory</button>
           </div>
         }
       />
-      {tab === 'digest'
-        ? <WeeklyDigestPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />
-        : <MeetingMemoryPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />}
+      {tab === 'digest' && <WeeklyDigestPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />}
+      {tab === 'recs' && <RecommendationsPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />}
+      {tab === 'memory' && <MeetingMemoryPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />}
     </div>
   );
 }
 window.SecondBrainView = SecondBrainView;
+
+// ── Recommendations — the emergent Second Brain layer (Advisor agent) ────
+const REC_KINDS = [
+  { id: 'operational', label: 'Operational', tone: 'red', icon: 'tasks' },
+  { id: 'process', label: 'Process', tone: 'amber', icon: 'sheet' },
+  { id: 'priorities', label: 'Priorities', tone: 'accent', icon: 'sparkles' },
+  { id: 'people', label: 'People', tone: 'green', icon: 'users' },
+];
+const REC_KIND = REC_KINDS.reduce((m, k) => ((m[k.id] = k), m), {});
+
+// Assemble a compact, grounded brief for the Advisor from Knowledge + captures.
+function rec_buildContext(currentUser) {
+  const CDC = window.CDC;
+  const lines = [];
+  // Hierarchy / org (Knowledge)
+  const depts = CDC.filterDepartments(currentUser.id);
+  lines.push('# Departments & sub-teams');
+  for (const d of depts) lines.push(`- ${d.id} "${d.name}" subs: ${(d.subs || []).join('; ') || '—'}`);
+  // People load (Knowledge + capture): worklog hours per person over 14 days
+  const logs = CDC.worklogsWithin(currentUser.id, 14);
+  const byUser = {};
+  for (const w of logs) { const k = w.userId; (byUser[k] = byUser[k] || { name: w.userName, sub: w.sub, hours: 0, n: 0 }); byUser[k].hours += (w.hours || 0); byUser[k].n++; }
+  lines.push('\n# Contributor load (last 14 days)');
+  Object.values(byUser).sort((a, b) => b.hours - a.hours).slice(0, 40)
+    .forEach((u) => lines.push(`- ${u.name} (${u.sub || '—'}): ${u.hours.toFixed(0)}h across ${u.n} entries`));
+  if (!logs.length) lines.push('- (no worklogs captured in range)');
+  // Missing reports (capture)
+  const missing = (CDC.dailyStatus(currentUser.id) || []).filter((s) => !s.submitted);
+  if (missing.length) { lines.push('\n# Missing daily reports today'); missing.slice(0, 30).forEach((s) => lines.push(`- ${s.user.name} (${s.stack})`)); }
+  // Open flags / blockers (capture)
+  const flags = (CDC.filterFlags ? CDC.filterFlags(currentUser.id) : (CDC.FLAGS || [])).filter((f) => f.state === 'open' || !f.state);
+  if (flags.length) { lines.push('\n# Open flags / blockers'); flags.slice(0, 20).forEach((f) => lines.push(`- [${f.id}] ${f.title || f.kind || ''} ${f.detail || f.reason || ''}`.trim())); }
+  // KPIs (capture)
+  const kpis = (CDC.filterKpis ? CDC.filterKpis(currentUser.id) : (CDC.KPIS || []));
+  if (kpis.length) { lines.push('\n# KPIs'); kpis.slice(0, 20).forEach((k) => lines.push(`- [${k.id}] ${k.name || k.title}: ${k.value ?? '?'}${k.target != null ? ' / target ' + k.target : ''} ${k.status || ''}`.trim())); }
+  // Latest weekly digest highlights (capture)
+  const digest = (CDC.WEEKLY_DIGESTS || []).slice().sort((a, b) => (a.weekOf < b.weekOf ? 1 : -1))[0];
+  if (digest) {
+    lines.push(`\n# Latest weekly digest ${digest.weekLabel || ''} (${digest.range || digest.weekOf})`);
+    for (const s of (digest.subs || [])) {
+      lines.push(`- ${s.sub}: ${s.hours || 0}h, ${(s.rows || []).length} streams`);
+      for (const r of (s.rows || []).slice(0, 4)) if (r.achieved) lines.push(`    • ${r.output}: ${r.achieved}`);
+    }
+  }
+  // MOM action items (capture)
+  const moms = (CDC.MOMS || []).slice(0, 6);
+  if (moms.length) {
+    lines.push('\n# Recent meeting action items');
+    for (const m of moms) for (const a of (m.actionItems || []).slice(0, 4)) lines.push(`- ${a.text || a.title} (owner: ${a.owner || a.assignee || '?'}, ${a.status || 'open'})`);
+  }
+  return lines.join('\n').slice(0, 9000);
+}
+
+function RecommendationsPanel({ tweaks, currentUser, nav }) {
+  const CDC = window.CDC;
+  const canRun = !!currentUser && ['L2', 'L3', 'Admin'].includes(currentUser.level) && CDC.agents && CDC.agents.available();
+  const [filter, setFilter] = useStP('all');
+  const [showDone, setShowDone] = useStP(false);
+  const [busy, setBusy] = useStP(false);
+  const [err, setErr] = useStP(null);
+  const [, force] = useStP(0);
+
+  const all = (CDC.RECOMMENDATIONS || []);
+  const visible = all
+    .filter((r) => filter === 'all' || r.kind === filter)
+    .filter((r) => showDone || r.status === 'new' || !r.status);
+
+  async function run() {
+    if (busy || !canRun) return;
+    setBusy(true); setErr(null);
+    try {
+      const ctx = rec_buildContext(currentUser);
+      const kinds = filter === 'all' ? null : [filter];
+      const items = await CDC.agents.runAdvisor({ ctx, kinds });
+      if (!items || !items.length) { setErr('No recommendations returned for this scope.'); return; }
+      const now = new Date().toISOString();
+      const cards = items.map((it, i) => ({
+        id: 'rec-' + Date.now().toString(36) + '-' + i,
+        kind: it.kind, title: it.title, detail: it.detail || '',
+        dept: it.dept || '', severity: it.severity || 'medium', refs: it.refs || [],
+        status: 'new', agent: 'Advisor', ts: now, by: currentUser.name,
+      }));
+      await CDC.db.addRecommendations(cards);
+      force((n) => n + 1);
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function triage(rec, status) { await CDC.db.updateRecommendation(rec.id, status); force((n) => n + 1); }
+
+  const countFor = (k) => all.filter((r) => (r.status === 'new' || !r.status) && (k === 'all' || r.kind === k)).length;
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="seg">
+          <button data-active={filter === 'all'} onClick={() => setFilter('all')}>All{countFor('all') ? ` (${countFor('all')})` : ''}</button>
+          {REC_KINDS.map((k) => (
+            <button key={k.id} data-active={filter === k.id} onClick={() => setFilter(k.id)}>{k.label}{countFor(k.id) ? ` (${countFor(k.id)})` : ''}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <label className="row muted" style={{ gap: 5, fontSize: 11.5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> show triaged
+        </label>
+        <button className="btn" data-variant="primary" disabled={busy || !canRun} onClick={run}>
+          <Icon name="sparkles" size={12} /> {busy ? 'Advisor thinking…' : 'Run Advisor now'}
+        </button>
+      </div>
+
+      {!canRun && (
+        <div className="muted" style={{ fontSize: 11.5 }}>
+          Recommendations are written by the Advisor agent — available to managers (L2+) when the backend is connected. They are also generated on a weekly schedule.
+        </div>
+      )}
+      {err && <div className="card card-pad" style={{ borderColor: 'var(--amber)', color: 'var(--amber)', fontSize: 12 }}>{err}</div>}
+
+      {visible.length === 0 && !busy && (
+        <div className="empty">No recommendations yet. {canRun ? 'Click “Run Advisor now” to generate suggestions from the latest captures.' : ''}</div>
+      )}
+
+      <div className="col" style={{ gap: 10 }}>
+        {visible.map((r) => {
+          const k = REC_KIND[r.kind] || { label: r.kind, tone: 'neutral', icon: 'sparkles' };
+          const deptName = r.dept ? ((CDC.lookup.dept(r.dept) || {}).name || r.dept) : 'Cross-department';
+          return (
+            <div key={r.id} className="card card-pad" style={{ opacity: r.status && r.status !== 'new' ? 0.6 : 1 }}>
+              <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                <Pill tone={k.tone}><Icon name={k.icon} size={11} /> {k.label}</Pill>
+                {r.severity && <Pill tone={r.severity === 'high' ? 'red' : r.severity === 'low' ? 'muted' : 'amber'}>{r.severity}</Pill>}
+                <span className="muted" style={{ fontSize: 11 }}>{deptName}</span>
+                <div style={{ flex: 1 }} />
+                {r.status && r.status !== 'new' && <Pill tone="muted">{r.status}</Pill>}
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}>{r.title}</div>
+              {r.detail && <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{r.detail}</div>}
+              <div className="row" style={{ gap: 6, marginTop: 10, alignItems: 'center' }}>
+                {(r.refs || []).length > 0 && <span className="muted mono" style={{ fontSize: 10.5 }}>refs: {r.refs.join(', ')}</span>}
+                <div style={{ flex: 1 }} />
+                {(!r.status || r.status === 'new') && canRun && (
+                  <>
+                    <button className="btn" data-size="sm" onClick={() => triage(r, 'acted')}><Icon name="weekly" size={11} /> Mark acted</button>
+                    <button className="btn" data-size="sm" data-variant="primary" onClick={() => triage(r, 'accepted')}>Accept</button>
+                    <button className="btn" data-size="sm" onClick={() => triage(r, 'dismissed')}>Dismiss</button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+window.RecommendationsPanel = RecommendationsPanel;
+
+// ── Knowledge — the concrete, authoritative layer (the source of truth) ──
+// Reads what's already ingested into knowledge_docs (from the Obsidian vault)
+// plus the always-present org data, bucketed into five categories.
+const KN_BUCKETS = [
+  { id: 'emp', label: 'Emp data' },
+  { id: 'taskflow', label: 'Task flow' },
+  { id: 'momflow', label: 'MOM flow' },
+  { id: 'arch', label: 'Architecture' },
+  { id: 'hierarchy', label: 'Hierarchy' },
+];
+function kn_bucket(doc) {
+  const p = (doc.path || doc.id || '').toLowerCase();
+  const t = doc.title || '';
+  if (doc.type === 'person' || p.startsWith('people/')) return 'emp';
+  if (p === 'org.md' || /\borg\b|hierarch/i.test(p)) return 'hierarchy';
+  if (/mom|meeting/i.test(p) || /mom|meeting/i.test(t)) return 'momflow';
+  if (p.startsWith('guidelines/') || p.startsWith('workflows/')) return 'taskflow';
+  return 'arch'; // architecture, agents, notes
+}
+// The concrete daily & weekly schemas (the "Task flow" definition itself).
+const KN_DAILY_FIELDS = ['EMP ID', 'Metric Category (auto)', 'Product-Audience', 'Task Category (auto)', 'Stack', 'Output Category', 'Output Count', 'Task', 'Status', 'If blocked/overdue — reason', 'Estimated Time'];
+const KN_WEEKLY_FIELDS = ['Metric Category (auto)', 'Product-Audience', 'Stack', 'Output Category', 'Output Count', 'What was achieved? (agent insight from daily reports)', 'Logged Time (Consolidated)'];
+
+function KnowledgeView({ tweaks, currentUser, nav }) {
+  const CDC = window.CDC;
+  const [bucket, setBucket] = useStP('emp');
+  const docs = (CDC.KNOWLEDGE || []);
+  const docsIn = (id) => docs.filter((d) => kn_bucket(d) === id);
+  const users = CDC.USERS || [];
+  const deptName = (id) => (CDC.lookup.dept(id) || {}).name || id || '—';
+  const empId = (id) => (CDC.empIdForUser ? CDC.empIdForUser(id) : id) || id;
+
+  const DocList = ({ items }) => (
+    items.length === 0
+      ? <div className="muted" style={{ fontSize: 11.5 }}>No vault notes ingested for this category yet. Run <span className="mono">scripts/import_obsidian.cjs</span> to sync the Obsidian vault into <span className="mono">knowledge_docs</span>.</div>
+      : <div className="col" style={{ gap: 10 }}>
+          {items.map((d) => (
+            <div key={d.id} className="card card-pad">
+              <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{d.title}</span>
+                {d.type && <Pill tone="muted">{d.type}</Pill>}
+                <div style={{ flex: 1 }} />
+                <span className="muted mono" style={{ fontSize: 10.5 }}>{d.path}</span>
+              </div>
+              {d.body && <div className="muted" style={{ fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{String(d.body).slice(0, 700)}{String(d.body).length > 700 ? '…' : ''}</div>}
+            </div>
+          ))}
+        </div>
+  );
+
+  return (
+    <div className="fadein">
+      <SectionHeader
+        title="Knowledge"
+        subtitle="The concrete source of truth — emp data, task & MOM flow, architecture, hierarchy. The Second Brain reasons against this."
+        actions={<Pill tone="muted">{docs.length} vault docs</Pill>}
+      />
+      <div className="seg" style={{ marginBottom: 16 }}>
+        {KN_BUCKETS.map((b) => (
+          <button key={b.id} data-active={bucket === b.id} onClick={() => setBucket(b.id)}>{b.label}</button>
+        ))}
+      </div>
+
+      {bucket === 'emp' && (
+        <div className="col" style={{ gap: 14 }}>
+          <h2 className="h-section" style={{ margin: 0 }}>Employees · {users.length}</h2>
+          <Card pad={false}>
+            <table className="tbl">
+              <thead><tr><th>Name</th><th>EMP ID</th><th>Level</th><th>Department</th><th>Sub-team</th><th>Reports to</th></tr></thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 500 }}>{u.name}</td>
+                    <td className="mono muted" style={{ fontSize: 11.5 }}>{empId(u.id)}</td>
+                    <td><Pill tone="muted">{u.level}</Pill></td>
+                    <td style={{ fontSize: 12 }}>{deptName(u.dept)}</td>
+                    <td style={{ fontSize: 12 }}>{u.sub || '—'}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{u.managerId ? ((CDC.lookup.user(u.managerId) || {}).name || u.managerId) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+          <DocList items={docsIn('emp')} />
+        </div>
+      )}
+
+      {bucket === 'taskflow' && (
+        <div className="col" style={{ gap: 14 }}>
+          <h2 className="h-section" style={{ margin: 0 }}>Daily report schema</h2>
+          <Card><div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {KN_DAILY_FIELDS.map((f) => <Pill key={f} tone="muted">{f}</Pill>)}
+          </div></Card>
+          <h2 className="h-section" style={{ margin: 0 }}>Weekly consolidation schema</h2>
+          <Card><div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {KN_WEEKLY_FIELDS.map((f) => <Pill key={f} tone="muted">{f}</Pill>)}
+          </div></Card>
+          <h2 className="h-section" style={{ margin: 0 }}>Output → Metric / Task mapping (auto-derived)</h2>
+          <Card pad={false}>
+            <table className="tbl">
+              <thead><tr><th>Output Category</th><th>Task Category</th><th>Metric Category</th></tr></thead>
+              <tbody>
+                {Object.entries((CDC.TASK_CATALOG || {}).OUTPUT_MAP || {}).map(([out, m]) => (
+                  <tr key={out}><td style={{ fontSize: 12 }}>{out}</td><td style={{ fontSize: 12 }}>{m.task}</td><td style={{ fontSize: 12 }}>{m.metric}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+          <h2 className="h-section" style={{ margin: 0 }}>Guidelines & flow notes</h2>
+          <DocList items={docsIn('taskflow')} />
+        </div>
+      )}
+
+      {bucket === 'momflow' && (
+        <div className="col" style={{ gap: 14 }}>
+          <h2 className="h-section" style={{ margin: 0 }}>MOM flow</h2>
+          <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>Meeting transcript → Scribe extracts action items → Dispatcher routes each to an owner → tasks &amp; meeting memory land in the Second Brain.</div>
+          <DocList items={docsIn('momflow')} />
+        </div>
+      )}
+
+      {bucket === 'arch' && (
+        <div className="col" style={{ gap: 14 }}>
+          <h2 className="h-section" style={{ margin: 0 }}>Agents · {(CDC.RELAY_AGENTS || []).length}</h2>
+          {(CDC.RELAY_AGENTS || []).length > 0 && (
+            <Card pad={false}>
+              <table className="tbl">
+                <thead><tr><th>Agent</th><th>Role</th><th>Model</th></tr></thead>
+                <tbody>
+                  {(CDC.RELAY_AGENTS || []).map((a) => (
+                    <tr key={a.id || a.name}><td style={{ fontWeight: 500 }}>{a.name}</td><td className="muted" style={{ fontSize: 12 }}>{a.role || a.desc || '—'}</td><td className="mono muted" style={{ fontSize: 11 }}>{a.model || '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+          <h2 className="h-section" style={{ margin: 0 }}>Architecture notes</h2>
+          <DocList items={docsIn('arch')} />
+        </div>
+      )}
+
+      {bucket === 'hierarchy' && (
+        <div className="col" style={{ gap: 14 }}>
+          {CDC.filterDepartments(currentUser.id).map((d) => (
+            <div key={d.id} className="col" style={{ gap: 6 }}>
+              <h2 className="h-section" style={{ margin: 0 }}>{d.name}</h2>
+              <Card pad={false}>
+                <table className="tbl">
+                  <thead><tr><th>Sub-team</th><th>Members</th></tr></thead>
+                  <tbody>
+                    {(d.subs || []).map((sub) => {
+                      const mem = users.filter((u) => u.dept === d.id && u.sub === sub);
+                      return (
+                        <tr key={sub}>
+                          <td style={{ fontSize: 12, fontWeight: 500 }}>{sub}</td>
+                          <td style={{ fontSize: 12 }}>{mem.length ? mem.map((m) => `${m.name} (${m.level})`).join(', ') : <span className="muted">—</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </Card>
+            </div>
+          ))}
+          <DocList items={docsIn('hierarchy')} />
+        </div>
+      )}
+    </div>
+  );
+}
+window.KnowledgeView = KnowledgeView;
 
 // ── Weekly Digest — consolidated, all-departments weekly glance ──────────
 function WeeklyDigestPanel({ tweaks, currentUser, nav }) {

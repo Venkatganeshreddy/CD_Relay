@@ -39,9 +39,11 @@
     farm_agents: 'FARM_AGENTS', relay_agents: 'RELAY_AGENTS', codex_workflows: 'CODEX_WORKFLOWS',
     codex_guidelines: 'CODEX_GUIDELINES', ai_runs: 'AI_RUNS', activity: 'ACTIVITY',
     knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
+    recommendations: 'RECOMMENDATIONS',
   };
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
   if (!Array.isArray(window.CDC.WEEKLY_DIGESTS)) window.CDC.WEEKLY_DIGESTS = [];
+  if (!Array.isArray(window.CDC.RECOMMENDATIONS)) window.CDC.RECOMMENDATIONS = [];
   function fillArray(cdcKey, items) { const a = window.CDC[cdcKey]; if (!Array.isArray(a)) return; a.length = 0; for (const it of items) a.push(it); }
   function fillObject(obj, next) { if (!obj) return; for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, next); }
 
@@ -207,6 +209,19 @@
       const i = arr.findIndex((d) => d.id === digest.id);
       if (i >= 0) arr[i] = digest; else arr.unshift(digest);
       await remote(() => sb.from('weekly_digests').upsert({ id: digest.id, week_of: digest.weekOf, status: digest.status || 'GENERATED', data: digest }));
+    },
+    // Insert a batch of Advisor recommendation cards (the emergent Second Brain layer).
+    async addRecommendations(list) {
+      const arr = (window.CDC.RECOMMENDATIONS = window.CDC.RECOMMENDATIONS || []);
+      for (const rec of list) arr.unshift(rec);
+      if (list.length) await remote(() => sb.from('recommendations').insert(
+        list.map((rec) => ({ id: rec.id, kind: rec.kind, dept: rec.dept || null, status: rec.status || 'new', data: rec }))));
+    },
+    // Triage a recommendation card: accepted / dismissed / acted.
+    async updateRecommendation(id, status) {
+      const rec = (window.CDC.RECOMMENDATIONS || []).find((r) => r.id === id);
+      if (rec) rec.status = status;
+      await remote(() => sb.from('recommendations').update({ status, data: rec || { id, status } }).eq('id', id));
     },
     async addDailyReport(report) {
       if (Array.isArray(window.CDC.REPORTS)) window.CDC.REPORTS.unshift(report);
@@ -412,6 +427,33 @@
         const m = content.match(/\[[\s\S]*\]/);
         const arr = JSON.parse(m[0]);
         if (Array.isArray(arr)) return arr.map((x) => (typeof x === 'string' ? x : (x && x.text) || ''));
+      } catch (_) {}
+      return null;
+    },
+    // Advisor — the emergent Second Brain layer. Reads concrete Knowledge
+    // (org/hierarchy + flow defs) plus recent captures and proposes suggestion
+    // cards across four kinds. `ctx` is a pre-built, compact text brief assembled
+    // by the caller (so we don't ship raw tables to the model). Returns an array
+    // of { kind, title, detail, dept, severity, refs[] }, or null.
+    async runAdvisor({ ctx, kinds }) {
+      const allowed = (kinds && kinds.length) ? kinds : ['operational', 'process', 'priorities', 'people'];
+      const prompt = `You are Advisor, the recommendation engine for a Curriculum Development department's operating copilot.\n` +
+        `Read the BRIEF below (the department's structure plus its recent captured activity) and propose concrete, actionable suggestions.\n` +
+        `Allowed kinds: ${allowed.join(', ')}.\n` +
+        `  - operational: risks, missing reports, blocked/overdue work, KPI slips.\n` +
+        `  - process: guideline/SOP refinements suggested by recurring patterns.\n` +
+        `  - priorities: what to create or prioritise next (coverage gaps, growing backlogs).\n` +
+        `  - people: workload balance, reassignment, who is overloaded vs idle.\n` +
+        `Rules: ground EVERY suggestion in the brief — never invent names, numbers, or facts not present. ` +
+        `Prefer fewer, higher-signal items. Each "detail" is at most 2 sentences and states the so-what + a next step. ` +
+        `Set "dept" to the relevant department id from the brief, or "" if cross-department. ` +
+        `"severity" is one of low/medium/high. "refs" lists any ids from the brief you used.\n` +
+        `Return ONLY JSON: {"items":[{"kind":"operational","title":"...","detail":"...","dept":"","severity":"medium","refs":[]}]}. No preamble.\n\nBRIEF:\n${ctx}`;
+      const content = await this.run({ agent: 'Advisor', model: 'smart', inputLabel: 'Recommendations', messages: [{ role: 'user', content: prompt }] });
+      try {
+        const m = content.match(/\{[\s\S]*\}/);
+        const items = JSON.parse(m[0]).items;
+        if (Array.isArray(items)) return items.filter((it) => it && it.title && allowed.includes(it.kind));
       } catch (_) {}
       return null;
     },

@@ -1421,6 +1421,10 @@
   // Starts empty; filled live from Supabase (weekly_digests) or generated in-app.
   const WEEKLY_DIGESTS = [];
 
+  // Recommendations — the emergent layer: Advisor-generated suggestion cards
+  // (operational / process / priorities / people). Filled from Supabase.
+  const RECOMMENDATIONS = [];
+
   // Live "today" — re-evaluated on every read so the app keeps in step with the
   // real wall clock even if a tab stays open across midnight. Consumers still
   // treat `CDC.today` as a Date value, but they now get a fresh one each time.
@@ -1436,7 +1440,7 @@
     TASK_CATALOG,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
     KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
-    WORKLOGS, empIdForUser, WEEKLY_DIGESTS,
+    WORKLOGS, empIdForUser, WEEKLY_DIGESTS, RECOMMENDATIONS,
     ENGRAM, EVAL_SETS, PROPOSALS, FARM_AGENTS,
     RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,
     scopeForUser, filterDepartments, filterReports, filterKpis, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterEngram,
