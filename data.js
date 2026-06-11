@@ -1417,6 +1417,10 @@
 
   const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES };
 
+  // Weekly Digests — consolidated, all-departments weekly glance (Second Brain).
+  // Starts empty; filled live from Supabase (weekly_digests) or generated in-app.
+  const WEEKLY_DIGESTS = [];
+
   // Live "today" — re-evaluated on every read so the app keeps in step with the
   // real wall clock even if a tab stays open across midnight. Consumers still
   // treat `CDC.today` as a Date value, but they now get a fresh one each time.
@@ -1432,7 +1436,7 @@
     TASK_CATALOG,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
     KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
-    WORKLOGS, empIdForUser,
+    WORKLOGS, empIdForUser, WEEKLY_DIGESTS,
     ENGRAM, EVAL_SETS, PROPOSALS, FARM_AGENTS,
     RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,
     scopeForUser, filterDepartments, filterReports, filterKpis, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterEngram,

@@ -38,9 +38,10 @@
     engram_interactions: 'ENGRAM', eval_sets: 'EVAL_SETS', guideline_proposals: 'PROPOSALS',
     farm_agents: 'FARM_AGENTS', relay_agents: 'RELAY_AGENTS', codex_workflows: 'CODEX_WORKFLOWS',
     codex_guidelines: 'CODEX_GUIDELINES', ai_runs: 'AI_RUNS', activity: 'ACTIVITY',
-    knowledge_docs: 'KNOWLEDGE',
+    knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
   };
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
+  if (!Array.isArray(window.CDC.WEEKLY_DIGESTS)) window.CDC.WEEKLY_DIGESTS = [];
   function fillArray(cdcKey, items) { const a = window.CDC[cdcKey]; if (!Array.isArray(a)) return; a.length = 0; for (const it of items) a.push(it); }
   function fillObject(obj, next) { if (!obj) return; for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, next); }
 
@@ -199,6 +200,13 @@
       const merged = { ...(local || weeklyObj), ...patch };
       if (local) Object.assign(local, patch);
       await remote(() => sb.from('weekly_summaries').update({ status: merged.status, data: merged }).eq('id', weeklyObj.id));
+    },
+    // Upsert a consolidated weekly digest (one row per ISO week, all departments).
+    async saveWeeklyDigest(digest) {
+      const arr = (window.CDC.WEEKLY_DIGESTS = window.CDC.WEEKLY_DIGESTS || []);
+      const i = arr.findIndex((d) => d.id === digest.id);
+      if (i >= 0) arr[i] = digest; else arr.unshift(digest);
+      await remote(() => sb.from('weekly_digests').upsert({ id: digest.id, week_of: digest.weekOf, status: digest.status || 'GENERATED', data: digest }));
     },
     async addDailyReport(report) {
       if (Array.isArray(window.CDC.REPORTS)) window.CDC.REPORTS.unshift(report);
@@ -386,6 +394,26 @@
         `Cite the source report ids you used. Be concise and specific; no preamble.\n\nDaily reports:\n${ctx}`;
       const content = await this.run({ agent: 'Rollup', model: 'smart', inputLabel: `Weekly ${weekly.id}`, messages: [{ role: 'user', content: prompt }] });
       try { const m = content.match(/\{[\s\S]*\}/); return JSON.parse(m[0]).sections || null; } catch (_) { return null; }
+    },
+    // Weekly Digest — for ONE sub-department, write a grounded "what was achieved"
+    // line per consolidated work-stream. `streams` is an ordered array of plain
+    // strings describing each row (metric/product/stack/output/count/hours/topics).
+    // Returns an array of achievement sentences in the SAME order, or null.
+    async runWeeklyDigest({ sub, weekLabel, streams }) {
+      if (!Array.isArray(streams) || !streams.length) return null;
+      const numbered = streams.map((s, i) => `${i + 1}. ${s}`).join('\n');
+      const prompt = `You are Rollup, consolidating one week (${weekLabel}) of daily reports for the sub-department "${sub}".\n` +
+        `For EACH numbered work-stream below, write ONE concise sentence (max 24 words) stating what was achieved that week. ` +
+        `Ground it ONLY in the figures and topics given (counts, hours, status, topics, blockers); do not invent specifics. ` +
+        `If a stream has open blockers or non-Done status, reflect that honestly.\n` +
+        `Return ONLY a JSON array of exactly ${streams.length} strings, in the same order as the list. No preamble.\n\n${numbered}`;
+      const content = await this.run({ agent: 'Rollup', model: 'smart', inputLabel: `Digest ${weekLabel} · ${sub}`, messages: [{ role: 'user', content: prompt }] });
+      try {
+        const m = content.match(/\[[\s\S]*\]/);
+        const arr = JSON.parse(m[0]);
+        if (Array.isArray(arr)) return arr.map((x) => (typeof x === 'string' ? x : (x && x.text) || ''));
+      } catch (_) {}
+      return null;
     },
     // Sentry — draft a short escalation brief for a stuck/blocked task. Routing
     // (who the next manager is) stays deterministic in the caller; Sentry only

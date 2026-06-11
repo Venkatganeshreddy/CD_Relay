@@ -55,23 +55,282 @@ function MonthlyView({ tweaks, currentUser, nav }) {
 }
 window.MonthlyView = MonthlyView;
 
+// ── Weekly Digest helpers (module scope; pure, no React) ─────────────────
+function wd_fmt(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Monday (ISO week start) of a 'YYYY-MM-DD' date, returned as 'YYYY-MM-DD'.
+function wd_mondayOf(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const back = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+  d.setDate(d.getDate() - back);
+  return wd_fmt(d);
+}
+// ISO week label, e.g. '2026-W24', from a Monday 'YYYY-MM-DD'.
+function wd_isoWeek(mondayStr) {
+  const d = new Date(mondayStr + 'T00:00:00');
+  const t = new Date(d);
+  t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7)); // shift to the week's Thursday
+  const week1 = new Date(t.getFullYear(), 0, 4);
+  const wk = 1 + Math.round(((t - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return `${t.getFullYear()}-W${String(wk).padStart(2, '0')}`;
+}
+// Human range, e.g. 'Jun 8 – 14, 2026', from a Monday 'YYYY-MM-DD'.
+function wd_rangeLabel(mondayStr) {
+  const s = new Date(mondayStr + 'T00:00:00');
+  const e = new Date(s); e.setDate(e.getDate() + 6);
+  const mo = (x) => x.toLocaleString('en-US', { month: 'short' });
+  const tail = s.getMonth() === e.getMonth() ? `${e.getDate()}` : `${mo(e)} ${e.getDate()}`;
+  return `${mo(s)} ${s.getDate()} – ${tail}, ${e.getFullYear()}`;
+}
+const WD_SEP = ' :: ';
+// Consolidate the worklogs of ONE ISO week into sub-departments → rows.
+// Row key = Metric Category × Product-Audience × Stack × Output Category.
+function wd_build(worklogs, mondayStr) {
+  const OUTPUT_MAP = (window.CDC.TASK_CATALOG || {}).OUTPUT_MAP || {};
+  const inWeek = (worklogs || []).filter((w) => w.date && wd_mondayOf(w.date) === mondayStr);
+  const bySub = {};
+  for (const w of inWeek) {
+    const sub = w.sub || (window.CDC.lookup.dept(w.dept) || {}).name || w.dept || '—';
+    (bySub[sub] = bySub[sub] || []).push(w);
+  }
+  return Object.keys(bySub).sort().map((sub) => {
+    const rowMap = {};
+    for (const w of bySub[sub]) {
+      const metric = w.metricCategory || (OUTPUT_MAP[w.outputCategory] || {}).metric || '—';
+      const product = (w.products && w.products.length) ? w.products.join(', ') : '—';
+      const stack = (w.stacks && w.stacks.length) ? w.stacks.join(', ') : '—';
+      const output = w.outputCategory || '—';
+      const key = [metric, product, stack, output].join(WD_SEP);
+      const r = rowMap[key] || (rowMap[key] = { key, metric, product, stack, output, count: 0, hours: 0, logs: [], statuses: {} });
+      r.count += (w.outputCount || 0);
+      r.hours += (w.hours || 0);
+      r.statuses[w.status] = (r.statuses[w.status] || 0) + 1;
+      r.logs.push(w);
+    }
+    const rows = Object.values(rowMap).sort((a, b) => b.hours - a.hours);
+    return { sub, rows, hours: rows.reduce((s, r) => s + r.hours, 0), count: rows.reduce((s, r) => s + r.count, 0) };
+  });
+}
+// Grounding string for one row, fed to the Rollup agent.
+function wd_streamText(r) {
+  const topics = [...new Set(r.logs.map((w) => (w.template && (w.template.topic || w.template.module || w.template.course)) || '').filter(Boolean))].slice(0, 6);
+  const statuses = Object.entries(r.statuses).map(([s, n]) => `${n}×${s}`).join(', ');
+  const blockers = [...new Set(r.logs.map((w) => w.reason).filter(Boolean))].slice(0, 3);
+  return `Metric=${r.metric}; Product-Audience=${r.product}; Stack=${r.stack}; Output=${r.output}; ` +
+    `OutputCount=${r.count}; Hours=${r.hours.toFixed(1)}; Status=${statuses || 'n/a'}` +
+    (topics.length ? `; Topics=${topics.join(' / ')}` : '') +
+    (blockers.length ? `; Blockers=${blockers.join(' | ')}` : '');
+}
+
 function SecondBrainView({ tweaks, currentUser, nav }) {
+  const [tab, setTab] = useStP('digest');
+  return (
+    <div className="fadein">
+      <SectionHeader
+        title="Second Brain"
+        subtitle="The department at a glance — weekly digests and meeting memory."
+        actions={
+          <div className="seg">
+            <button data-active={tab === 'digest'} onClick={() => setTab('digest')}>Weekly digest</button>
+            <button data-active={tab === 'memory'} onClick={() => setTab('memory')}>Meeting memory</button>
+          </div>
+        }
+      />
+      {tab === 'digest'
+        ? <WeeklyDigestPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />
+        : <MeetingMemoryPanel tweaks={tweaks} currentUser={currentUser} nav={nav} />}
+    </div>
+  );
+}
+window.SecondBrainView = SecondBrainView;
+
+// ── Weekly Digest — consolidated, all-departments weekly glance ──────────
+function WeeklyDigestPanel({ tweaks, currentUser, nav }) {
+  const CDC = window.CDC;
+  const canGenerate = !!currentUser && ['L2', 'L3', 'Admin'].includes(currentUser.level) && CDC.agents && CDC.agents.available();
+  const worklogs = CDC.filterWorklogs(currentUser.id);
+
+  // Distinct weeks present in scope, newest first; fall back to the current week.
+  const weeks = useMP(() => {
+    const set = new Set();
+    for (const w of worklogs) { const m = w.date && wd_mondayOf(w.date); if (m) set.add(m); }
+    let list = [...set].sort().reverse();
+    if (!list.length) list = [wd_mondayOf(wd_fmt(new Date()))];
+    return list;
+  }, [worklogs.length]);
+
+  const [week, setWeek] = useStP(weeks[0]);
+  React.useEffect(() => { if (!weeks.includes(week)) setWeek(weeks[0]); }, [weeks.join(',')]);
+
+  const subs = useMP(() => wd_build(worklogs, week), [worklogs.length, week]);
+  const digestId = 'wd-' + wd_isoWeek(week);
+  const saved = (CDC.WEEKLY_DIGESTS || []).find((d) => d.id === digestId) || null;
+
+  const [achieved, setAchieved] = useStP({}); // `${sub}::${rowKey}` → sentence
+  const [busy, setBusy] = useStP(false);
+  const [err, setErr] = useStP(null);
+
+  // Rehydrate achievement text from a persisted digest when the week changes.
+  React.useEffect(() => {
+    const map = {};
+    if (saved && Array.isArray(saved.subs)) {
+      for (const s of saved.subs) for (const r of (s.rows || [])) {
+        if (r.achieved) map[`${s.sub}${WD_SEP}${r.key}`] = r.achieved;
+      }
+    }
+    setAchieved(map);
+  }, [week, saved && saved.generatedAt]);
+
+  const totalHours = subs.reduce((s, x) => s + x.hours, 0);
+  const totalRows = subs.reduce((s, x) => s + x.rows.length, 0);
+  const totalUnits = subs.reduce((s, x) => s + x.count, 0);
+  const filledRows = subs.reduce((s, x) => s + x.rows.filter((r) => achieved[`${x.sub}${WD_SEP}${r.key}`]).length, 0);
+
+  function digestDoc(achievedMap) {
+    return {
+      id: digestId, weekOf: week, weekLabel: wd_isoWeek(week), range: wd_rangeLabel(week),
+      status: 'GENERATED', generatedAt: new Date().toISOString(), generatedBy: currentUser.name,
+      subs: subs.map((s) => ({
+        sub: s.sub, hours: +s.hours.toFixed(2), count: s.count,
+        rows: s.rows.map((r) => ({
+          key: r.key, metric: r.metric, product: r.product, stack: r.stack, output: r.output,
+          count: r.count, hours: +r.hours.toFixed(2),
+          achieved: achievedMap[`${s.sub}${WD_SEP}${r.key}`] || '',
+        })),
+      })),
+    };
+  }
+
+  async function generate() {
+    if (busy || !subs.length) return;
+    setBusy(true); setErr(null);
+    const next = { ...achieved };
+    try {
+      for (const s of subs) {
+        const streams = s.rows.map(wd_streamText);
+        let lines = null;
+        try { lines = await CDC.agents.runWeeklyDigest({ sub: s.sub, weekLabel: wd_isoWeek(week), streams }); }
+        catch (e) { setErr(e.message || String(e)); }
+        s.rows.forEach((r, i) => { const txt = lines && lines[i]; if (txt) next[`${s.sub}${WD_SEP}${r.key}`] = txt; });
+        setAchieved({ ...next }); // progressive reveal, sub by sub
+      }
+      await CDC.db.saveWeeklyDigest(digestDoc(next));
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setBusy(false); }
+  }
+
+  const statusTone = (st) => st === 'Done' ? 'green' : st === 'Blocked' || st === 'Overdue' ? 'red' : st === 'Backlog' ? 'muted' : 'amber';
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      {/* Week picker + generate */}
+      <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="col" style={{ gap: 2 }}>
+          <span className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600 }}>Week</span>
+          <select className="input-text" value={week} onChange={(e) => setWeek(e.target.value)} style={{ minWidth: 230 }}>
+            {weeks.map((m) => (
+              <option key={m} value={m}>{wd_isoWeek(m)} · {wd_rangeLabel(m)}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: 1 }} />
+        {saved && saved.generatedAt && (
+          <span className="muted" style={{ fontSize: 11 }}>
+            Last generated {new Date(saved.generatedAt).toLocaleString()} · {saved.generatedBy}
+          </span>
+        )}
+        <button className="btn" data-variant="primary" disabled={busy || !canGenerate || !subs.length} onClick={generate}>
+          <Icon name="sparkles" size={12} /> {busy ? 'Generating…' : filledRows ? 'Regenerate insights' : 'Generate insights'}
+        </button>
+      </div>
+
+      {!canGenerate && (
+        <div className="muted" style={{ fontSize: 11.5 }}>
+          Insights are written by the Rollup agent — available to managers (L2+) when the backend is connected. The consolidated table below is always live.
+        </div>
+      )}
+      {err && <div className="card card-pad" style={{ borderColor: 'var(--red)', color: 'var(--red)', fontSize: 12 }}>Agent error: {err}</div>}
+
+      {/* KPI tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div className="kpi-tile"><div className="kpi-name">Sub-departments</div><div className="kpi-value">{subs.length}</div><div className="kpi-meta"><span>reporting this week</span></div></div>
+        <div className="kpi-tile"><div className="kpi-name">Work-streams</div><div className="kpi-value">{totalRows}</div><div className="kpi-meta"><span>{filledRows} with insight</span></div></div>
+        <div className="kpi-tile"><div className="kpi-name">Output count</div><div className="kpi-value">{totalUnits || '—'}</div><div className="kpi-meta"><span>units produced</span></div></div>
+        <div className="kpi-tile"><div className="kpi-name">Logged time</div><div className="kpi-value">{totalHours.toFixed(0)}h</div><div className="kpi-meta"><span>consolidated</span></div></div>
+      </div>
+
+      {subs.length === 0 && (
+        <div className="empty">No daily reports in scope for {wd_isoWeek(week)} ({wd_rangeLabel(week)}).</div>
+      )}
+
+      {/* One block per sub-department */}
+      {subs.map((s) => (
+        <div key={s.sub} className="col" style={{ gap: 6 }}>
+          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
+            <h2 className="h-section" style={{ margin: 0 }}>{s.sub}</h2>
+            <span className="muted" style={{ fontSize: 11.5 }}>· {s.rows.length} stream{s.rows.length === 1 ? '' : 's'} · {s.hours.toFixed(0)}h</span>
+          </div>
+          <Card pad={false}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Metric Category</th>
+                  <th>Product-Audience</th>
+                  <th>Stack</th>
+                  <th>Output Category</th>
+                  <th className="num">Output Count</th>
+                  <th style={{ minWidth: 280 }}>What was achieved?</th>
+                  <th className="num">Logged Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.rows.map((r) => {
+                  const text = achieved[`${s.sub}${WD_SEP}${r.key}`];
+                  return (
+                    <tr key={r.key}>
+                      <td style={{ fontSize: 12 }}>{r.metric}</td>
+                      <td style={{ fontSize: 12 }}>{r.product}</td>
+                      <td style={{ fontSize: 12 }}>{r.stack}</td>
+                      <td style={{ fontSize: 12 }}>{r.output}</td>
+                      <td className="num">{r.count || '—'}</td>
+                      <td style={{ fontSize: 12, lineHeight: 1.45 }}>
+                        {text
+                          ? <span>{text}</span>
+                          : <span className="muted" style={{ fontStyle: 'italic' }}>{busy ? '…' : 'Not generated yet'}</span>}
+                        <div className="row" style={{ gap: 3, marginTop: 4, flexWrap: 'wrap' }}>
+                          {Object.entries(r.statuses).map(([st, n]) => (
+                            <Pill key={st} tone={statusTone(st)}>{n} {st}</Pill>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="num mono">{r.hours.toFixed(1)}h</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      ))}
+    </div>
+  );
+}
+window.WeeklyDigestPanel = WeeklyDigestPanel;
+
+// ── Meeting memory (the original Second Brain content) ───────────────────
+function MeetingMemoryPanel({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const moms = CDC.MOMS;
   const [openMomId, setOpenMomId] = useStP(null);
   const openMom = openMomId ? (moms || []).find((m) => m.id === openMomId) : null;
   return (
     <div className="fadein">
-      <SectionHeader
-        title="Second Brain"
-        subtitle="Meeting memory graph. Cartographer keeps it fresh."
-        actions={
-          <>
-            <button className="btn" data-size="sm"><Icon name="search" size={12} /> GraphRAG search</button>
-            {canUseMomLoader(currentUser) && <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('mom')}><Icon name="sparkles" size={12} /> Add MOM</button>}
-          </>
-        }
-      />
+      <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
+        <button className="btn" data-size="sm"><Icon name="search" size={12} /> GraphRAG search</button>
+        {canUseMomLoader(currentUser) && <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('mom')}><Icon name="sparkles" size={12} /> Add MOM</button>}
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile">
@@ -148,7 +407,7 @@ function SecondBrainView({ tweaks, currentUser, nav }) {
     </div>
   );
 }
-window.SecondBrainView = SecondBrainView;
+window.MeetingMemoryPanel = MeetingMemoryPanel;
 
 // Read-only meeting notes card — opened when a MoM row is clicked.
 // Layout matches the user's reference image: Title / Agenda / Date / Attendees
