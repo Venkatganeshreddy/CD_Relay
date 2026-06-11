@@ -275,6 +275,13 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
         </button>
       </div>
 
+      {(() => {
+        const last = all.reduce((a, r) => (r.ts && (!a || r.ts > a.ts) ? r : a), null);
+        if (!last) return null;
+        const src = last.by === 'scheduled' ? 'weekly auto-run' : (last.by || last.agent || 'manual run');
+        return <div className="muted" style={{ fontSize: 11 }}><Icon name="sparkles" size={10} /> Last generated {new Date(last.ts).toLocaleString()} · {src} · {all.length} total</div>;
+      })()}
+
       {!canRun && (
         <div className="muted" style={{ fontSize: 11.5 }}>
           Recommendations are written by the Advisor agent — available to managers (L2+) when the backend is connected. They are also generated on a weekly schedule.
