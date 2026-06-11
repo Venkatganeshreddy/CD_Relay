@@ -331,6 +331,14 @@
       const p = (window.CDC.PROPOSALS || []).find((x) => x.id === id); if (p) p.state = state;
       await remote(() => sb.from('guideline_proposals').update({ status: state, data: p || { id, state } }).eq('id', id));
     },
+    // Create a guideline proposal — used to promote an accepted process-kind
+    // recommendation into the Curator/Engram review surface (single source).
+    async addGuidelineProposal(p) {
+      const row = { evidence: [], state: 'pending', ...p };
+      if (Array.isArray(window.CDC.PROPOSALS)) window.CDC.PROPOSALS.unshift(row);
+      await remote(() => sb.from('guideline_proposals').insert({ id: row.id, agent: row.agent, status: row.state, data: row }));
+      return row;
+    },
     async addWeeklyComment({ weeklyId, itemPath, author, text }) {
       const row = { id: rid('wc-'), weeklyId, itemPath, author, ts: nowStr(), text };
       if (Array.isArray(window.CDC.WEEKLY_COMMENTS)) window.CDC.WEEKLY_COMMENTS.unshift(row);

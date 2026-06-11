@@ -6,9 +6,12 @@ const REF = process.env.SUPABASE_REF || 'fzwgdiphjehecsizvwyl';
 const PAT = process.env.SUPABASE_PAT || process.env.SUPABASE_ACCESS_TOKEN;
 const slug = process.argv[2];
 const file = process.argv[3];
+// Pass --no-verify-jwt for functions invoked by pg_cron / external callers
+// (they have no user JWT; protect them with a shared secret in the handler).
+const verifyJwt = !process.argv.includes('--no-verify-jwt');
 
 if (!PAT) { console.error('Set SUPABASE_PAT (sbp_...).'); process.exit(1); }
-if (!slug || !file) { console.error('Usage: node scripts/deploy_function.cjs <slug> <path/to/index.ts>'); process.exit(1); }
+if (!slug || !file) { console.error('Usage: node scripts/deploy_function.cjs <slug> <path/to/index.ts> [--no-verify-jwt]'); process.exit(1); }
 
 const body = fs.readFileSync(file, 'utf8');
 
@@ -18,7 +21,7 @@ const body = fs.readFileSync(file, 'utf8');
   const res = await fetch(API, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${PAT}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body, verify_jwt: true }),
+    body: JSON.stringify({ body, verify_jwt: verifyJwt }),
   });
   const text = await res.text();
   if (!res.ok) {
@@ -27,7 +30,7 @@ const body = fs.readFileSync(file, 'utf8');
     const createRes = await fetch(`https://api.supabase.com/v1/projects/${REF}/functions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${PAT}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, name: slug, body, verify_jwt: true }),
+      body: JSON.stringify({ slug, name: slug, body, verify_jwt: verifyJwt }),
     });
     const createText = await createRes.text();
     console.log(`POST ${createRes.status}: ${createText}`);

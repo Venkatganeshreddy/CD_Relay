@@ -236,7 +236,24 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
     finally { setBusy(false); }
   }
 
-  async function triage(rec, status) { await CDC.db.updateRecommendation(rec.id, status); force((n) => n + 1); }
+  async function triage(rec, status) {
+    await CDC.db.updateRecommendation(rec.id, status);
+    // Process-kind recs share a review surface with the Curator: accepting one
+    // promotes it into guideline_proposals (shown in Engram → Curator proposals).
+    if (rec.kind === 'process' && status === 'accepted' && CDC.db.addGuidelineProposal && !rec.promotedTo) {
+      const gp = await CDC.db.addGuidelineProposal({
+        id: 'gp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        agent: 'Advisor', proposedBy: currentUser.name,
+        ts: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        title: rec.title, rationale: rec.detail || rec.title,
+        currentRule: '— (no current rule cited)', proposedRule: rec.detail || rec.title,
+        evidence: [],
+      });
+      rec.promotedTo = gp.id;
+      await CDC.db.updateRecommendation(rec.id, status); // persist the promotedTo link
+    }
+    force((n) => n + 1);
+  }
 
   const countFor = (k) => all.filter((r) => (r.status === 'new' || !r.status) && (k === 'all' || r.kind === k)).length;
 
@@ -284,6 +301,10 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
               </div>
               <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}>{r.title}</div>
               {r.detail && <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{r.detail}</div>}
+              {r.kind === 'process' && (!r.status || r.status === 'new') && (
+                <div className="muted" style={{ fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>Accepting routes this to Engram → Curator proposals for guideline review.</div>
+              )}
+              {r.promotedTo && <div className="muted mono" style={{ fontSize: 10.5, marginTop: 6 }}>→ proposal {r.promotedTo}</div>}
               <div className="row" style={{ gap: 6, marginTop: 10, alignItems: 'center' }}>
                 {(r.refs || []).length > 0 && <span className="muted mono" style={{ fontSize: 10.5 }}>refs: {r.refs.join(', ')}</span>}
                 <div style={{ flex: 1 }} />
