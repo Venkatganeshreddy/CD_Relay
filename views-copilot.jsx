@@ -16,6 +16,10 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   const [apiKey, setApiKey] = useState_c(() => localStorage.getItem('relay_openrouter_key') || '');
   const [showKeyInput, setShowKeyInput] = useState_c(false);
   const hasKey = !!apiKey;
+  // Signed in with the relay-agent Edge Function available → the key never
+  // leaves the server; hide the personal-key fallback entirely (it only
+  // exists for offline/demo use).
+  const serverLLM = !!(window.__RELAY && window.__RELAY.authed && window.CDC.agents && window.CDC.agents.available());
 
   function handleKeyChange(val) {
     setApiKey(val);
@@ -98,19 +102,21 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             </div>
           </div>
           <div className="row" style={{ gap: 6 }}>
-            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5, background: hasKey ? 'var(--accent-soft)' : 'var(--panel)', border: '1px solid ' + (hasKey ? 'var(--accent-border)' : 'var(--border)'), color: hasKey ? 'var(--accent)' : 'var(--text-muted)' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: hasKey ? 'var(--accent)' : 'var(--text-faint)' }} />
-              {hasKey ? 'LLM connected' : 'offline mode'}
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5, background: (serverLLM || hasKey) ? 'var(--accent-soft)' : 'var(--panel)', border: '1px solid ' + ((serverLLM || hasKey) ? 'var(--accent-border)' : 'var(--border)'), color: (serverLLM || hasKey) ? 'var(--accent)' : 'var(--text-muted)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: (serverLLM || hasKey) ? 'var(--accent)' : 'var(--text-faint)' }} />
+              {serverLLM ? 'LLM connected · server' : hasKey ? 'LLM connected' : 'offline mode'}
             </span>
-            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setShowKeyInput((v) => !v)}>
-              <Icon name="plug" size={12} /> API key
-            </button>
+            {!serverLLM && (
+              <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setShowKeyInput((v) => !v)}>
+                <Icon name="plug" size={12} /> API key
+              </button>
+            )}
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { setMessages([]); setStreamText(''); }}>Clear</button>
           </div>
         </div>
       </div>
 
-      {showKeyInput && (
+      {showKeyInput && !serverLLM && (
         <div style={{ padding: '6px 24px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>OpenRouter key:</span>
           <input type="password" value={apiKey} onChange={(e) => handleKeyChange(e.target.value)}

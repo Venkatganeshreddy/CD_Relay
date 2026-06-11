@@ -158,7 +158,35 @@
   };
 
   // ── Writes (Phase 4): optimistic-local always; remote when signed in ──────
-  async function remote(fn) { if (sb && authed()) { try { const { error } = await fn(); if (error) console.warn('[Relay] write:', error.message); return !error; } catch (e) { console.warn('[Relay] write threw:', e.message); } } return false; }
+  // A failed server write used to be console-only; now it also shows a small
+  // toast so the user knows their change is local-only. Rate-limited so a burst
+  // of failing writes doesn't stack toasts. Demo/unauth mode never toasts
+  // (skipping remote is normal there, not a failure).
+  let lastWriteToast = 0;
+  function writeFailToast() {
+    const now = Date.now();
+    if (now - lastWriteToast < 5000) return;
+    lastWriteToast = now;
+    try {
+      const el = document.createElement('div');
+      el.textContent = 'Server write failed — change kept locally (it will not survive a reload).';
+      el.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;' +
+        'background:#5a1722;color:#ffe9ec;border:1px solid #f85149;border-radius:8px;' +
+        'padding:8px 14px;font:12.5px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35)';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 5000);
+    } catch (_) { /* headless/test contexts have no DOM body yet */ }
+  }
+  async function remote(fn) {
+    if (sb && authed()) {
+      try {
+        const { error } = await fn();
+        if (error) { console.warn('[Relay] write:', error.message); writeFailToast(); }
+        return !error;
+      } catch (e) { console.warn('[Relay] write threw:', e.message); writeFailToast(); }
+    }
+    return false;
+  }
 
   // Auto-Curator: once CURATOR_AUTO_THRESHOLD human corrections (edits/rejects)
   // accumulate for an agent, run the Curator for it in the background so its

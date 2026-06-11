@@ -50,9 +50,22 @@ function isContributorRole(role) {
   return ['L0', 'L1', 'TEAM_MEMBER'].includes(role);
 }
 
+// ── Hash routing: '#/name' or '#/name/<id>' ────────────────────────────────
+// Keeps the back button and deep links working on the static host (path-based
+// routing would 404 on refresh under GitHub Pages). Unknown names fall through
+// to RouteView's default case (Dashboard), so a stale hash can't break boot.
+function routeFromHash() {
+  const m = (location.hash || '').match(/^#\/([\w-]+)(?:\/([\w-]+))?/);
+  if (!m) return null;
+  return { name: m[1], params: m[2] ? { id: m[2] } : {} };
+}
+function hashForRoute(r) {
+  return '#/' + r.name + (r.params && r.params.id ? '/' + r.params.id : '');
+}
+
 function App({ authMode = 'demo', me = null, realUser = null, impersonating = false }) {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [route, setRoute] = useState_a({ name: 'dashboard', params: {} });
+  const [route, setRoute] = useState_a(() => routeFromHash() || { name: 'dashboard', params: {} });
   const [copilotPrefill, setCopilotPrefill] = useState_a(null);
   const [momOpen, setMomOpen] = useState_a(false);
 
@@ -107,12 +120,21 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     if (route.name === 'department') {
       const visible = window.CDC.filterDepartments(currentUser.id).map((d) => d.id);
       if (!visible.includes(route.params.id)) {
-        setRoute({ name: isContributor ? 'dashboard' : 'dashboard', params: {} });
+        const home = { name: 'dashboard', params: {} };
+        setRoute(home);
+        try { history.replaceState(home, '', hashForRoute(home)); } catch (_) {}
         return;
       }
     }
     // L1/L0 users now have a dashboard too (own dashboard) — don't auto-redirect them
   }, [currentUser.id]);
+
+  // Back/forward: restore the route the browser is navigating to.
+  useEffect_a(() => {
+    const onPop = (e) => setRoute((e.state && e.state.name) ? e.state : (routeFromHash() || { name: 'dashboard', params: {} }));
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const nav = {
     go: (name, params = {}) => {
@@ -122,9 +144,16 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
         setCopilotPrefill(null);
       }
       if (name === 'mom') { if (window.canUseMomLoader(currentUser)) setMomOpen(true); return; }
-      setRoute({ name, params });
+      const r = { name, params };
+      setRoute(r);
+      // Push into browser history so back-button and deep links work.
+      try { if (hashForRoute(r) !== location.hash) history.pushState(r, '', hashForRoute(r)); } catch (_) {}
     },
   };
+
+  // Eager render-time flag (the __RELAY effect above runs only after first
+  // paint) — children use it to decide if the server LLM proxy is in play.
+  window.__RELAY = Object.assign(window.__RELAY || {}, { authed: authMode === 'authed' });
 
   const visibleDepts = window.CDC.filterDepartments(currentUser.id);
   const role = currentUser.role;
@@ -1181,7 +1210,9 @@ function CDCTweaksPanel({ t, setTweak }) {
       <TweakRadio label="Active env" value={t.env} options={['beta', 'prod']} onChange={(v) => setTweak('env', v)} />
 
       <TweakSection label="Concierge" />
-      <TweakText label="OpenRouter key" value={t.openrouterKey} placeholder="sk-or-…" onChange={(v) => setTweak('openrouterKey', v)} />
+      {(window.__RELAY && window.__RELAY.authed && window.CDC.agents && window.CDC.agents.available())
+        ? <div className="muted" style={{ fontSize: 11.5, padding: '2px 0 6px' }}>Server proxy active (relay-agent) — no personal key needed.</div>
+        : <TweakText label="OpenRouter key" value={t.openrouterKey} placeholder="sk-or-…" onChange={(v) => setTweak('openrouterKey', v)} />}
 
       <TweakSection label="User scope (RBAC)" />
       <TweakSelect label="Acting as" value={t.userId}
