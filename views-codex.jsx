@@ -139,12 +139,52 @@ function lazyScript(src, globalName) {
 
 function MermaidFlow({ file, onNode }) {
   const ref = useRfCx(null);
+  const graph = useRfCx({ nodes: new Map(), edges: [], pz: null });
   const [err, setErr] = useStCx(null);
   const [loading, setLoading] = useStCx(true);
+  const [focused, setFocused] = useStCx(false);
+
+  const cleanLabel = (g) => {
+    const l = g.querySelector('.nodeLabel') || g.querySelector('.label') || g;
+    return (l.textContent || '').replace(/\s+/g, ' ').trim();
+  };
+
+  const clearTrace = () => {
+    const { nodes, edges } = graph.current;
+    nodes.forEach((n) => { n.g.style.opacity = ''; n.g.style.filter = ''; });
+    edges.forEach((e) => { e.path.style.opacity = ''; e.path.style.stroke = ''; e.path.style.strokeWidth = ''; });
+    setFocused(false);
+  };
+
+  const focusNode = (id) => {
+    const { nodes, edges } = graph.current;
+    const down = edges.filter((e) => e.src === id);
+    const up = edges.filter((e) => e.tgt === id);
+    const keep = new Set([id, ...down.map((e) => e.tgt), ...up.map((e) => e.src)]);
+    nodes.forEach((n, nid) => {
+      n.g.style.transition = 'opacity .2s';
+      n.g.style.opacity = keep.has(nid) ? '1' : '0.12';
+      n.g.style.filter = nid === id ? 'drop-shadow(0 0 7px rgba(207,227,247,.85))' : '';
+    });
+    edges.forEach((e) => {
+      const on = e.src === id || e.tgt === id;
+      e.path.style.transition = 'stroke .2s, opacity .2s';
+      e.path.style.opacity = on ? '1' : '0.08';
+      e.path.style.stroke = on ? (e.src === id ? '#7aa2f7' : '#34d058') : '';
+      e.path.style.strokeWidth = on ? '2.4px' : '';
+    });
+    setFocused(true);
+    if (onNode) onNode({
+      id,
+      label: nodes.get(id) ? nodes.get(id).label : id,
+      upstream: up.map((e) => nodes.get(e.src) && nodes.get(e.src).label).filter(Boolean),
+      downstream: down.map((e) => nodes.get(e.tgt) && nodes.get(e.tgt).label).filter(Boolean),
+    });
+  };
 
   useEfCx(() => {
-    let cancelled = false; let panzoom = null;
-    setErr(null); setLoading(true);
+    let cancelled = false;
+    setErr(null); setLoading(true); setFocused(false);
     (async () => {
       try {
         await lazyScript('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js', 'mermaid');
@@ -154,27 +194,41 @@ function MermaidFlow({ file, onNode }) {
         const src = await res.text();
         if (cancelled) return;
         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { htmlLabels: true } });
-        const renderId = 'mmd-' + file.replace(/\W/g, '');
-        const { svg } = await window.mermaid.render(renderId, src);
+        const { svg } = await window.mermaid.render('mmd-' + file.replace(/\W/g, ''), src);
         if (cancelled || !ref.current) return;
         ref.current.innerHTML = svg;
         const svgEl = ref.current.querySelector('svg');
+        const nodes = new Map(); const edges = [];
         if (svgEl) {
           svgEl.removeAttribute('height'); svgEl.style.maxWidth = 'none';
           svgEl.style.width = '100%'; svgEl.style.height = '100%';
-          if (window.svgPanZoom) {
-            panzoom = window.svgPanZoom(svgEl, { controlIconsEnabled: true, fit: true, center: true, minZoom: 0.3, maxZoom: 8, zoomScaleSensitivity: 0.35 });
-          }
-          svgEl.querySelectorAll('.node').forEach((n) => {
-            n.style.cursor = 'pointer';
-            n.addEventListener('click', () => { if (onNode) onNode((n.textContent || '').trim()); });
+          // Build graph from DOM ids: node = "<r>-flowchart-<id>-<n>", edge = "<r>-L_<src>_<tgt>_<n>".
+          svgEl.querySelectorAll('.node').forEach((g) => {
+            const part = (g.id || '').split('-flowchart-')[1];
+            if (!part) return;
+            const nid = part.replace(/-\d+$/, '');
+            nodes.set(nid, { g, label: cleanLabel(g) });
+            g.style.cursor = 'pointer';
+            g.addEventListener('click', (ev) => { ev.stopPropagation(); focusNode(nid); });
           });
+          svgEl.querySelectorAll('.flowchart-link').forEach((path) => {
+            const rest = (path.id || '').split('-L_')[1];
+            if (!rest) return;
+            const parts = rest.split('_');
+            edges.push({ src: parts[0], tgt: parts.slice(1, -1).join('_'), path });
+          });
+          if (window.svgPanZoom) {
+            graph.current.pz = window.svgPanZoom(svgEl, { controlIconsEnabled: false, fit: true, center: true, minZoom: 0.3, maxZoom: 8, zoomScaleSensitivity: 0.35 });
+          }
         }
+        graph.current.nodes = nodes; graph.current.edges = edges;
         setLoading(false);
       } catch (e) { if (!cancelled) { setErr(e.message || String(e)); setLoading(false); } }
     })();
-    return () => { cancelled = true; if (panzoom) { try { panzoom.destroy(); } catch (_) {} } };
+    return () => { cancelled = true; const pz = graph.current.pz; if (pz) { try { pz.destroy(); } catch (_) {} } graph.current = { nodes: new Map(), edges: [], pz: null }; };
   }, [file]);
+
+  const resetView = () => { const pz = graph.current.pz; if (pz) { try { pz.reset(); pz.fit(); pz.center(); } catch (_) {} } };
 
   if (err) return (
     <div className="empty" style={{ padding: 24 }}>
@@ -184,7 +238,11 @@ function MermaidFlow({ file, onNode }) {
   return (
     <>
       {loading && <div className="muted" style={{ position: 'absolute', top: 14, left: 16, fontSize: 12, zIndex: 2 }}>rendering {file}…</div>}
-      <div ref={ref} style={{ width: '100%', height: '100%' }} />
+      <div className="row" style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, gap: 6 }}>
+        {focused && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { clearTrace(); if (onNode) onNode(null); }}>Clear trace</button>}
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={resetView}>Reset view</button>
+      </div>
+      <div ref={ref} style={{ width: '100%', height: '100%' }} onClick={() => { if (focused) { clearTrace(); if (onNode) onNode(null); } }} />
     </>
   );
 }
@@ -194,18 +252,23 @@ function AgentFlowsTab({ canEdit, nav }) {
   const [node, setNode] = useStCx(null);
   const def = FLOW_DEFS.find((f) => f.id === active) || FLOW_DEFS[0];
 
-  const onNode = (text) => {
-    if (!text) return;
-    const g = FLOW_GLOSSARY.find((e) => e.match.some((m) => text.includes(m)));
-    setNode(g ? { title: g.title, detail: g.detail } : { title: text, detail: 'Step in the ' + def.label + ' flow.' });
+  const onNode = (p) => {
+    if (!p) { setNode(null); return; }
+    const g = FLOW_GLOSSARY.find((e) => e.match.some((m) => p.label.includes(m)));
+    setNode({
+      title: g ? g.title : (p.label.length > 42 ? p.label.slice(0, 42) + '…' : p.label),
+      detail: g ? g.detail : ('Step in the ' + def.label + ' flow.'),
+      upstream: p.upstream || [], downstream: p.downstream || [],
+    });
   };
+  const shortLbl = (s) => (s && s.length > 26 ? s.slice(0, 26) + '…' : s);
 
   return (
     <div className="col" style={{ gap: 12 }}>
       <div className="muted" style={{ fontSize: 12.5, padding: '0 4px' }}>
         Live-rendered from <span className="code">diagrams/agents/*.mmd</span> — the same control-flow the code runs.
         Trigger → prompt → <span className="code">run()</span> → Edge Function <span className="code">relay-agent</span> → Claude Sonnet 4.6 → parse → output, with fail-soft fallback.
-        Drag to pan · scroll to zoom · click a node for detail.
+        Drag to pan · scroll to zoom · <strong>click a node to trace it</strong> — green = input from, blue = feeds into.
       </div>
 
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
@@ -250,6 +313,22 @@ function AgentFlowsTab({ canEdit, nav }) {
                 <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setNode(null)}>✕</button>
               </div>
               <div className="muted" style={{ fontSize: 12 }}>{node.detail}</div>
+              {node.upstream.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="muted" style={{ fontSize: 10.5, marginBottom: 4 }}><span style={{ color: '#34d058' }}>●</span> input from</div>
+                  <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                    {node.upstream.map((u, i) => <span key={i} className="agent-tool" style={{ fontSize: 10.5 }}>{shortLbl(u)}</span>)}
+                  </div>
+                </div>
+              )}
+              {node.downstream.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="muted" style={{ fontSize: 10.5, marginBottom: 4 }}><span style={{ color: '#7aa2f7' }}>●</span> feeds into</div>
+                  <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                    {node.downstream.map((d, i) => <span key={i} className="agent-tool" style={{ fontSize: 10.5 }}>{shortLbl(d)}</span>)}
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 
