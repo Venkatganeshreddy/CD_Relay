@@ -53,6 +53,13 @@ function buildBrief(d: {
   lines.push("# Departments & sub-teams");
   for (const x of d.depts) { const dd = x.data || x; lines.push(`- ${dd.id} "${dd.name}" subs: ${(dd.subs || []).join("; ") || "—"}`); }
 
+  // Roster — grounds 'people' recommendations in real names/levels/teams.
+  const roster = d.emps.map((e) => e.data || e).filter((e: any) => e.name);
+  if (roster.length) {
+    lines.push("\n# Team roster (name — level — team)");
+    roster.slice(0, 60).forEach((e: any) => lines.push(`- ${e.name} — ${e.level || e.role || "?"} — ${e.sub || e.dept || "—"}`));
+  }
+
   const byUser: Record<string, { name: string; sub: string; hours: number; n: number }> = {};
   for (const w0 of d.logs) {
     const w = w0.data || w0;
@@ -127,6 +134,9 @@ Deno.serve(async (req) => {
     });
     const aj = await ai.json();
     if (!ai.ok) return json({ error: aj?.error?.message || "OpenRouter error" }, 502);
+    // OpenRouter can soft-fail: HTTP 200 with an {error} body. Surface it
+    // instead of silently returning ok:true with 0 cards (cron would never know).
+    if (aj?.error) return json({ error: aj.error.message || String(aj.error) }, 502);
     const content: string = aj?.choices?.[0]?.message?.content || "";
 
     let items: any[] = [];
@@ -134,11 +144,14 @@ Deno.serve(async (req) => {
     items = items.filter((it) => it && it.title && allowed.includes(it.kind));
 
     const now = new Date().toISOString();
-    const rows = items.map((it, i) => ({
-      id: `rec-cron-${Date.now().toString(36)}-${i}`,
-      kind: it.kind, dept: it.dept || null, status: "new",
-      data: { id: `rec-cron-${Date.now().toString(36)}-${i}`, kind: it.kind, title: it.title, detail: it.detail || "", dept: it.dept || "", severity: it.severity || "medium", refs: it.refs || [], status: "new", agent: "Advisor", ts: now, by: "scheduled" },
-    }));
+    const batch = Date.now().toString(36); // computed once: row.id must equal data.id (triage matches on it)
+    const rows = items.map((it, i) => {
+      const id = `rec-cron-${batch}-${i}`;
+      return {
+        id, kind: it.kind, dept: it.dept || null, status: "new",
+        data: { id, kind: it.kind, title: it.title, detail: it.detail || "", dept: it.dept || "", severity: it.severity || "medium", refs: it.refs || [], status: "new", agent: "Advisor", ts: now, by: "scheduled" },
+      };
+    });
     const ok = await insertRecs(rows);
     return json({ ok, generated: rows.length, model: MODEL });
   } catch (e) {
