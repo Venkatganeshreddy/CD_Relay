@@ -24,6 +24,7 @@ const EMAILS = [
   'rushikesh.konapure@nxtwave.co.in',
   'kakarla.pavanteja@nxtwave.co.in',
   'sunil.tekale@nxtwave.co.in',     // new L2 · University Partnership
+  'vijay.padala@nxtwave.co.in',     // L2 · Central Ops (employees row must use this email too)
 ];
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' };
 

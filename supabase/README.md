@@ -40,6 +40,15 @@ L2's exact scope (Phase 3 wires an RPC + UI for this).
   (tick *Auto Confirm User*), one per manager, `email` = the `employees.email`
   value below, set a default password. The `on_auth_user_created` trigger links
   each to its employee row automatically; users change their password later.
+- **Self-serve signup — DONE:** run `18_signup_access.sql`, then turn OFF
+  *Confirm email* (**Authentication → Sign In / Up → Email**) for instant access.
+  Any employee whose email is on an `employees` row can use **Create account**
+  on the login screen and pick their own password — no admin provisioning.
+  Password resets/changes are in the app too (**Forgot password?** link +
+  **Change password** in the topbar); for the emailed reset link to work, add
+  the app URL to **Authentication → URL Configuration → Redirect URLs**.
+  Account-activation and password-change events are logged to the `activity`
+  feed (the password itself is only ever stored hashed by Supabase Auth).
 
   | Role | Email |
   |---|---|

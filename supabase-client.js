@@ -67,12 +67,48 @@
     return loadedAny;
   }
 
+  // Capture the password-recovery deep link BEFORE supabase-js consumes the URL
+  // hash (it strips #access_token…&type=recovery while establishing the session).
+  // app.jsx reads this flag at mount to show the "set a new password" screen.
+  if (/type=recovery/.test(location.hash)) window.__RELAY_RECOVERY = true;
+  if (sb) sb.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') window.__RELAY_RECOVERY = true; });
+
   if (sb) {
     window.CDC.auth = {
       signIn: (email, password) => sb.auth.signInWithPassword({ email, password }),
       signOut: () => sb.auth.signOut(),
       session: () => sb.auth.getSession(),
       onChange: (cb) => sb.auth.onAuthStateChange(cb),
+      // Signed-in user sets a new password (no email round-trip needed).
+      changePassword: (password) => sb.auth.updateUser({ password }),
+      // Forgot-password: emails a recovery link that lands back on this page,
+      // where the __RELAY_RECOVERY flag routes to the set-new-password screen.
+      resetPassword: (email) => sb.auth.resetPasswordForEmail(email, {
+        redirectTo: location.origin + location.pathname,
+      }),
+      // Self-serve signup ("Request access"): gated to rostered employees via
+      // the email_has_access RPC (18_signup_access.sql) — the email must exist
+      // on an employees row added in the app. With "Confirm email" OFF in the
+      // dashboard, signUp returns a live session immediately (instant access).
+      signUp: async (email, password) => {
+        const { data: gate, error: gateErr } = await sb.rpc('email_has_access', { p_email: email });
+        if (gateErr) return { error: gateErr };
+        if (!gate || !gate.allowed) return { error: { message: 'This email is not in the employee roster yet — ask your admin to add you under Roles & Master data first.' } };
+        if (gate.already) return { error: { message: 'An account already exists for this email — use Sign in (or "Forgot password?").' } };
+        return sb.auth.signUp({ email, password });
+      },
+      // Audit trail: account-activation / password-change events land in the
+      // activity feed (admin-visible). Only the event is recorded — the
+      // password itself lives hashed in Supabase Auth, never in plaintext.
+      logAuthEvent: async (text) => {
+        try {
+          const me = window.CDC.whoami ? await window.CDC.whoami() : null;
+          const row = { id: rid('act-'), kind: 'auth', ts: nowStr().slice(11, 16),
+            text: `${(me && me.name) || 'A user'} ${text}`, icon: '🔐' };
+          if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(row);
+          await sb.from('activity').insert({ id: row.id, data: row });
+        } catch (e) { console.warn('[Relay] auth audit:', e.message || e); }
+      },
     };
     window.CDC.whoami = async () => { const { data, error } = await sb.rpc('whoami'); if (error) { console.warn('[Relay] whoami:', error.message); return null; } return data || null; };
     window.CDC.whoamiReal = async () => { const { data, error } = await sb.rpc('whoami_real'); if (error) { return null; } return data || null; };

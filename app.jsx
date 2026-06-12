@@ -349,6 +349,7 @@ function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, d
 function Topbar({ route, nav, currentUser, tweaks, setTweak, openMom, authMode, impersonating, realName }) {
   const [roleOpen, setRoleOpen] = useState_a(false);
   const [searchOpen, setSearchOpen] = useState_a(false);
+  const [pwOpen, setPwOpen] = useState_a(false);
   const authed = authMode === 'authed';
   const isAdminish = ['L3', 'ADMIN', 'Admin', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
   const canSwitch = !authed || isAdminish; // non-admins can't impersonate
@@ -411,11 +412,17 @@ function Topbar({ route, nav, currentUser, tweaks, setTweak, openMom, authMode, 
       </button>
 
       {authed && (
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setPwOpen(true)} title="Change your password">
+          Change password
+        </button>
+      )}
+      {authed && (
         <button className="btn" data-size="sm" data-variant="ghost" onClick={() => window.__RELAY && window.__RELAY.signOut()} title="Sign out">
           Sign out
         </button>
       )}
 
+      <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
       <RoleSwitcher open={roleOpen} onClose={() => setRoleOpen(false)} currentId={currentUser.id} onPick={(id) => { relayPickUser(setTweak, id); setRoleOpen(false); }} />
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} nav={nav} currentUser={currentUser} />
     </div>
@@ -1233,6 +1240,18 @@ function relayPickUser(setTweak, id) {
 // employee; otherwise show the login screen (with a demo-mode bypass).
 (async () => {
   const root = ReactDOM.createRoot(document.getElementById('root'));
+
+  // Password-recovery deep link (flag set early in supabase-client.js, before
+  // supabase-js consumed the URL hash): the link signed the user in, so show
+  // the set-new-password screen, then reload into the app with a clean URL.
+  if (window.__RELAY_RECOVERY && window.CDC && window.CDC.auth) {
+    root.render(<ErrorBoundary><ResetPasswordScreen onDone={() => {
+      window.__RELAY_RECOVERY = false;
+      location.replace(location.origin + location.pathname);
+    }} /></ErrorBoundary>);
+    return;
+  }
+
   let me = null, real = null, authMode = 'demo';
   try {
     if (window.CDC && window.CDC.auth) {
