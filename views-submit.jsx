@@ -10,12 +10,28 @@ const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 // and saves. Acknowledgement writes lastAckDate; the server-side escalation
 // engine (supabase/09_escalation.sql) walks tasks that miss the daily ack and
 // climbs the manager_id graph (L1 → L2 → L3) when the threshold is hit.
+// Minutes since midnight in IST, regardless of the viewer's local timezone.
+function istMinutesNow() {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit' })
+    .formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
+  return (+p.hour) * 60 + (+p.minute);
+}
+const GLANCE_OPENS_AT = 18 * 60; // 6:00 PM IST
+
 function GlanceView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
   const mine = (CDC.TASKS || []).filter((t) =>
     t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
+
+  // The snapshot unlocks at exactly 6:00 PM IST; before that, show a countdown.
+  // A 30s tick keeps the countdown (and the unlock moment) fresh without a reload.
+  const [, setTick] = useS(0);
+  useE(() => { const id = setInterval(() => setTick((x) => x + 1), 30000); return () => clearInterval(id); }, []);
+  const nowMin = istMinutesNow();
+  const isOpen = nowMin >= GLANCE_OPENS_AT;
+  const minsLeft = GLANCE_OPENS_AT - nowMin;
 
   return (
     <div className="fadein">
@@ -24,8 +40,8 @@ function GlanceView({ tweaks, currentUser, nav }) {
         subtitle={`Quick 6:00 PM check-in. Update each open task's status; add a reason if blocked. Tasks left unacknowledged escalate up the manager graph.`}
         actions={
           <>
-            <Pill tone={pending ? 'amber' : 'green'} dot>
-              {pending ? `${pending} awaiting ack` : 'all acknowledged'}
+            <Pill tone={!isOpen ? 'neutral' : pending ? 'amber' : 'green'} dot>
+              {!isOpen ? 'opens 6:00 PM IST' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
             </Pill>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
               <Icon name="tasks" size={11} /> Open Tasks
@@ -33,7 +49,17 @@ function GlanceView({ tweaks, currentUser, nav }) {
           </>
         }
       />
-      {mine.length === 0 ? (
+      {!isOpen ? (
+        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>🕕</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>The 6:00 PM snapshot isn't open yet</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            Opens in {Math.floor(minsLeft / 60) > 0 ? `${Math.floor(minsLeft / 60)}h ` : ''}{minsLeft % 60}m (at 18:00 IST).
+            {mine.length > 0 && ` You have ${mine.length} open task${mine.length === 1 ? '' : 's'} to review then.`}
+            {' '}Until then you can update tasks anytime from My Tasks.
+          </div>
+        </div>
+      ) : mine.length === 0 ? (
         <div className="empty" style={{ padding: 24 }}>
           You have no open tasks. New work from MoMs, reports, or your manager will show up here at 6:00 PM.
         </div>
@@ -46,9 +72,10 @@ function GlanceView({ tweaks, currentUser, nav }) {
 window.GlanceView = GlanceView;
 
 // ── Catalog (shared, defined in data.js → window.CDC.TASK_CATALOG) ────────
+// These are LIVE references — applyTaskCatalog() mutates them in place when an
+// admin edits the catalog, so always look up OUTPUT_MAP at use time (no
+// module-load snapshots like the old OUTPUT_TO_TASK table).
 const { PRODUCTS, STACKS, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, OUTPUT_MAP } = window.CDC.TASK_CATALOG;
-// Output category → Task category (derived from the shared map).
-const OUTPUT_TO_TASK = Object.fromEntries(OUTPUT_CATEGORIES.map((c) => [c, OUTPUT_MAP[c].task]));
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 function empIdFor(user) {
@@ -160,7 +187,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
     pushUser(String(n));
     setCurrent((c) => ({ ...c, outputCount: n }));
     typeThen(() => {
-      pushBot(`What was achieved? Fill in the template — it's tailored for "${OUTPUT_TO_TASK[current.outputCategory]}".`);
+      pushBot(`What was achieved? Fill in the template — it's tailored for "${(OUTPUT_MAP[current.outputCategory] || {}).task || current.outputCategory}".`);
       setStep('template');
     });
   }

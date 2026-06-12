@@ -1434,10 +1434,42 @@
     return d;
   };
 
+  // Apply an admin-edited catalog (app_docs key 'task_catalog') IN PLACE, so
+  // every view holding references to these arrays/objects sees the update
+  // without a reload. Derived structures (categories list, count-NA set) are
+  // recomputed here; TASK_TEMPLATES stays code-defined.
+  function applyTaskCatalog(cat) {
+    if (!cat) return;
+    if (Array.isArray(cat.products) && cat.products.length) { PRODUCTS.length = 0; PRODUCTS.push(...cat.products); }
+    if (Array.isArray(cat.stacks) && cat.stacks.length) { STACKS.length = 0; STACKS.push(...cat.stacks); }
+    if (cat.outputMap && typeof cat.outputMap === 'object' && Object.keys(cat.outputMap).length) {
+      for (const k of Object.keys(OUTPUT_MAP)) delete OUTPUT_MAP[k];
+      Object.assign(OUTPUT_MAP, cat.outputMap);
+    }
+    OUTPUT_CATEGORIES.length = 0; OUTPUT_CATEGORIES.push(...Object.keys(OUTPUT_MAP));
+    COUNT_NA.clear();
+    for (const c of OUTPUT_CATEGORIES) {
+      if (['Executive Ops', 'Business Impact'].includes((OUTPUT_MAP[c] || {}).metric)) COUNT_NA.add(c);
+    }
+  }
+
+  // Display helper for mixed timestamp formats ('YYYY-MM-DD HH:MM IST' vs bare
+  // 'HH:MM'): today's entries show the time, older ones show "D Mon · HH:MM".
+  function fmtTs(ts) {
+    if (typeof ts !== 'string') return ts || '';
+    const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (!m) return ts;
+    const todayIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const date = `${m[1]}-${m[2]}-${m[3]}`, hm = `${m[4]}:${m[5]}`;
+    if (date === todayIst) return hm;
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${+m[3]} ${MON[+m[2] - 1]} · ${hm}`;
+  }
+
   window.CDC = {
     fmt, daysAgo: liveDaysAgo,
     ROLES, USERS,
-    TASK_CATALOG,
+    TASK_CATALOG, applyTaskCatalog, fmtTs,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
     KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
     WORKLOGS, empIdForUser, WEEKLY_DIGESTS, RECOMMENDATIONS,

@@ -186,6 +186,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     { id: 'engram', label: 'Engram', icon: 'sparkles', badge: window.CDC.PROPOSALS.filter((p) => p.state === 'pending').length, badgeTone: 'amber' },
     { id: 'expense', label: 'Tool Expense Tracker', icon: 'runs' },
     { id: 'runs', label: 'AI runs', icon: 'runs' },
+    { id: 'catalog', label: 'Task catalog', icon: 'tasks' },
     { id: 'guideline', label: 'Guideline', icon: 'sheet' },
     { id: 'admin', label: 'Admin', icon: 'admin' },
   ] : [
@@ -239,6 +240,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
   switch (route.name) {
     case 'dashboard': return isL1 ? <L1Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} /> : isL2 ? <ManagerView tweaks={tweaks} currentUser={currentUser} nav={nav} /> : <Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'department': return <DepartmentView deptId={route.params.id} tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'catalog': return <TaskCatalogView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'copilot': return <CopilotView tweaks={tweaks} currentUser={currentUser} nav={nav} initialPrompt={initialPrompt} />;
     case 'weekly': return <WeeklyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'missing': return <MissingReportsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -439,6 +441,7 @@ function buildCrumbs(route, currentUser) {
     case 'my-tasks': return ['Daily work', 'My tasks'];
     case 'worklogs': return ['Daily work', 'Worklogs'];
     case 'codex': return ['System', 'Codex'];
+    case 'catalog': return ['System', 'Task catalog'];
     case 'architecture': return ['System', 'Codex', 'Architecture'];
     case 'expense': return ['System', 'Tool Expense Tracker'];
     case 'engram': return ['System', 'Engram'];

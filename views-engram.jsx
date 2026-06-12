@@ -175,7 +175,7 @@ function InteractionStream({ interactions, agents, agentFilter, setAgentFilter, 
                       <Avatar user={u} size={20} />
                       <div>
                         <div style={{ fontSize: 11.5 }}>{u?.name || e.userId}</div>
-                        <div className="muted mono" style={{ fontSize: 10.5 }}>{e.ts.slice(11)}</div>
+                        <div className="muted mono" style={{ fontSize: 10.5 }}>{(window.CDC.fmtTs && window.CDC.fmtTs(e.ts)) || e.ts}</div>
                       </div>
                     </div>
                   </td>

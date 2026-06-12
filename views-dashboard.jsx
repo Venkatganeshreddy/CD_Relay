@@ -329,7 +329,7 @@ function Dashboard({ tweaks, currentUser, nav }) {
             <div key={a.id} className="row" style={{ padding: '10px 16px', gap: 12, borderBottom: '1px solid var(--border)' }} onClick={() => nav.go('runs')}>
               <div style={{ width: 24, height: 24, borderRadius: 5, background: 'var(--panel-2)', display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{a.icon}</div>
               <div style={{ flex: 1, fontSize: 12.5 }}>{a.text}</div>
-              <span className="mono faint" style={{ fontSize: 11 }}>{a.ts}</span>
+              <span className="mono faint" style={{ fontSize: 11 }}>{(window.CDC.fmtTs && window.CDC.fmtTs(a.ts)) || a.ts}</span>
             </div>
           ))}
         </div>

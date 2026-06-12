@@ -51,7 +51,15 @@
     if (!sb || !window.CDC) return false;
     let loadedAny = false;
     const tables = Object.keys(ARRAY_MAP);
-    const settled = await Promise.all(tables.map((t) => sb.from(t).select('data').then((res) => ({ t, res }))));
+    // Newest-first: the UI relies on array order (everything unshifts on write),
+    // but an unordered select returns rows arbitrarily after a reload — which is
+    // how Engram/AI-run timestamps ended up looking shuffled. Fall back to an
+    // unordered read for any table without created_at.
+    const settled = await Promise.all(tables.map(async (t) => {
+      let res = await sb.from(t).select('data').order('created_at', { ascending: false });
+      if (res.error) res = await sb.from(t).select('data');
+      return { t, res };
+    }));
     for (const { t, res } of settled) {
       if (res.error) { console.warn('[Relay]', t, '—', res.error.message); continue; }
       if (res.data && res.data.length) { fillArray(ARRAY_MAP[t], res.data.map((r) => r.data)); loadedAny = true; }
@@ -61,7 +69,11 @@
     const ex = await sb.from('expense_doc').select('data').eq('id', 'current').maybeSingle();
     if (ex.data && ex.data.data) fillObject(window.CDC.EXPENSE, ex.data.data);
     const ad = await sb.from('app_docs').select('key,data');
-    if (ad.data) ad.data.forEach((r) => { if (r.key === 'roles') fillObject(window.CDC.ROLES, r.data); });
+    if (ad.data) ad.data.forEach((r) => {
+      if (r.key === 'roles') fillObject(window.CDC.ROLES, r.data);
+      // Admin-edited task catalog (products / stacks / output categories).
+      if (r.key === 'task_catalog' && window.CDC.applyTaskCatalog) window.CDC.applyTaskCatalog(r.data);
+    });
     window.CDC.__source = loadedAny ? 'supabase' : 'bundled';
     console.log('[Relay] data source:', window.CDC.__source);
     return loadedAny;
@@ -103,7 +115,7 @@
       logAuthEvent: async (text) => {
         try {
           const me = window.CDC.whoami ? await window.CDC.whoami() : null;
-          const row = { id: rid('act-'), kind: 'auth', ts: nowStr().slice(11, 16),
+          const row = { id: rid('act-'), kind: 'auth', ts: nowStr(),
             text: `${(me && me.name) || 'A user'} ${text}`, icon: '🔐' };
           if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(row);
           await sb.from('activity').insert({ id: row.id, data: row });
@@ -410,12 +422,21 @@
       return row;
     },
     // Append an entry to the live activity feed (also used as the notification sink).
+    // ts keeps the FULL date+time (server-side inserts already do) — renderers
+    // shorten via CDC.fmtTs, so yesterday's events no longer masquerade as today's.
     async addActivity(act) {
-      const row = { id: act.id || rid('act-'), kind: act.kind || 'event', ts: act.ts || nowStr().slice(11, 16),
+      const row = { id: act.id || rid('act-'), kind: act.kind || 'event', ts: act.ts || nowStr(),
         text: act.text || '', icon: act.icon || '•', to: act.to || null, refId: act.refId || null };
       if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(row);
       await remote(() => sb.from('activity').insert({ id: row.id, data: row }));
       return row;
+    },
+    // Persist the admin-edited task catalog (products / stacks / output map) and
+    // apply it in memory so every open form picks it up immediately.
+    async saveTaskCatalog(cat) {
+      if (window.CDC.applyTaskCatalog) window.CDC.applyTaskCatalog(cat);
+      const remoteOk = await remote(() => sb.from('app_docs').upsert({ key: 'task_catalog', data: cat }));
+      return { remoteOk };
     },
     // Fan out a notification (e.g. task blocked) to one feed entry per recipient.
     async notify(recipients, { text, icon, kind, refId }) {
@@ -461,7 +482,7 @@
         outcome, ts: nowStr(), scopeHash: 'live', input: inputLabel || '',
         output: (outcome === 'OK' ? content : errMsg || '').slice(0, 240),
       };
-      const act = { id: rid('act-'), kind: 'agent', ts: nowStr().slice(11, 16),
+      const act = { id: rid('act-'), kind: 'agent', ts: nowStr(),
         text: `${agent} ${outcome === 'OK' ? 'ran' : 'failed'}${inputLabel ? ' · ' + inputLabel : ''}`, icon: '⚙' };
       if (Array.isArray(window.CDC.AI_RUNS)) window.CDC.AI_RUNS.unshift(run);
       if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(act);
