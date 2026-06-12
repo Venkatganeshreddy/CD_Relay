@@ -127,10 +127,26 @@ function wd_streamText(r) {
     (blockers.length ? `; Blockers=${blockers.join(' | ')}` : '');
 }
 
+// Second Brain is per-viewer: every tab shows only what falls inside the
+// viewer's scope. L3/Admin/cross-dept see everything; an L2 sees their own
+// department's items. Cross-dept recommendations (no dept) stay visible to
+// whoever generated them; dept-less MOMs stay visible to all managers.
+function sb_scopeFilter(currentUser) {
+  const CDC = window.CDC;
+  const seesAll = ['L3', 'Admin'].includes(currentUser.level)
+    || ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.crossDept;
+  const deptIds = new Set((CDC.filterDepartments(currentUser.id) || []).map((d) => d.id));
+  return {
+    rec: (r) => seesAll || (r.dept ? deptIds.has(r.dept) : r.by === currentUser.name),
+    mom: (m) => seesAll || !m.dept || deptIds.has(m.dept),
+  };
+}
+
 function SecondBrainView({ tweaks, currentUser, nav }) {
   const [tab, setTab] = useStP('digest');
   const CDC = window.CDC;
-  const openRecs = (CDC.RECOMMENDATIONS || []).filter((r) => r.status === 'new').length;
+  const openRecs = (CDC.RECOMMENDATIONS || []).filter(sb_scopeFilter(currentUser).rec)
+    .filter((r) => r.status === 'new').length;
   return (
     <div className="fadein">
       <SectionHeader
@@ -213,7 +229,7 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
   const [err, setErr] = useStP(null);
   const [, force] = useStP(0);
 
-  const all = (CDC.RECOMMENDATIONS || []);
+  const all = (CDC.RECOMMENDATIONS || []).filter(sb_scopeFilter(currentUser).rec);
   const visible = all
     .filter((r) => filter === 'all' || r.kind === filter)
     .filter((r) => showDone || r.status === 'new' || !r.status);
@@ -683,7 +699,7 @@ window.WeeklyDigestPanel = WeeklyDigestPanel;
 // ── Meeting memory (the original Second Brain content) ───────────────────
 function MeetingMemoryPanel({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
-  const moms = CDC.MOMS;
+  const moms = (CDC.MOMS || []).filter(sb_scopeFilter(currentUser).mom);
   const [openMomId, setOpenMomId] = useStP(null);
   const openMom = openMomId ? (moms || []).find((m) => m.id === openMomId) : null;
   return (
