@@ -80,15 +80,13 @@ function LoginScreen({ onAuthed, onDemo }) {
               placeholder="name@nxtwave.co.in" disabled={!canAuth || busy}
               style={inp} />
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', margin: '14px 0 4px' }}>Password</label>
-            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
-              placeholder={signup ? 'At least 8 characters' : '••••••••'} disabled={!canAuth || busy}
-              style={inp} />
+            <PwInput value={pw} onChange={(e) => setPw(e.target.value)}
+              placeholder={signup ? 'At least 8 characters' : '••••••••'} disabled={!canAuth || busy} />
             {signup && (
               <React.Fragment>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'block', margin: '14px 0 4px' }}>Confirm password</label>
-                <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)}
-                  placeholder="Repeat your password" disabled={!canAuth || busy}
-                  style={inp} />
+                <PwInput value={pw2} onChange={(e) => setPw2(e.target.value)}
+                  placeholder="Repeat your password" disabled={!canAuth || busy} />
               </React.Fragment>
             )}
             {err && <div style={{ color: 'var(--rose, #c0392b)', fontSize: 12, marginTop: 12 }}>{err}</div>}
@@ -133,6 +131,36 @@ const inp = {
   background: 'var(--panel-2, #fafafa)', color: 'var(--text, #111)',
 };
 
+// Password input with a show/hide (eye) toggle — used by every password field
+// on the auth screens (sign in, sign up, reset, change-password modal).
+function PwInput({ value, onChange, placeholder, disabled, autoFocus }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <input type={show ? 'text' : 'password'} value={value} onChange={onChange}
+        placeholder={placeholder} disabled={disabled} autoFocus={autoFocus}
+        style={{ ...inp, paddingRight: 38 }} />
+      <button type="button" onClick={() => setShow((s) => !s)} tabIndex={-1} disabled={disabled}
+        title={show ? 'Hide password' : 'Show password'} aria-label={show ? 'Hide password' : 'Show password'}
+        style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+          color: 'var(--muted, #6b7280)', display: 'grid', placeItems: 'center', lineHeight: 0 }}>
+        {show
+          ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>}
+      </button>
+    </div>
+  );
+}
+
 // Shared new-password + confirm form. Used by the recovery-link screen and the
 // in-app Change-password modal — both end in CDC.auth.changePassword().
 function NewPasswordForm({ onSaved, saveLabel }) {
@@ -158,11 +186,11 @@ function NewPasswordForm({ onSaved, saveLabel }) {
   return (
     <form onSubmit={submit}>
       <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>New password</label>
-      <input type="password" autoFocus value={pw1} onChange={(e) => setPw1(e.target.value)}
-        placeholder="At least 8 characters" disabled={busy} style={inp} />
+      <PwInput autoFocus value={pw1} onChange={(e) => setPw1(e.target.value)}
+        placeholder="At least 8 characters" disabled={busy} />
       <label style={{ fontSize: 12, fontWeight: 500, display: 'block', margin: '14px 0 4px' }}>Confirm new password</label>
-      <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)}
-        placeholder="••••••••" disabled={busy} style={inp} />
+      <PwInput value={pw2} onChange={(e) => setPw2(e.target.value)}
+        placeholder="••••••••" disabled={busy} />
       {err && <div style={{ color: 'var(--rose, #c0392b)', fontSize: 12, marginTop: 12 }}>{err}</div>}
       <button className="btn" type="submit" disabled={busy}
         style={{ width: '100%', marginTop: 18, justifyContent: 'center', background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)', padding: '9px 0', fontWeight: 600 }}>

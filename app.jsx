@@ -388,9 +388,11 @@ function Topbar({ route, nav, currentUser, tweaks, setTweak, openMom, authMode, 
         <kbd>⌘K</kbd>
       </div>
 
-      <button className="btn" data-size="sm" onClick={openMom} title="Upload meeting transcript and run Scribe">
-        <Icon name="sheet" size={12} /> MOM Loader
-      </button>
+      {window.canUseMomLoader && window.canUseMomLoader(currentUser) && (
+        <button className="btn" data-size="sm" onClick={openMom} title="Upload meeting transcript and run Scribe">
+          <Icon name="sheet" size={12} /> MOM Loader
+        </button>
+      )}
 
       <span className={`env-pill`} data-env={tweaks.env}>{tweaks.env}</span>
 

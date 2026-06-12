@@ -2,9 +2,12 @@
 
 const { useState: useStP, useMemo: useMP } = React;
 
-// MOM Loader is restricted to L3 and Admin.
+// MOM Loader is restricted to managers (L2/L3/Admin), plus any employee with a
+// per-person momLoader flag (e.g. the developer account, NW0006717). Grant via:
+//   update employees set data = data || '{"momLoader": true}' where id = '<NW id>';
 function canUseMomLoader(u) {
-  return !!u && (u.role === 'ADMIN' || u.role === 'PRODUCT_OWNER' || u.level === 'L3' || u.level === 'Admin');
+  return !!u && (u.momLoader === true || u.role === 'ADMIN' || u.role === 'PRODUCT_OWNER'
+    || u.level === 'L2' || u.level === 'L3' || u.level === 'Admin');
 }
 window.canUseMomLoader = canUseMomLoader;
 

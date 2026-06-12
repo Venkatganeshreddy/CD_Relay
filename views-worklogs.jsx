@@ -9,6 +9,17 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const all = useMWL(() => CDC.filterWorklogs(currentUser.id), [currentUser.id]);
 
+  // Title mirrors the viewer's actual scope: L3/Admin see the whole department,
+  // a manager (L2 or anyone with reportees) sees their team, an L1/L0 sees only
+  // their own entries — so don't call it "Department worklogs" for everyone.
+  const pageTitle = useMWL(() => {
+    const lvl = currentUser.level || currentUser.role;
+    if (lvl === 'L3' || lvl === 'Admin' || currentUser.role === 'ADMIN'
+      || currentUser.role === 'PRODUCT_OWNER' || currentUser.crossDept) return 'Department worklogs';
+    const hasReportees = (CDC.USERS || []).some((u) => u.managerId === currentUser.id);
+    return (lvl === 'L2' || hasReportees) ? 'Team worklogs' : 'My worklogs';
+  }, [currentUser.id]);
+
   // Filter state
   const [range, setRange] = useStWL('week');           // today | week | month | all
   const [groupBy, setGroupBy] = useStWL('person');     // person | category | stack | day
@@ -63,7 +74,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   return (
     <div className="fadein">
       <SectionHeader
-        title="Department worklogs"
+        title={pageTitle}
         subtitle={`${filtered.length} entries · ${totalHrs.toFixed(1)} hrs · ${contributors} contributor${contributors === 1 ? '' : 's'} · ${rangeLabel(range)}`}
         actions={
           <>
