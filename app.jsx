@@ -181,12 +181,10 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     ...(isL3orAdmin ? [{ id: 'farm', label: 'Agent Farm', icon: 'plug' }] : []),
   ];
   const groupSystem = (isL3orAdmin) ? [
-    { id: 'knowledge', label: 'Knowledge', icon: 'sheet' },
     { id: 'codex', label: 'Codex', icon: 'admin' },
     { id: 'engram', label: 'Engram', icon: 'sparkles', badge: window.CDC.PROPOSALS.filter((p) => p.state === 'pending').length, badgeTone: 'amber' },
     { id: 'expense', label: 'Tool Expense Tracker', icon: 'runs' },
     { id: 'runs', label: 'AI runs', icon: 'runs' },
-    { id: 'catalog', label: 'Task catalog', icon: 'tasks' },
     { id: 'guideline', label: 'Guideline', icon: 'sheet' },
     { id: 'admin', label: 'Admin', icon: 'admin' },
   ] : [
@@ -441,7 +439,8 @@ function buildCrumbs(route, currentUser) {
     case 'my-tasks': return ['Daily work', 'My tasks'];
     case 'worklogs': return ['Daily work', 'Worklogs'];
     case 'codex': return ['System', 'Codex'];
-    case 'catalog': return ['System', 'Task catalog'];
+    case 'catalog': return ['System', 'Admin', 'Task catalog'];
+    case 'knowledge': return ['System', 'Admin', 'Knowledge'];
     case 'architecture': return ['System', 'Codex', 'Architecture'];
     case 'expense': return ['System', 'Tool Expense Tracker'];
     case 'engram': return ['System', 'Engram'];
@@ -613,7 +612,7 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
 }
 
 // ── Admin (placeholder) ─────────────────────────────────────────────────
-function AdminView({ tweaks, currentUser }) {
+function AdminView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const [view, setView] = useState_a(null);          // null | 'employees'
   const [rows, setRows] = useState_a(null);
@@ -762,6 +761,8 @@ function AdminView({ tweaks, currentUser }) {
         {[
           { t: 'Employees', d: `${CDC.USERS.length} users · click to view details from Supabase`, action: openEmployees },
           { t: 'Master data', d: 'Business directions, products, departments, sub-teams', action: () => setView('masterdata') },
+          { t: 'Task catalog', d: 'Product-Audience, Stack & Output-category lists for the task forms', action: () => nav && nav.go('catalog') },
+          { t: 'Knowledge', d: 'Uploaded docs & org reference the agents read', action: () => nav && nav.go('knowledge') },
           { t: 'KPI catalog', d: 'KPIs · formulas versioned server-side', action: () => setView('kpis') },
           { t: 'Imports', d: 'Daily reports + monthly KPIs · nightly @ 23:30 IST', action: () => setView('imports') },
           { t: 'MCP tokens', d: 'Personal access tokens for Claude Desktop / Cursor', action: () => setView('mcp') },
