@@ -65,15 +65,9 @@ function hashForRoute(r) {
 
 function App({ authMode = 'demo', me = null, realUser = null, impersonating = false }) {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  // Default landing: L1/L0 contributors open on My Tasks (their primary surface);
-  // managers/admins open on the dashboard. An explicit URL hash always wins.
-  const [route, setRoute] = useState_a(() => {
-    const fromHash = routeFromHash();
-    if (fromHash) return fromHash;
-    const u = (authMode === 'authed' && me) ? me : null;
-    if (u && isContributorRole(u.role)) return { name: 'my-tasks', params: {} };
-    return { name: 'dashboard', params: {} };
-  });
+  // Everyone (incl. L1/L0 contributors) lands on their dashboard; an explicit
+  // URL hash always wins. L1/L0 get a contributor Dashboard in the sidebar too.
+  const [route, setRoute] = useState_a(() => routeFromHash() || { name: 'dashboard', params: {} });
   const [copilotPrefill, setCopilotPrefill] = useState_a(null);
   const [momOpen, setMomOpen] = useState_a(false);
 
@@ -172,6 +166,9 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
 
   // ── Sidebar groups (Daily Worklog / Department / Intelligence / System) ─
   const groupDaily = [
+    // Contributors (L1/L0) get their Dashboard here, since the manager-only
+    // Department group (which carries the manager Dashboard) is hidden for them.
+    ...(isContributor ? [{ id: 'dashboard', label: 'Dashboard', icon: 'dashboard' }] : []),
     { id: 'my-tasks', label: 'Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => tt.owner === currentUser.id && tt.status !== 'DONE' && tt.status !== 'REJECTED').length || null, badgeTone: 'amber' },
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
