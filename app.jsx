@@ -65,7 +65,15 @@ function hashForRoute(r) {
 
 function App({ authMode = 'demo', me = null, realUser = null, impersonating = false }) {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [route, setRoute] = useState_a(() => routeFromHash() || { name: 'dashboard', params: {} });
+  // Default landing: L1/L0 contributors open on My Tasks (their primary surface);
+  // managers/admins open on the dashboard. An explicit URL hash always wins.
+  const [route, setRoute] = useState_a(() => {
+    const fromHash = routeFromHash();
+    if (fromHash) return fromHash;
+    const u = (authMode === 'authed' && me) ? me : null;
+    if (u && isContributorRole(u.role)) return { name: 'my-tasks', params: {} };
+    return { name: 'dashboard', params: {} };
+  });
   const [copilotPrefill, setCopilotPrefill] = useState_a(null);
   const [momOpen, setMomOpen] = useState_a(false);
 

@@ -651,7 +651,11 @@ function TasksView({ tweaks, currentUser }) {
               const ownerName = owner?.name || 'Unassigned';
               const overdue = isOverdue({ ...t, status });
               const meta = statusMeta(status);
-              const canSetStatus = status !== 'SUGGESTED';
+              // Only the task's owner may change its status; everyone else
+              // (managers included) sees it read-only. SUGGESTED tasks are never
+              // status-editable here (they go through approve/reject).
+              const isOwner = t.owner === me.id;
+              const canSetStatus = status !== 'SUGGESTED' && isOwner;
               return (
                 <tr key={t.id} style={decided === 'rejected' ? { opacity: 0.45 } : decided === 'approved' ? { background: 'color-mix(in oklch, var(--green-soft) 40%, transparent)' } : {}}>
                   <td>
@@ -685,7 +689,11 @@ function TasksView({ tweaks, currentUser }) {
                         style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
                         {TASK_STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
                       </select>
-                    ) : <Pill tone="outline" dot>suggested</Pill>}
+                    ) : status === 'SUGGESTED' ? (
+                      <Pill tone="outline" dot>suggested</Pill>
+                    ) : (
+                      <Pill tone={meta.tone} dot title={isOwner ? '' : `Only ${ownerName} can change this`}>{meta.label}</Pill>
+                    )}
                   </td>
                   <td>
                     {status === 'SUGGESTED' ? (

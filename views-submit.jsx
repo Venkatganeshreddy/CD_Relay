@@ -16,7 +16,8 @@ function istMinutesNow() {
     .formatToParts(new Date()).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
   return (+p.hour) * 60 + (+p.minute);
 }
-const GLANCE_OPENS_AT = 18 * 60; // 6:00 PM IST
+const GLANCE_OPENS_AT = 18 * 60;  // 6:00 PM IST
+const GLANCE_CLOSES_AT = 20 * 60; // 8:00 PM IST — window shuts; open tasks escalate
 
 function GlanceView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
@@ -25,23 +26,26 @@ function GlanceView({ tweaks, currentUser, nav }) {
     t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
 
-  // The snapshot unlocks at exactly 6:00 PM IST; before that, show a countdown.
-  // A 30s tick keeps the countdown (and the unlock moment) fresh without a reload.
+  // The snapshot is open only between 6:00 PM and 8:00 PM IST. Before 6 PM we
+  // show a countdown; after 8 PM it's closed (anything still unacknowledged
+  // feeds the escalation engine). A 30s tick keeps the state fresh.
   const [, setTick] = useS(0);
   useE(() => { const id = setInterval(() => setTick((x) => x + 1), 30000); return () => clearInterval(id); }, []);
   const nowMin = istMinutesNow();
-  const isOpen = nowMin >= GLANCE_OPENS_AT;
+  const phase = nowMin < GLANCE_OPENS_AT ? 'before' : nowMin >= GLANCE_CLOSES_AT ? 'after' : 'open';
   const minsLeft = GLANCE_OPENS_AT - nowMin;
+
+  const fmtH = (mins) => `${Math.floor(mins / 60) > 0 ? `${Math.floor(mins / 60)}h ` : ''}${mins % 60}m`;
 
   return (
     <div className="fadein">
       <SectionHeader
         title="Day-end glance"
-        subtitle={`Quick 6:00 PM check-in. Update each open task's status; add a reason if blocked. Tasks left unacknowledged escalate up the manager graph.`}
+        subtitle={`The 6:00 PM check-in (open 6:00–8:00 PM IST). Update each open task's status; add a reason if blocked. Tasks left unacknowledged when the window closes escalate up the manager graph.`}
         actions={
           <>
-            <Pill tone={!isOpen ? 'neutral' : pending ? 'amber' : 'green'} dot>
-              {!isOpen ? 'opens 6:00 PM IST' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
+            <Pill tone={phase !== 'open' ? 'neutral' : pending ? 'amber' : 'green'} dot>
+              {phase === 'before' ? 'opens 6:00 PM IST' : phase === 'after' ? 'closed (8:00 PM)' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
             </Pill>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
               <Icon name="tasks" size={11} /> Open Tasks
@@ -49,14 +53,26 @@ function GlanceView({ tweaks, currentUser, nav }) {
           </>
         }
       />
-      {!isOpen ? (
+      {phase === 'before' ? (
         <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 10 }}>🕕</div>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>The 6:00 PM snapshot isn't open yet</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Opens in {Math.floor(minsLeft / 60) > 0 ? `${Math.floor(minsLeft / 60)}h ` : ''}{minsLeft % 60}m (at 18:00 IST).
+            Opens in {fmtH(minsLeft)} (at 18:00 IST) and closes at 20:00 IST.
             {mine.length > 0 && ` You have ${mine.length} open task${mine.length === 1 ? '' : 's'} to review then.`}
             {' '}Until then you can update tasks anytime from My Tasks.
+          </div>
+        </div>
+      ) : phase === 'after' ? (
+        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>🌙</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>The 6:00 PM snapshot has closed for today</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            The window was open 6:00–8:00 PM IST.
+            {pending > 0
+              ? ` ${pending} task${pending === 1 ? '' : 's'} went unacknowledged and will escalate.`
+              : ' All your open tasks were acknowledged — nice.'}
+            {' '}You can still update tasks from My Tasks; the snapshot reopens at 6:00 PM tomorrow.
           </div>
         </div>
       ) : mine.length === 0 ? (
@@ -70,6 +86,12 @@ function GlanceView({ tweaks, currentUser, nav }) {
   );
 }
 window.GlanceView = GlanceView;
+
+// Target working hours a contributor is expected to log per day. 8 is the
+// floor; overtime is fine and shown without warning. Used by the day-end
+// submit flow (progress + soft warning) and the Worklogs under-log flag.
+const DAILY_TARGET_HRS = 8;
+window.CDC.DAILY_TARGET_HRS = DAILY_TARGET_HRS;
 
 // ── Catalog (shared, defined in data.js → window.CDC.TASK_CATALOG) ────────
 // These are LIVE references — applyTaskCatalog() mutates them in place when an
@@ -251,8 +273,13 @@ function SubmitView({ tweaks, currentUser, nav }) {
 
   function onWrapUp() {
     pushUser("That's all for today");
+    const totalHrs = tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+    const short = DAILY_TARGET_HRS - totalHrs;
     typeThen(() => {
-      pushBot(`Wrapped up. ${tasks.length} task${tasks.length === 1 ? '' : 's'} logged against ${myEmpId} for today.`);
+      const base = `Wrapped up. ${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${totalHrs.toFixed(1)} hrs logged against ${myEmpId} for today.`;
+      pushBot(short > 0
+        ? `${base} That's ${short.toFixed(1)}h under the ${DAILY_TARGET_HRS}h day — it's saved, but if you missed any work add it and resubmit. Managers see days under ${DAILY_TARGET_HRS}h flagged.`
+        : base);
       setStep('done');
       persistReport();
     });
@@ -719,14 +746,48 @@ function AnotherInput({ onAnotherTask, onWrapUp }) {
   );
 }
 
+// ── Daily-hours progress toward the 8h target ─────────────────────────────
+// Soft guidance only: shows progress, turns amber when under 8h, green at/above.
+// Overtime (>8h) is fine — bar caps at 100% and never warns for going over.
+function DailyHoursBar({ totalHrs, compact }) {
+  const target = DAILY_TARGET_HRS;
+  const under = totalHrs < target;
+  const pct = Math.min(100, target ? (totalHrs / target) * 100 : 0);
+  const color = under ? 'var(--amber, #b7791f)' : 'var(--green, #1e7e34)';
+  return (
+    <div style={{ marginTop: compact ? 4 : 0 }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11.5, marginBottom: 4 }}>
+        <span className="muted">Daily total</span>
+        <span className="mono" style={{ color, fontWeight: 600 }}>
+          {totalHrs.toFixed(1)} / {target}h
+        </span>
+      </div>
+      <div style={{ height: 6, borderRadius: 4, background: 'var(--panel-2, #eceef1)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .25s ease' }} />
+      </div>
+      {under && (
+        <div style={{ fontSize: 11, color: 'var(--amber, #b7791f)', marginTop: 5 }}>
+          {(target - totalHrs).toFixed(1)}h short of the {target}h day — add more tasks, or wrap up if it was a part day.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Done card ───────────────────────────────────────────────────────────
 function DoneCard({ tasks, myEmpId, restart }) {
   const totalHrs = tasks.reduce((s, t) => s + (t.hours || 0), 0);
+  const under = totalHrs < DAILY_TARGET_HRS;
   return (
     <div className="celebrate fadein" style={{ alignSelf: 'stretch' }}>
       <div className="check"><Icon name="check" size={28} stroke={2.5} /></div>
       <h2>Logged. See you tomorrow 👋</h2>
       <p>{tasks.length} task{tasks.length === 1 ? '' : 's'} · {totalHrs.toFixed(1)} hrs · against <span className="mono">{myEmpId}</span></p>
+      {under && (
+        <p className="muted" style={{ fontSize: 12.5, color: 'var(--amber, #b7791f)', marginTop: -4 }}>
+          Heads up: that's under the {DAILY_TARGET_HRS}h day — your manager will see it flagged. Resubmit if you missed something.
+        </p>
+      )}
       <div className="row" style={{ gap: 8, marginTop: 16, justifyContent: 'center' }}>
         <button className="btn" data-size="sm">View today's report</button>
         <button className="btn" data-size="sm" data-variant="ghost" onClick={restart}><Icon name="refresh" size={12} /> Edit & resubmit</button>
@@ -751,6 +812,7 @@ function SessionRail({ tasks, current, step, currentUser }) {
           <div style={{ fontSize: 18, fontWeight: 600 }} className="mono">{totalHrs.toFixed(1)}<span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 4 }}>hrs</span></div>
           <span className="muted" style={{ fontSize: 11.5 }}>logged today</span>
         </div>
+        <div style={{ marginTop: 8 }}><DailyHoursBar totalHrs={totalHrs} /></div>
       </div>
 
       <div className="divider" />

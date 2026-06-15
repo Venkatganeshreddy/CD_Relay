@@ -71,6 +71,32 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   // Group filtered worklogs for the table
   const grouped = useMWL(() => groupWorklogs(filtered, groupBy), [filtered, groupBy]);
 
+  // Export the currently-filtered worklogs to a CSV the browser downloads.
+  function exportCsv() {
+    const esc = (v) => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const cols = ['Date', 'Person', 'EMP ID', 'Department', 'Sub-team', 'Stacks', 'Output category', 'Count', 'Hours', 'Status', 'Details'];
+    const rows = filtered.map((w) => {
+      const u = CDC.lookup.user(w.userId) || {};
+      const dept = (CDC.lookup.dept(w.dept) || {}).name || w.dept || '';
+      const details = w.template && typeof w.template === 'object'
+        ? Object.values(w.template).filter(Boolean).join(' · ') : (w.reason || '');
+      return [w.date || '', w.userName || u.name || w.userId, w.userId, dept, w.sub || '',
+        (w.stacks || []).join('; '), w.outputCategory || '', w.outputCount ?? '',
+        w.hours ?? '', w.status || '', details].map(esc).join(',');
+    });
+    const csv = [cols.join(','), ...rows].join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `worklogs-${rangeLabel(range).replace(/\s+/g, '-').toLowerCase()}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fadein">
       <SectionHeader
@@ -78,7 +104,10 @@ function WorklogsView({ tweaks, currentUser, nav }) {
         subtitle={`${filtered.length} entries · ${totalHrs.toFixed(1)} hrs · ${contributors} contributor${contributors === 1 ? '' : 's'} · ${rangeLabel(range)}`}
         actions={
           <>
-            <button className="btn" data-size="sm"><Icon name="filter" size={12} /> Export CSV</button>
+            <button className="btn" data-size="sm" onClick={exportCsv} disabled={!filtered.length}
+              title={filtered.length ? 'Download the filtered rows as CSV' : 'Nothing to export'}>
+              <Icon name="filter" size={12} /> Export CSV
+            </button>
             <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('copilot', { prefill: 'Summarize this week\u2019s worklog patterns and call out anything concerning.' })}>
               <Icon name="sparkles" size={12} /> Ask Copilot
             </button>
@@ -330,16 +359,22 @@ function GroupHeader({ group, groupBy }) {
 // ── Breakdown panel ────────────────────────────────────────────────────
 function BreakdownList({ items, max }) {
   if (items.length === 0) return <div className="empty">No data.</div>;
+  const amber = 'var(--amber, #b7791f)';
   return (
     <div style={{ padding: '4px 0' }}>
       {items.map((it) => (
         <div key={it.key} style={{ padding: '6px 14px' }}>
           <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{it.label}</span>
-            <span className="mono" style={{ fontWeight: 500 }}>{it.value.toFixed(1)} hr</span>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>
+              {it.under && <span title={`Avg ${it.avgPerDay.toFixed(1)}h/day over ${it.nDays} day${it.nDays === 1 ? '' : 's'} — under the ${window.CDC.DAILY_TARGET_HRS || 8}h target`} style={{ color: amber, marginRight: 4 }}>⚠</span>}
+              {it.label}
+            </span>
+            <span className="mono" style={{ fontWeight: 500, color: it.under ? amber : undefined }}>
+              {it.value.toFixed(1)} hr{it.avgPerDay != null ? ` · ${it.avgPerDay.toFixed(1)}/day` : ''}
+            </span>
           </div>
           <div style={{ height: 4, background: 'var(--panel-2)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
-            <div style={{ width: `${(it.value / max) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+            <div style={{ width: `${(it.value / max) * 100}%`, height: '100%', background: it.under ? amber : 'var(--accent)', borderRadius: 2 }} />
           </div>
         </div>
       ))}
@@ -421,11 +456,19 @@ function breakdown(items, key, valueKey) {
 }
 
 function breakdownByPerson(items) {
-  const map = new Map();
-  for (const it of items) map.set(it.userId, (map.get(it.userId) || 0) + it.hours);
-  return [...map.entries()].map(([uid, v]) => {
+  const target = window.CDC.DAILY_TARGET_HRS || 8;
+  const map = new Map();   // uid → { hours, days:Set }
+  for (const it of items) {
+    const e = map.get(it.userId) || { hours: 0, days: new Set() };
+    e.hours += it.hours; if (it.date) e.days.add(it.date);
+    map.set(it.userId, e);
+  }
+  return [...map.entries()].map(([uid, e]) => {
     const u = window.CDC.lookup.user(uid);
-    return { key: uid, label: u?.name || uid, value: v };
+    const nDays = e.days.size || 1;
+    const avgPerDay = e.hours / nDays;
+    // Flag people averaging under the daily target across the days they logged.
+    return { key: uid, label: u?.name || uid, value: e.hours, avgPerDay, nDays, under: avgPerDay < target - 0.01 };
   }).sort((a, b) => b.value - a.value);
 }
 
