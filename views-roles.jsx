@@ -30,11 +30,16 @@ function ManagerView({ tweaks, currentUser, nav }) {
   }, [pickedMgrId, currentUser.id]);
 
   const mgr = pickedMgrId ? CDC.lookup.user(pickedMgrId) : currentUser;
+  // Day/Week filter — re-scopes the whole dashboard to today or the last 7 days.
+  const [range, setRange] = useStR('week');            // 'day' | 'week'
+  const windowDays = range === 'day' ? 0 : 6;
+  const rangeShort = range === 'day' ? 'today' : '7d';
+  const rangeLong = range === 'day' ? 'today' : 'this week';
   const teamWorklogs = useMR(() => {
     if (!mgr.sub) return [];
     return CDC.WORKLOGS.filter((w) => w.sub === mgr.sub);
   }, [mgr]);
-  const recentWorklogs = teamWorklogs.filter((w) => w.daysAgo <= 6);
+  const recentWorklogs = teamWorklogs.filter((w) => w.daysAgo <= windowDays);
 
   const [selectedEmployee, setSelectedEmployee] = useStR(null);
 
@@ -44,7 +49,8 @@ function ManagerView({ tweaks, currentUser, nav }) {
   const blockedByReason = groupBy(blocked, (b) => b.reason || 'No reason given');
   const productSplit = computeProductSplit(recentWorklogs);
   const workflowsUsed = computeWorkflowsUsed(recentWorklogs);
-  const reportRate = computeReportRate(mgr, recentWorklogs, myReportees);
+  // Expected workdays in range: 1 for a day, 5 for a working week.
+  const reportRate = computeReportRate(mgr, recentWorklogs, myReportees, range === 'day' ? 1 : 5);
   const teamHighlights = computeTeamHighlights(recentWorklogs);
 
   return (
@@ -62,6 +68,10 @@ function ManagerView({ tweaks, currentUser, nav }) {
                 ))}
               </select>
             )}
+            <div className="seg">
+              <button data-active={range === 'day'} onClick={() => setRange('day')}>Day</button>
+              <button data-active={range === 'week'} onClick={() => setRange('week')}>Week</button>
+            </div>
             <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('weekly')}><Icon name="weekly" size={12} /> Weekly draft</button>
           </>
         }
@@ -79,7 +89,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
           <h2 className="h-section">Team overview</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <div className="kpi-tile" data-tone={reportRate >= 0.8 ? 'green' : reportRate >= 0.6 ? 'amber' : 'red'}>
-              <div className="kpi-name">Report completion · 7d</div>
+              <div className="kpi-name">Report completion · {rangeShort}</div>
               <div className="kpi-value">{Math.round(reportRate * 100)}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 400 }}>%</span></div>
               <div className="kpi-meta"><span>{myReportees.length} reportee{myReportees.length === 1 ? '' : 's'}</span></div>
             </div>
@@ -94,7 +104,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
               <div className="kpi-meta"><span>{Object.keys(blockedByReason).length} distinct reasons</span></div>
             </div>
             <div className="kpi-tile">
-              <div className="kpi-name">Total hours · 7d</div>
+              <div className="kpi-name">Total hours · {rangeShort}</div>
               <div className="kpi-value">{recentWorklogs.reduce((s, w) => s + w.hours, 0).toFixed(0)}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 400 }}>h</span></div>
               <div className="kpi-meta"><span>{recentWorklogs.length} entries</span></div>
             </div>
@@ -102,7 +112,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
 
           {/* Two-column: highlights + workflows */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
-            <Card title="Top accomplishments · this week" meta="auto-summarized" actions={<Pill tone="accent" dot>Rollup</Pill>}>
+            <Card title={`Top accomplishments · ${rangeLong}`} meta="auto-summarized" actions={<Pill tone="accent" dot>Rollup</Pill>}>
               {teamHighlights.length === 0 ? (
                 <div className="muted" style={{ fontSize: 12.5 }}>No accomplishments captured yet — Rollup runs Monday 06:00 IST.</div>
               ) : (
@@ -116,9 +126,9 @@ function ManagerView({ tweaks, currentUser, nav }) {
               )}
             </Card>
 
-            <Card title="Most-used agentic workflows" meta="this week">
+            <Card title="Most-used agentic workflows" meta={rangeLong}>
               {workflowsUsed.length === 0 ? (
-                <div className="muted" style={{ fontSize: 12.5 }}>No agent workflows logged this week.</div>
+                <div className="muted" style={{ fontSize: 12.5 }}>No agent workflows logged {rangeLong}.</div>
               ) : (
                 <div className="col" style={{ gap: 10 }}>
                   {workflowsUsed.slice(0, 5).map((w, i) => {
@@ -141,7 +151,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
           </div>
 
           {/* Product contribution split */}
-          <Card title="Product contribution · this week" meta="hours per Product-Audience" style={{ marginTop: 12 }}>
+          <Card title={`Product contribution · ${rangeLong}`} meta="hours per Product-Audience" style={{ marginTop: 12 }}>
             <div className="col" style={{ gap: 8 }}>
               {productSplit.map((p) => {
                 const max = productSplit[0]?.hours || 1;
@@ -157,7 +167,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
                     </div>
                 );
               })}
-              {productSplit.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>No worklogs yet this week.</div>}
+              {productSplit.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>No worklogs yet {rangeLong}.</div>}
             </div>
           </Card>
 
@@ -185,6 +195,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
                 key={emp.id}
                 emp={emp}
                 worklogs={CDC.WORKLOGS.filter((w) => w.userId === emp.id)}
+                range={range}
                 onClick={() => setSelectedEmployee(emp)}
               />
             ))}
@@ -213,14 +224,17 @@ const PRODUCT_COLORS = {
   'Launchpad': 'var(--red)',
 };
 
-function EmployeeCard({ emp, worklogs, onClick }) {
+function EmployeeCard({ emp, worklogs, onClick, range = 'week' }) {
+  const windowDays = range === 'day' ? 0 : 6;
   const last = worklogs.length > 0 ? worklogs[0] : null;
-  const last7 = worklogs.filter((w) => w.daysAgo <= 6);
-  const hrs7 = last7.reduce((s, w) => s + w.hours, 0);
-  const blockers = last7.filter((w) => w.status === 'Blocked').length;
-  const expected = 7;
-  const submittedDays = new Set(last7.map((w) => w.daysAgo)).size;
-  const compPct = Math.round((submittedDays / expected) * 100);
+  const inRange = worklogs.filter((w) => w.daysAgo <= windowDays);
+  const hrs7 = inRange.reduce((s, w) => s + w.hours, 0);
+  const blockers = inRange.filter((w) => w.status === 'Blocked').length;
+  // Expected workdays: 1 for a day, 5 for a working week (weekends excluded).
+  const expected = range === 'day' ? 1 : 5;
+  const submittedDays = new Set(inRange.map((w) => w.date)).size;
+  const compPct = Math.min(100, Math.round((submittedDays / expected) * 100));
+  const hrsLabel = range === 'day' ? 'today' : 'last 7d';
   const tone = compPct >= 85 ? 'green' : compPct >= 60 ? 'amber' : 'red';
   return (
     <div className="card card-pad" onClick={onClick} style={{ cursor: 'default' }}>
@@ -239,7 +253,7 @@ function EmployeeCard({ emp, worklogs, onClick }) {
         </div>
         <div>
           <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{hrs7.toFixed(0)}h</div>
-          <div style={{ fontSize: 10 }}>last 7d</div>
+          <div style={{ fontSize: 10 }}>{hrsLabel}</div>
         </div>
         <div>
           <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: blockers > 0 ? 'var(--red)' : undefined }}>{blockers}</div>
@@ -411,14 +425,14 @@ function computeWorkflowsUsed(worklogs) {
     .sort((a, b) => b.count - a.count);
 }
 
-function computeReportRate(mgr, recentLogs, reportees) {
-  const expectedPerWeek = reportees.length * 5;
+function computeReportRate(mgr, recentLogs, reportees, expectedDays = 5) {
+  const expectedTotal = reportees.length * expectedDays;
   const submittedDays = new Set();
   for (const r of reportees) {
     const myLogs = recentLogs.filter((w) => w.userId === r.id);
     for (const w of myLogs) submittedDays.add(`${r.id}-${w.date}`);
   }
-  return expectedPerWeek > 0 ? Math.min(1, submittedDays.size / expectedPerWeek) : 0.85;
+  return expectedTotal > 0 ? Math.min(1, submittedDays.size / expectedTotal) : 0.85;
 }
 
 function computeTeamHighlights(worklogs) {
