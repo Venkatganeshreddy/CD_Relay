@@ -19,6 +19,15 @@ function istMinutesNow() {
 const GLANCE_OPENS_AT = 18 * 60;  // 6:00 PM IST
 const GLANCE_CLOSES_AT = 20 * 60; // 8:00 PM IST — window shuts; open tasks escalate
 
+// Shared snapshot-window state so the dashboard banner and the Day-end glance
+// agree: 'before' (countdown to 6 PM), 'open' (6–8 PM), 'after' (closed).
+function snapshotPhase() {
+  const nowMin = istMinutesNow();
+  const phase = nowMin < GLANCE_OPENS_AT ? 'before' : nowMin >= GLANCE_CLOSES_AT ? 'after' : 'open';
+  return { phase, minsToOpen: GLANCE_OPENS_AT - nowMin };
+}
+window.CDC.snapshotPhase = snapshotPhase;
+
 function GlanceView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
@@ -26,27 +35,56 @@ function GlanceView({ tweaks, currentUser, nav }) {
     t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
 
-  // The snapshot is open only between 6:00 PM and 8:00 PM IST. Before 6 PM we
-  // show a countdown; after 8 PM it's closed (anything still unacknowledged
-  // feeds the escalation engine). A 30s tick keeps the state fresh.
+  // A 30s tick keeps the window state (and the unlock/close moment) fresh.
   const [, setTick] = useS(0);
+  const [creating, setCreating] = useS(false);
   useE(() => { const id = setInterval(() => setTick((x) => x + 1), 30000); return () => clearInterval(id); }, []);
-  const nowMin = istMinutesNow();
-  const phase = nowMin < GLANCE_OPENS_AT ? 'before' : nowMin >= GLANCE_CLOSES_AT ? 'after' : 'open';
-  const minsLeft = GLANCE_OPENS_AT - nowMin;
-
+  const { phase, minsToOpen: minsLeft } = snapshotPhase();
   const fmtH = (mins) => `${Math.floor(mins / 60) > 0 ? `${Math.floor(mins / 60)}h ` : ''}${mins % 60}m`;
+
+  // L1/L0 contributors add their own tasks here; the new task (owned by them)
+  // immediately appears below for the 6 PM status snapshot.
+  function createTask(form) {
+    const m = (CDC.TASK_CATALOG.OUTPUT_MAP || {})[form.outputCategory] || {};
+    const tmplSummary = form.template ? Object.values(form.template).filter(Boolean).join(' · ') : '';
+    const title = (form.title && form.title.trim()) ||
+      `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${tmplSummary ? ` — ${tmplSummary}` : ''}`;
+    const STATUS_MAP = { 'In-progress': 'ACTIVE', 'Done': 'DONE', 'Blocked': 'BLOCKED', 'Overdue': 'ACTIVE', 'Backlog': 'BACKLOG' };
+    const status = STATUS_MAP[form.status] || 'ACTIVE';
+    const task = {
+      id: `task-${Date.now()}`, title, status, reason: 'Manual', sourceReports: [],
+      owner: currentUser.id, dept: currentUser.dept, created: todayStr, due: form.due || null,
+      confidence: null, source: 'manual', createdBy: currentUser.id,
+      products: form.products || [], stacks: form.stacks || [], stack: (form.stacks || [])[0] || null,
+      outputCategory: form.outputCategory || null, taskCategory: m.task || '',
+      activityCategory: m.activity || '', metricCategory: m.metric || '',
+      outputCount: form.outputCount ?? null, template: form.template || {},
+      estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
+      blockReason: form.reason || '',
+    };
+    if (status === 'BLOCKED') { task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = currentUser.managerId || null; }
+    CDC.db.addTask(task);
+    setCreating(false);
+    setTick((x) => x + 1);
+  }
+
+  const addBtn = (variant) => (
+    <button className="btn" data-size="sm" data-variant={variant} onClick={() => setCreating(true)}>
+      <Icon name="check" size={11} /> Add task
+    </button>
+  );
 
   return (
     <div className="fadein">
       <SectionHeader
         title="Day-end glance"
-        subtitle={`The 6:00 PM check-in (open 6:00–8:00 PM IST). Update each open task's status; add a reason if blocked. Tasks left unacknowledged when the window closes escalate up the manager graph.`}
+        subtitle={`The 6:00 PM check-in (open 6:00–8:00 PM IST). Add your tasks for today, then set each one's status; add a reason if blocked. Tasks left unacknowledged when the window closes escalate up the manager graph.`}
         actions={
           <>
             <Pill tone={phase !== 'open' ? 'neutral' : pending ? 'amber' : 'green'} dot>
               {phase === 'before' ? 'opens 6:00 PM IST' : phase === 'after' ? 'closed (8:00 PM)' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
             </Pill>
+            {phase === 'open' && mine.length > 0 && addBtn('ghost')}
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
               <Icon name="tasks" size={11} /> Open Tasks
             </button>
@@ -76,12 +114,19 @@ function GlanceView({ tweaks, currentUser, nav }) {
           </div>
         </div>
       ) : mine.length === 0 ? (
-        <div className="empty" style={{ padding: 24 }}>
-          You have no open tasks. New work from MoMs, reports, or your manager will show up here at 6:00 PM.
+        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📝</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No tasks for today yet</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            Add the tasks you worked on today — once you add one, the 6:00 PM snapshot opens below so you can set each task's status.
+          </div>
+          {addBtn('primary')}
         </div>
       ) : (
         <AckPanel currentUser={currentUser} />
       )}
+      <CreateTaskModal open={creating} onClose={() => setCreating(false)} onCreate={createTask}
+        me={currentUser} people={CDC.USERS} todayStr={todayStr} />
     </div>
   );
 }

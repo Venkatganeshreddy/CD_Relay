@@ -465,17 +465,29 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
         }
       />
 
-      {/* Daily workflow banner */}
-      {!submittedToday && (
-        <div className="submit-banner" style={{ marginBottom: 18 }}>
-          <div className="banner-icon"><Icon name="clock" size={14} /></div>
-          <div style={{ flex: 1 }}>
-            <div className="banner-title">6:00 PM snapshot · review status & note your backlog</div>
-            <div className="banner-sub">Takes 5 minutes. Logs against {CDC.empIdForUser(currentUser.id)} for tonight's intake.</div>
+      {/* Daily workflow banner — only during the 6–8 PM snapshot window. Before
+          tasks are added it prompts to Add task; once tasks exist it prompts to
+          review their status. */}
+      {(() => {
+        const { phase } = CDC.snapshotPhase ? CDC.snapshotPhase() : { phase: 'open' };
+        if (phase !== 'open') return null;
+        const myOpen = (CDC.TASKS || []).filter((t) =>
+          t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
+        const hasTasks = myOpen.length > 0;
+        return (
+          <div className="submit-banner" style={{ marginBottom: 18 }}>
+            <div className="banner-icon"><Icon name="clock" size={14} /></div>
+            <div style={{ flex: 1 }}>
+              <div className="banner-title">{hasTasks ? '6:00 PM snapshot · review each task’s status' : '6:00 PM snapshot · add today’s tasks'}</div>
+              <div className="banner-sub">
+                {hasTasks ? `${myOpen.length} task${myOpen.length === 1 ? '' : 's'} to review. ` : 'Add the tasks you worked on today, then set their status. '}
+                Logs against {CDC.empIdForUser(currentUser.id)}. Window closes 8:00 PM IST.
+              </div>
+            </div>
+            <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>{hasTasks ? 'Review now' : 'Add task'}</button>
           </div>
-          <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>Submit now</button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* This-week summary */}
       <h2 className="h-section">Your week</h2>
