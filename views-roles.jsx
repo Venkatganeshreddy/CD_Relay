@@ -459,7 +459,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
         currentUser={currentUser}
         context={`${currentUser.title} · ${submittedToday ? "today's report is submitted" : "today's report not submitted yet"}`}
         actions={
-          <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>
+          <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('my-tasks')}>
             <Icon name="edit" size={12} /> {submittedToday ? 'Edit today' : 'Submit today'}
           </button>
         }
@@ -555,12 +555,12 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
       {/* Daily Workflow shortcut */}
       <h2 className="h-section">Daily workflow</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-        <div className="card card-pad" style={{ cursor: 'default' }} onClick={() => nav.go('submit')}>
+        <div className="card card-pad" onClick={() => nav.go('my-tasks')}>
           <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
             <div className="banner-icon" style={{ width: 32, height: 32 }}><Icon name="edit" size={14} /></div>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14 }}>Submit today</div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>5-min chat-style flow. Captures Product-Audience, Stack, Output Category, Hours.</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Add and update your tasks for today — Product-Audience, Stack, Output Category, Hours.</div>
             </div>
           </div>
         </div>
