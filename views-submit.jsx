@@ -64,6 +64,19 @@ function GlanceView({ tweaks, currentUser, nav }) {
     };
     if (status === 'BLOCKED') { task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = currentUser.managerId || null; }
     CDC.db.addTask(task);
+    // Mirror the task into a worklog so the day's work shows up LIVE in the
+    // manager dashboard, the worklogs page, and weekly/monthly rollups — all of
+    // which read WORKLOGS. Hours come from the estimate; status keeps the label.
+    CDC.db.addWorklog({
+      id: `wl-${Date.now()}`, userId: currentUser.id, userName: currentUser.name, userInitials: currentUser.initials,
+      empId: currentUser.id, dept: currentUser.dept, sub: currentUser.sub || null, date: todayStr, daysAgo: 0,
+      products: form.products || [], stacks: form.stacks || [],
+      outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
+      activityCategory: m.activity || '', metricCategory: m.metric || '',
+      outputCount: form.outputCount ?? 0, template: form.template || {},
+      hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
+      status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
+    });
     setCreating(false);
     setTick((x) => x + 1);
   }

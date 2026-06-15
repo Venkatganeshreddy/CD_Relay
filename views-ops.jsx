@@ -584,6 +584,19 @@ function TasksView({ tweaks, currentUser }) {
       task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = chain[0] || null;
     }
     CDC.db.addTask(task);
+    // Mirror into a worklog so the owner's work shows up LIVE in the manager
+    // dashboard, worklogs page, and rollups (all WORKLOGS-driven). Owned by the
+    // selected owner, so a manager creating for a reportee logs against them.
+    CDC.db.addWorklog({
+      id: `wl-${Date.now()}`, userId: form.owner, userName: owner ? owner.name : form.owner, userInitials: owner ? owner.initials : '',
+      empId: form.owner, dept: owner ? owner.dept : me.dept, sub: owner ? (owner.sub || null) : (me.sub || null), date: todayStr, daysAgo: 0,
+      products: form.products || [], stacks: form.stacks || [],
+      outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
+      activityCategory: m.activity || '', metricCategory: m.metric || '',
+      outputCount: form.outputCount ?? 0, template: form.template || {},
+      hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
+      status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
+    });
     CDC.db.logInteraction({ agent: '—', flow: 'task_create', inputRef: `Task ${task.id}`, action: 'create',
       reason: `Created "${task.title}" (${m.metric || '—'} · ${m.task || '—'}) for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
     setStatusOv((s) => ({ ...s, [task.id]: status }));
