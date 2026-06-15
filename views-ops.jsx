@@ -597,6 +597,18 @@ function TasksView({ tweaks, currentUser }) {
       hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
       status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
     });
+    // Remaining-hours nudge — only when logging your own work (not when a
+    // manager creates a task for a reportee).
+    if (form.owner === me.id) {
+      const dayHrs = (CDC.WORKLOGS || []).filter((w) => w.userId === me.id && w.daysAgo === 0).reduce((s, w) => s + (Number(w.hours) || 0), 0);
+      const target = CDC.DAILY_TARGET_HRS || 8;
+      const left = target - dayHrs;
+      if (CDC.toast) CDC.toast(
+        left > 0.01
+          ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
+          : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
+        left > 0.01 ? 'amber' : 'green');
+    }
     CDC.db.logInteraction({ agent: '—', flow: 'task_create', inputRef: `Task ${task.id}`, action: 'create',
       reason: `Created "${task.title}" (${m.metric || '—'} · ${m.task || '—'}) for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
     setStatusOv((s) => ({ ...s, [task.id]: status }));
@@ -850,14 +862,28 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
 
         {/* 3. Output category → auto Metric/Task + Output count */}
         <div>
-          <div style={label()}>Output category</div>
+          <div style={label()}>Output category <span style={{ color: 'var(--rose, #c0392b)' }}>*</span></div>
+          {/* Persistent "selected" line so the choice stays visible while scrolling. */}
+          {outputCategory ? (
+            <div className="row" style={{ gap: 8, alignItems: 'center', margin: '2px 0 8px' }}>
+              <span className="muted" style={{ fontSize: 12 }}>Selected:</span>
+              <span style={{ fontWeight: 600, fontSize: 13, background: 'var(--accent-soft, #eef2ff)', color: 'var(--accent, #4356c0)', border: '1px solid var(--accent-border, #c7d0f5)', borderRadius: 999, padding: '3px 10px' }}>{outputCategory}</span>
+              <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => { setOutputCategory(''); setTemplate({}); setCatSearch(''); }}>change</button>
+            </div>
+          ) : (
+            <div className="muted" style={{ fontSize: 11.5, margin: '2px 0 6px' }}>Search or pick one — it auto-fills the metric, activity and task.</div>
+          )}
           <input className="tb-search" placeholder="Search categories…" value={catSearch} onChange={(e) => setCatSearch(e.target.value)} style={inp} />
-          <div className="chip-grid" style={{ marginTop: 8, maxHeight: 132, overflowY: 'auto' }}>
-            {filteredCats.map((c) => (
-              <div key={c} className="chip" data-selected={outputCategory === c} onClick={() => { setOutputCategory(c); setTemplate({}); }}>
-                {outputCategory === c && <Icon name="check" size={10} stroke={2.4} />}<span>{c}</span>
-              </div>
-            ))}
+          <div className="chip-grid" style={{ marginTop: 8, maxHeight: 184, overflowY: 'auto', padding: 10, border: '1px solid var(--border, #d8d9dd)', borderRadius: 8, background: 'var(--panel-2, #fafafa)', alignContent: 'flex-start' }}>
+            {filteredCats.map((c) => {
+              const sel = outputCategory === c;
+              return (
+                <div key={c} className="chip" data-selected={sel} onClick={() => { setOutputCategory(c); setTemplate({}); }}
+                  style={sel ? { background: 'var(--accent, #4356c0)', color: '#fff', borderColor: 'var(--accent, #4356c0)', fontWeight: 600 } : undefined}>
+                  {sel && <Icon name="check" size={10} stroke={2.4} />}<span>{c}</span>
+                </div>
+              );
+            })}
             {filteredCats.length === 0 && <div className="muted" style={{ fontSize: 12 }}>No matches.</div>}
           </div>
           {map && (

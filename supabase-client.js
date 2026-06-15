@@ -181,6 +181,29 @@
   };
   window.CDC.computeCost = computeCost;
 
+  // Lightweight, theme-friendly toast for transient confirmations (e.g. the
+  // remaining-hours nudge after logging a task). tone: amber | green | info | red.
+  window.CDC.toast = function (msg, tone) {
+    try {
+      const palette = {
+        amber: ['#fff8e6', '#92600a', '#e8c887'],
+        green: ['#e9f9ef', '#1e7e34', '#34c759'],
+        red:   ['#fdecee', '#b3261e', '#f85149'],
+        info:  ['#eef4ff', '#1d4ed8', '#9bbcfa'],
+      };
+      const [bg, fg, br] = palette[tone] || palette.info;
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;' +
+        `background:${bg};color:${fg};border:1px solid ${br};border-radius:10px;` +
+        'padding:11px 18px;font:13px/1.45 system-ui,sans-serif;font-weight:500;' +
+        'box-shadow:0 6px 24px rgba(0,0,0,.16);max-width:92vw;text-align:center';
+      document.body.appendChild(el);
+      setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; }, 4200);
+      setTimeout(() => el.remove(), 4700);
+    } catch (_) { /* headless/test contexts */ }
+  };
+
   const offlineShim = (window.claude && window.claude.complete) || null;
   window.claude = window.claude || {};
   window.claude.complete = async ({ messages }) => {

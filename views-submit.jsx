@@ -77,6 +77,15 @@ function GlanceView({ tweaks, currentUser, nav }) {
       hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
       status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
     });
+    // Nudge: how many hours are left to reach the 8h day.
+    const dayHrs = (CDC.WORKLOGS || []).filter((w) => w.userId === currentUser.id && w.daysAgo === 0).reduce((s, w) => s + (Number(w.hours) || 0), 0);
+    const target = CDC.DAILY_TARGET_HRS || 8;
+    const left = target - dayHrs;
+    if (CDC.toast) CDC.toast(
+      left > 0.01
+        ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
+        : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
+      left > 0.01 ? 'amber' : 'green');
     setCreating(false);
     setTick((x) => x + 1);
   }
