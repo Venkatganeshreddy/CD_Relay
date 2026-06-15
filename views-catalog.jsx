@@ -10,8 +10,10 @@ function TaskCatalogView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const CAT = CDC.TASK_CATALOG;
   const TASK_KEYS = Object.keys(CAT.TASK_TEMPLATES);
-  const ACTIVITIES = ['Planned Content Creation', 'Initiatives / Upgrades', 'Executive Ops', 'Hiring & Developing the best'];
-  const METRICS = ['Content Velocity', 'Content Effectiveness', 'Content Efficiency', 'Content Relevance', 'Business Impact', 'Stakeholder Alignment', 'Executive Ops'];
+  const ACTIVITIES = ['Planned Content Creation', 'Initiatives / Upgrades', 'Executive Ops', 'Hiring & Developing the best',
+    'Academic Governance & Compliance', 'Legal & Risk', 'Academic Program Operations', 'Process & Systems Optimization'];
+  const METRICS = ['Content Velocity', 'Content Effectiveness', 'Content Efficiency', 'Content Relevance', 'Business Impact',
+    'Stakeholder Alignment', 'Executive Ops', 'System Effectiveness', 'System Efficiency'];
 
   const [products, setProducts] = useStTC(() => [...CAT.PRODUCTS]);
   const [stacks, setStacks] = useStTC(() => [...CAT.STACKS]);

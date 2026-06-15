@@ -1347,6 +1347,47 @@
     'Performance-Goal Management': { task: 'Reporting Analysis', activity: 'Executive Ops', metric: 'Executive Ops' },
     'HR & Employee Engagement': { task: 'Employee Engagement', activity: 'Executive Ops', metric: 'Executive Ops' },
     'Upskilling & Learning hours': { task: 'Learning Hours', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
+
+    // ── Governance / Program / Systems block (v.12 mapping additions) ────────
+    // Business Impact · Academic Governance & Compliance · BOS & Academic Approvals
+    'Syllabus Drafts & Revised Curriculum Documents': { task: 'BOS & Academic Approvals', activity: 'Academic Governance & Compliance', metric: 'Business Impact' },
+    'Meeting Minutes & HOD Discussion Summaries': { task: 'BOS & Academic Approvals', activity: 'Academic Governance & Compliance', metric: 'Business Impact' },
+    'Approval Request Emails & Communication Threads': { task: 'BOS & Academic Approvals', activity: 'Academic Governance & Compliance', metric: 'Business Impact' },
+    'Signed-off Approvals from Content Teams & HODs': { task: 'BOS & Academic Approvals', activity: 'Academic Governance & Compliance', metric: 'Business Impact' },
+    'Academic Planning Documents & University Visit Reports': { task: 'BOS & Academic Approvals', activity: 'Academic Governance & Compliance', metric: 'Business Impact' },
+    // Business Impact · Legal & Risk · Legal & IP Issues
+    'Escalation Logs for NxtWave LMS Videos Posted on YouTube': { task: 'Legal & IP Issues', activity: 'Legal & Risk', metric: 'Business Impact' },
+    'Coordination Records with Legal & Tech Teams': { task: 'Legal & IP Issues', activity: 'Legal & Risk', metric: 'Business Impact' },
+    'Identification, Escalation & Resolution Process Documentation': { task: 'Legal & IP Issues', activity: 'Legal & Risk', metric: 'Business Impact' },
+    // System Effectiveness · Academic Governance & Compliance · Regulations & Compliance (NASSCOM)
+    'Detailed Proposals & Supporting Documentation for Regulatory Submissions': { task: 'Regulations & Compliance (NASSCOM)', activity: 'Academic Governance & Compliance', metric: 'System Effectiveness' },
+    'NOS/QP Mapping Sheets with Course IDs & Names': { task: 'Regulations & Compliance (NASSCOM)', activity: 'Academic Governance & Compliance', metric: 'System Effectiveness' },
+    'Elective & Compliance Course Alignment Records': { task: 'Regulations & Compliance (NASSCOM)', activity: 'Academic Governance & Compliance', metric: 'System Effectiveness' },
+    'Submission & Follow-up Logs for NOS/QP Validations': { task: 'Regulations & Compliance (NASSCOM)', activity: 'Academic Governance & Compliance', metric: 'System Effectiveness' },
+    // System Effectiveness · Academic Program Operations · University Program Ops (NIAT 2024)
+    'Curriculum Structure Plans for Sem 5 & 6': { task: 'University Program Ops (NIAT 2024)', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    'Slot Distribution Analysis & Academic Scheduling Documents': { task: 'University Program Ops (NIAT 2024)', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    'Content Readiness Trackers & Course Link Follow-up Logs': { task: 'University Program Ops (NIAT 2024)', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    'Stakeholder Meeting & Curriculum Rollout Plans': { task: 'University Program Ops (NIAT 2024)', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    'Research Reports on Partner University Options (BITS Alternatives)': { task: 'University Program Ops (NIAT 2024)', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    // System Effectiveness · Academic Program Operations · Academy Operations
+    'Old vs New Curriculum Comparison with Value Proposition': { task: 'Academy Operations', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    'Requirement Analysis & Academy POC Coordination Logs': { task: 'Academy Operations', activity: 'Academic Program Operations', metric: 'System Effectiveness' },
+    // System Efficiency · Academic Program Operations · Cross-team Coordination & Adhoc Support
+    'Cross-team Dependency Tracking & Resolution Logs': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
+    'Requirement Gathering Notes & Stakeholder Follow-up Records': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
+    'Operational Support Tickets & Issue Tracking Updates': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
+    'Internal Sync-up Notes & Meeting Summaries': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
+    // System Efficiency · Process & Systems Optimization · Systems Efficiency & Improvement
+    'Weekly & Batch-wise F&B Reports': { task: 'Systems Efficiency & Improvement', activity: 'Process & Systems Optimization', metric: 'System Efficiency' },
+    'Routed/Rerouted Tickets to Correct Teams': { task: 'Systems Efficiency & Improvement', activity: 'Process & Systems Optimization', metric: 'System Efficiency' },
+    'Follow-up Logs on Pending Issue Resolutions': { task: 'Systems Efficiency & Improvement', activity: 'Process & Systems Optimization', metric: 'System Efficiency' },
+    'KT on F&B Workflows': { task: 'Systems Efficiency & Improvement', activity: 'Process & Systems Optimization', metric: 'System Efficiency' },
+    'Stakeholder Coordination Notes & Zoho Portal Improvement Requirements': { task: 'Systems Efficiency & Improvement', activity: 'Process & Systems Optimization', metric: 'System Efficiency' },
+    // System Efficiency · Planned Content Creation · Content Creation & Review
+    'Elective & Compliance Course Development': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
+    'Reading Material Prepared for BITS Courses': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
+    'Review Video Recordings & PPTs': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
   };
 
   const OUTPUT_CATEGORIES = Object.keys(OUTPUT_MAP);
@@ -1412,6 +1453,41 @@
       { id: 'initiative', label: 'Initiative name', type: 'text', ph: 'e.g. Adaptive problem ladder' },
       { id: 'usecase', label: 'Use-case', type: 'text', ph: 'e.g. DS&Algo cohort 4' },
       { id: 'impact', label: 'Impact (0–5)', type: 'choice', options: ['0', '1', '2', '3', '4', '5'] },
+    ],
+    // ── Governance / Program / Systems task templates (v.12 additions) ───────
+    'BOS & Academic Approvals': [
+      { id: 'doc', label: 'Document / approval', type: 'text', ph: 'e.g. Syllabus draft v2' },
+      { id: 'stakeholders', label: 'Stakeholders', type: 'text', ph: 'e.g. HOD, Content team' },
+      { id: 'status', label: 'Approval status', type: 'choice', options: ['Drafted', 'Submitted', 'Approved', 'Pending'] },
+    ],
+    'Legal & IP Issues': [
+      { id: 'issue', label: 'Issue', type: 'text', ph: 'e.g. LMS video on YouTube' },
+      { id: 'action', label: 'Action taken', type: 'textarea', ph: 'What you did / coordinated…' },
+      { id: 'status', label: 'Status', type: 'choice', options: ['Identified', 'Escalated', 'Resolved'] },
+    ],
+    'Regulations & Compliance (NASSCOM)': [
+      { id: 'item', label: 'Submission / mapping', type: 'text', ph: 'e.g. NOS/QP mapping sheet' },
+      { id: 'detail', label: 'Detail', type: 'textarea', ph: 'Scope / course IDs / notes…' },
+      { id: 'status', label: 'Status', type: 'choice', options: ['Drafted', 'Submitted', 'Validated', 'Pending'] },
+    ],
+    'University Program Ops (NIAT 2024)': [
+      { id: 'item', label: 'Plan / document', type: 'text', ph: 'e.g. Sem 5 curriculum plan' },
+      { id: 'program', label: 'Program / Sem', type: 'text', ph: 'e.g. Sem 5 & 6' },
+      { id: 'status', label: 'Status', type: 'choice', options: ['Planned', 'In-progress', 'Done'] },
+    ],
+    'Academy Operations': [
+      { id: 'item', label: 'Work item', type: 'text', ph: 'e.g. Old vs new curriculum comparison' },
+      { id: 'detail', label: 'Detail', type: 'textarea', ph: 'Analysis / coordination notes…' },
+    ],
+    'Cross-team Coordination & Adhoc Support': [
+      { id: 'item', label: 'Coordination / ticket', type: 'text', ph: 'e.g. Dependency with Tech team' },
+      { id: 'teams', label: 'Teams involved', type: 'text', ph: 'e.g. Content, Tech, Ops' },
+      { id: 'status', label: 'Status', type: 'choice', options: ['Open', 'In-progress', 'Resolved'] },
+    ],
+    'Systems Efficiency & Improvement': [
+      { id: 'item', label: 'Report / improvement', type: 'text', ph: 'e.g. Weekly F&B report' },
+      { id: 'detail', label: 'Detail', type: 'textarea', ph: 'What was done / improved…' },
+      { id: 'impact', label: 'Impact', type: 'text', ph: 'e.g. Tickets routed correctly, -2d turnaround' },
     ],
   };
 
