@@ -555,15 +555,19 @@
       const allowed = (kinds && kinds.length) ? kinds : ['operational', 'process', 'priorities', 'people'];
       const prompt = `You are Advisor, the recommendation engine for a Curriculum Development department's operating copilot.\n` +
         `Read the BRIEF below (the department's structure plus its recent captured activity) and propose concrete, actionable suggestions.\n` +
-        `Allowed kinds: ${allowed.join(', ')}.\n` +
+        `Allowed kinds (you may use ONLY these): ${allowed.join(', ')}.\n` +
         `  - operational: risks, missing reports, blocked/overdue work, KPI slips.\n` +
         `  - process: guideline/SOP refinements suggested by recurring patterns.\n` +
         `  - priorities: what to create or prioritise next (coverage gaps, growing backlogs).\n` +
         `  - people: workload balance, reassignment, who is overloaded vs idle.\n` +
+        `HARD kind filter: every item's "kind" MUST be exactly one of [${allowed.join(', ')}]. ` +
+        `Discard any suggestion that does not fit one of those kinds, even if it seems useful — do NOT relabel it to sneak it in.\n` +
         `Rules: ground EVERY suggestion in the brief — never invent names, numbers, or facts not present. ` +
         `Prefer fewer, higher-signal items. Each "detail" is at most 2 sentences and states the so-what + a next step. ` +
         `Set "dept" to the relevant department id from the brief, or "" if cross-department. ` +
-        `"severity" is one of low/medium/high. "refs" lists any ids from the brief you used.\n` +
+        `"severity" is one of low/medium/high. ` +
+        `"refs" MUST contain ONLY ids that appear verbatim inside square brackets in the BRIEF (e.g. [k-1], [t-3], [r-1009]). ` +
+        `Never put a word, label, team name, or section heading (like "missing-reports") in refs — only real bracketed ids. If you used no specific id, return refs as [].\n` +
         `Return ONLY JSON: {"items":[{"kind":"operational","title":"...","detail":"...","dept":"","severity":"medium","refs":[]}]}. No preamble.\n\nBRIEF:\n${ctx}`;
       const content = await this.run({ agent: 'Advisor', model: 'smart', inputLabel: 'Recommendations', messages: [{ role: 'user', content: prompt }] });
       try {
@@ -601,17 +605,20 @@
       const prompt = `You are Scribe, summarizing a meeting transcript for the team listed below.\n` +
         `Produce FOUR things in this exact order: agenda, attendees, summary, items.\n\n` +
         `1) agenda — a single crisp one-line meeting agenda (what the meeting was about — under 90 chars, no preamble).\n\n` +
-        `2) attendees — array of every distinct speaker name that appears in the transcript (e.g. lines like "Ravi: ...", "[10:02] Priya:" etc.). Use the speaker's name as it appears. Prefer the roster name when the transcript name clearly matches a roster entry. Skip generic labels like "Team" or "Everyone".\n\n` +
+        `2) attendees — array of ONLY the distinct people who actually SPEAK in the transcript. A person counts as an attendee solely if there is a speaker line for them (e.g. "Ravi: ...", "[10:02] Priya:"). Include a name ONLY when it has such a speaking line. Do NOT add anyone from the team roster who does not speak — the roster is for assigning tasks, NEVER a source of attendees. You may normalize a speaker's name to its roster spelling when they clearly match, but never introduce a roster name that has no speaking line. Skip generic labels like "Team" or "Everyone".\n\n` +
         `3) summary — an OBJECT with THREE short paragraphs, one per outcome lens. Each paragraph is 2 to 5 sentences, written as flowing prose (NOT bullets), and outcome-oriented (focus on conclusions, not chat). Do not restate action items — those live in the items array. Do not invent. Skip any lens that wasn't substantively discussed by setting it to "".\n` +
         `  - "businessDirection": the strategic intent the meeting set or reinforced — the "why this matters" thread, the direction the team is heading.\n` +
         `  - "alignment": what everyone aligned on — the decisions reached, the shared understanding, what is now settled.\n` +
         `  - "guidelines": guidelines & insights that emerged — principles, learnings, things to remember going forward.\n\n` +
         `4) items — extract EVERY action item. Recall matters: capture ALL action items, follow-ups, commitments, and decisions that imply work — including implicit ones ("we need to…", "someone should…", "let's make sure…"). Do not skip or merge distinct tasks.\n` +
-        `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Rules:\n` +
-        `- Prefer the EXACT name from the team roster below. If a task is for an area/team ("for GenAI", "DS&Algo", "Aptitude"), use that team/sub name from the roster.\n` +
-        `- If a speaker volunteers ("I'll…", "I will…", "let me…"), assign that speaker.\n` +
-        `- Never default to the meeting chair or whoever is handing out work; pick who must complete it.\n` +
-        `- If no one in the roster plausibly fits, set assigneeHint to "" (leave it for human triage) — do NOT guess a random person.\n\n` +
+        `For each item, set assigneeHint to the person or team RESPONSIBLE for doing the work — the owner, never the person delegating it. Apply these rules IN ORDER, first match wins:\n` +
+        `1. Speaker volunteers ("I'll…", "I will…", "let me…") → assign that speaker.\n` +
+        `2. A specific FULL name or unambiguous person is named → that exact roster name.\n` +
+        `3. A team/area is referenced ("for GenAI", "DS&Algo", "Aptitude", or the speaker is reporting for their team) → use that team/sub name. A team reference ALWAYS resolves — never blank a team-scoped ask.\n` +
+        `4. Only a bare first name/token that matches MORE THAN ONE roster person (e.g. two people called "Pavan", two "Poojitha"), with no team context → set assigneeHint to "" for triage. Do NOT guess one of them, and do NOT invent a full name.\n` +
+        `5. No plausible roster owner and no team → set assigneeHint to "".\n` +
+        `Never default to the meeting chair or whoever is handing out work.\n` +
+        `AMBIGUITY EXAMPLE: if the roster has two people whose first name is "Pavan" and the transcript only says "Pavan should pull the numbers" (no team, no full name), set that item's assigneeHint to "" — never pick one Pavan or invent a full name.\n\n` +
         `EXAMPLE:\n` +
         `Transcript: "Ravi: GenAI module shipped Friday but quiz scores dipped to 62%. Priya: I'll review the rubric. Pavan: we should tighten the eval pack for DS&Algo next sprint — that's where retention is leaking."\n` +
         `Output: {"agenda":"GenAI launch review and DS&Algo eval planning","attendees":["Ravi","Priya","Pavan"],"summary":{"businessDirection":"Quality-of-learning is the headline direction this quarter. Shipping is necessary but not sufficient if assessment outcomes slip — the team is steering toward measurable learner outcomes as the leading metric.","alignment":"The team agreed the 62% GenAI quiz scores are a leading signal that the rubric needs another pass before the next cohort. They also aligned that DS&Algo is now the larger retention risk and warrants a tightened eval pack in the next sprint.","guidelines":"Any module that ships should be paired with a rubric audit within a week. Eval packs are not optional polish — they are the early-warning system. Evaluation health travels with launch readiness, not after."},"items":[{"text":"Review the GenAI rubric to investigate quiz score dip","assigneeHint":"Priya","confidence":0.9},{"text":"Tighten the DS&Algo eval pack next sprint","assigneeHint":"DS&Algo","confidence":0.7}]}\n\n` +

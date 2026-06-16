@@ -947,21 +947,37 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     const h = norm(hint);
     if (!h) return { id: currentUser.id, reason: 'No assignee hint — assigned to you for triage' };
 
-    // 1. Person: exact name wins; then full-name contained in hint; then initials;
-    //    then a UNIQUE name-token (skip ambiguous first names like "Pavan" → 2 people).
+    // 1. Person: exact name wins; then full-name contained in hint; then a UNIQUE
+    //    substring of a name; then initials; then a UNIQUE name-token. The
+    //    substring + token steps are gated on uniqueness so an ambiguous first
+    //    name (e.g. "Pavan" → 2 people) falls through to triage instead of being
+    //    silently assigned to whichever match happens to be first.
     const hTokens = h.split(/\s+/).filter((p) => p.length > 2);
     let u = users.find((x) => norm(x.name) === h)
-         || users.find((x) => h.includes(norm(x.name)))                              // hint contains a full name
-         || (h.length >= 4 ? users.find((x) => norm(x.name).includes(h)) : null)     // hint is a substring of a name
-         || users.find((x) => norm(x.initials) === h);
+         || users.find((x) => h.includes(norm(x.name)));                             // hint contains a full name
+    if (!u && h.length >= 4) {
+      const subHits = users.filter((x) => norm(x.name).includes(h));                 // hint is a substring of a name
+      if (subHits.length === 1) u = subHits[0];                                      // unique only; ambiguous → skip
+    }
+    if (!u) u = users.find((x) => norm(x.initials) === h);
     if (!u) {
       const tokenMatches = users.filter((x) => norm(x.name).split(/\s+/).some((p) => p.length > 2 && hTokens.includes(p)));
       if (tokenMatches.length === 1) u = tokenMatches[0];   // only if unambiguous
     }
     if (u) return { id: u.id, reason: `${u.name} (${u.level}) — matched person "${hint}"` };
 
-    // 2. Sub-team: route to that sub's lead (the manager others report to).
-    const subMembers = users.filter((x) => x.sub && (norm(x.sub).includes(h) || h.includes(norm(x.sub))));
+    // 2. Sub-team: route to that sub's lead (the manager others report to). Match
+    //    the whole canonical sub string OR a distinctive sub token, so a phrase
+    //    like "for the Fullstack team" routes the same as a bare "Fullstack".
+    const SUB_STOP = new Set(['content', 'team', 'the', 'for', 'and', 'ops']);
+    const hWords = new Set(h.split(/[^a-z0-9&]+/).filter(Boolean));
+    const subMembers = users.filter((x) => {
+      if (!x.sub) return false;
+      const s = norm(x.sub);
+      if (s.includes(h) || h.includes(s)) return true;                               // whole-string match
+      const toks = s.split(/[^a-z0-9&]+/).filter((t) => t.length >= 3 && !SUB_STOP.has(t));
+      return toks.some((t) => hWords.has(t));                                        // distinctive token match
+    });
     if (subMembers.length) {
       const lead = pickLead(subMembers);
       return { id: lead.id, reason: `${lead.name} — lead of "${lead.sub}" via manager graph (hint "${hint}")` };
