@@ -35,15 +35,6 @@ function GlanceView({ tweaks, currentUser, nav }) {
     t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
 
-  // Hard gate: the 6:00 PM check-in stays LOCKED until the contributor has
-  // logged the full daily target of hours today (sum of today's worklogs).
-  const target = CDC.DAILY_TARGET_HRS || 8;
-  const loggedToday = (CDC.WORKLOGS || [])
-    .filter((w) => w.userId === currentUser.id && w.daysAgo === 0)
-    .reduce((s, w) => s + (Number(w.hours) || 0), 0);
-  const hoursMet = loggedToday >= target - 0.01;
-  const hoursLeft = Math.max(0, target - loggedToday);
-
   // A 30s tick keeps the window state (and the unlock/close moment) fresh.
   const [, setTick] = useS(0);
   const [creating, setCreating] = useS(false);
@@ -112,13 +103,10 @@ function GlanceView({ tweaks, currentUser, nav }) {
         subtitle={`The 6:00 PM check-in (open 6:00–8:00 PM IST). Add your tasks for today, then set each one's status; add a reason if blocked. Tasks left unacknowledged when the window closes escalate up the manager graph.`}
         actions={
           <>
-            <Pill tone={phase !== 'open' ? 'neutral' : !hoursMet ? 'amber' : pending ? 'amber' : 'green'} dot>
-              {phase === 'before' ? 'opens 6:00 PM IST'
-                : phase === 'after' ? 'closed (8:00 PM)'
-                : !hoursMet ? `${loggedToday.toFixed(1)}/${target}h logged`
-                : pending ? `${pending} awaiting ack` : 'all acknowledged'}
+            <Pill tone={phase !== 'open' ? 'neutral' : pending ? 'amber' : 'green'} dot>
+              {phase === 'before' ? 'opens 6:00 PM IST' : phase === 'after' ? 'closed (8:00 PM)' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
             </Pill>
-            {phase === 'open' && addBtn('ghost')}
+            {phase === 'open' && mine.length > 0 && addBtn('ghost')}
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
               <Icon name="tasks" size={11} /> Open Tasks
             </button>
@@ -147,32 +135,17 @@ function GlanceView({ tweaks, currentUser, nav }) {
             {' '}You can still update tasks from My Tasks; the snapshot reopens at 6:00 PM tomorrow.
           </div>
         </div>
-      ) : !hoursMet ? (
-        // HARD BLOCK — the day-end check-in is locked until the full daily
-        // target of hours has been logged. The only way forward is Add task.
-        <div className="card" style={{ padding: 28, textAlign: 'center', border: '1px solid var(--amber, #e8c887)', background: 'var(--amber-soft, #fdf6e3)' }}>
-          <div style={{ fontSize: 30, marginBottom: 8 }}>⛔</div>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
-            Log {hoursLeft.toFixed(1)}h more to complete your day
-          </div>
-          <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>
-            You've logged <strong>{loggedToday.toFixed(1)}h</strong> of the required <strong>{target}h</strong> today.
-            The 6:00 PM check-in unlocks once you reach {target}h.
-          </div>
-          <div style={{ height: 8, borderRadius: 4, background: 'var(--panel, #fff)', overflow: 'hidden', margin: '14px auto', maxWidth: 360, border: '1px solid var(--amber, #e8c887)' }}>
-            <div style={{ width: `${Math.min(100, (loggedToday / target) * 100)}%`, height: '100%', background: 'var(--amber, #b7791f)', transition: 'width .25s ease' }} />
+      ) : mine.length === 0 ? (
+        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📝</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No tasks for today yet</div>
+          <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+            Add the tasks you worked on today — once you add one, the 6:00 PM snapshot opens below so you can set each task's status.
           </div>
           {addBtn('primary')}
         </div>
       ) : (
-        <>
-          <div className="row" style={{ gap: 6, marginBottom: 10, fontSize: 12.5, color: 'var(--green, #1e7e34)', fontWeight: 500 }}>
-            <Icon name="check" size={12} /> {loggedToday.toFixed(1)}h logged today — {target}h requirement met. Complete your check-in below.
-          </div>
-          {mine.length === 0
-            ? <div className="empty" style={{ padding: 24 }}>All your work is logged and there are no open tasks to acknowledge — you're done for today. 🎉</div>
-            : <AckPanel currentUser={currentUser} />}
-        </>
+        <AckPanel currentUser={currentUser} />
       )}
       <CreateTaskModal open={creating} onClose={() => setCreating(false)} onCreate={createTask}
         me={currentUser} people={CDC.USERS} todayStr={todayStr} />
