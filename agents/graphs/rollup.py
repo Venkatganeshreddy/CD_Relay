@@ -10,7 +10,8 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
 from llm import db_select
-from graphs.common import complete, extract_json
+from graphs.common import complete_json, fence
+from graphs.schemas import RollupOut, DigestOut
 
 
 class S(TypedDict, total=False):
@@ -42,12 +43,11 @@ def generate(state: S) -> S:
     prompt = (
         f"You are Rollup, consolidating a week of daily reports into a manager-ready summary "
         f"for \"{w.get('deptName', w.get('dept'))}\".\n"
-        'Return ONLY JSON: {"sections":[{"h":"Highlights","items":[{"text":"...","cites":["r-1001"]}]},'
-        '{"h":"Risks","items":[...]},{"h":"Asks","items":[...]}]}.\n'
-        "Cite the source report ids you used. Be concise and specific; no preamble."
-        f"{correction}\n\nDaily reports:\n{ctx}"
+        "Produce sections (e.g. Highlights, Risks, Asks); each item cites the source report "
+        "ids you used. Be concise and specific."
+        f"{correction}\n\nDaily reports:\n" + fence(ctx)
     )
-    sections = (extract_json(complete("Rollup", prompt, "smart", f"Weekly {w.get('id','')}")) or {}).get("sections") or []
+    sections = complete_json("Rollup", prompt, RollupOut, "smart", f"Weekly {w.get('id','')}")["sections"]
     return {"sections": sections, "attempts": state.get("attempts", 0) + 1}
 
 
@@ -98,9 +98,8 @@ def run_weekly_digest(payload: dict) -> list:
         f"\"{payload.get('sub','')}\".\n"
         "For EACH numbered work-stream, write ONE concise sentence (max 24 words) stating what was achieved. "
         "Ground it ONLY in the figures/topics given; reflect open blockers or non-Done status honestly.\n"
-        f"Return ONLY a JSON array of exactly {len(streams)} strings, same order. No preamble.\n\n{numbered}"
+        f"Set achievements to exactly {len(streams)} sentences, in the same order as the list.\n\n"
+        + fence(numbered)
     )
-    arr = extract_json(complete("Rollup", prompt, "smart", f"Digest {payload.get('weekLabel','')}"), "[")
-    if isinstance(arr, list):
-        return [x if isinstance(x, str) else (x or {}).get("text", "") for x in arr]
-    return []
+    achievements = complete_json("Rollup", prompt, DigestOut, "smart", f"Digest {payload.get('weekLabel','')}")["achievements"]
+    return [str(a) for a in achievements]

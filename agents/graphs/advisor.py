@@ -12,7 +12,8 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
 from llm import db_select
-from graphs.common import complete, extract_json
+from graphs.common import complete_json, fence
+from graphs.schemas import AdvisorOut
 
 KINDS = ["operational", "process", "priorities", "people"]
 
@@ -74,14 +75,11 @@ def generate(state: S) -> S:
         "Ground EVERY suggestion in the brief — never invent names, numbers, or facts. "
         "Prefer fewer, higher-signal items. Each detail is at most 2 sentences (so-what + next step). "
         'refs MUST contain ONLY ids that appear verbatim in square brackets in the BRIEF.'
-        f"{correction}\n"
-        'Return ONLY JSON: {"items":[{"kind":"operational","title":"...","detail":"...",'
-        '"dept":"","severity":"medium","refs":[]}]}. No preamble.\n\nBRIEF:\n'
-        + state["brief"]
+        f"{correction}\n\nBRIEF:\n"
+        + fence(state["brief"])
     )
-    content = complete("Advisor", prompt, model="smart", input_label="Recommendations")
-    parsed = extract_json(content) or {}
-    items = [it for it in parsed.get("items", [])
+    parsed = complete_json("Advisor", prompt, AdvisorOut, model="smart", input_label="Recommendations")
+    items = [it for it in parsed["items"]
              if it.get("title") and it.get("kind") in allowed]
     return {"items": items, "attempts": state.get("attempts", 0) + 1}
 

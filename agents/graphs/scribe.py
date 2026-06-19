@@ -13,7 +13,8 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
 from llm import db_select
-from graphs.common import complete, extract_json
+from graphs.common import complete_json, fence
+from graphs.schemas import ScribeOut
 
 
 class S(TypedDict, total=False):
@@ -54,24 +55,16 @@ def extract(state: S) -> S:
         "roster person with no team -> \"\" for triage; (5) no plausible owner -> \"\". "
         "Never default to the meeting chair.\n\n"
         f"Team roster (name — level — team):\n{roster_txt}\n\n"
-        'Return ONLY JSON: {"agenda":"...","attendees":["Name"],"summary":{"businessDirection":"",'
-        '"alignment":"","guidelines":""},"items":[{"text":"...","assigneeHint":"","confidence":0.0}]}. '
-        "No preamble.\n\nTranscript:\n" + state["transcript"]
+        "Transcript:\n" + fence(state["transcript"])
     )
-    content = complete("Scribe", prompt, model="smart", input_label="MOM extract")
-    p = extract_json(content) or {}
-    summary = {"businessDirection": "", "alignment": "", "guidelines": ""}
-    s = p.get("summary")
-    if isinstance(s, dict):
-        for k in summary:
-            summary[k] = str(s.get(k, "") or "").strip()
-    elif isinstance(s, str) and s.strip():
-        summary["alignment"] = s.strip()
+    p = complete_json("Scribe", prompt, ScribeOut, model="smart", input_label="MOM extract")
+    s = p["summary"]
+    summary = {k: str(s.get(k, "") or "").strip() for k in ("businessDirection", "alignment", "guidelines")}
     return {
-        "agenda": p.get("agenda", ""),
-        "attendees": [str(a).strip() for a in p.get("attendees", []) if str(a).strip()],
+        "agenda": p["agenda"],
+        "attendees": [str(a).strip() for a in p["attendees"] if str(a).strip()],
         "summary": summary,
-        "items": p.get("items", []) if isinstance(p.get("items"), list) else [],
+        "items": p["items"],
     }
 
 

@@ -12,7 +12,8 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
 from llm import db_select, db_update
-from graphs.common import complete, extract_json
+from graphs.common import complete_json, fence
+from graphs.schemas import CuratorOut
 
 
 class S(TypedDict, total=False):
@@ -49,15 +50,11 @@ def distill(state: S) -> S:
             f"You are Curator. Below are cases where {name}'s AI suggestion was edited or rejected "
             f"by a human reviewer.\nFind the RECURRING ways humans correct {name} and turn them into "
             "durable, imperative preference rules the agent should follow next time. Ignore one-off "
-            "corrections; keep only patterns that repeat. Be specific and actionable.\n"
-            'Return ONLY JSON: {"rules":["...","..."]} with 3-7 short rules. No preamble.\n\nCases:\n'
-            + cases
+            "corrections; keep only patterns that repeat. Be specific and actionable. Return 3-7 short "
+            "rules.\n\nCases:\n" + fence(cases)
         )
-        try:
-            rules = (extract_json(complete(
-                "Curator", prompt, "smart", f"Distill {name} ({len(items)} corrections)")) or {}).get("rules", [])[:7]
-        except Exception:
-            continue
+        rules = complete_json(
+            "Curator", prompt, CuratorOut, "smart", f"Distill {name} ({len(items)} corrections)")["rules"][:7]
         if not rules:
             continue
         # Persist into that agent's memory so future runs self-correct.

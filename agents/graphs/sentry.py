@@ -8,7 +8,7 @@ from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
 
-from graphs.common import complete
+from graphs.common import complete, fence
 
 
 class S(TypedDict, total=False):
@@ -32,11 +32,13 @@ def generate(state: S) -> S:
         f"that tells {target}{lvl} "
         f"why this is being {state.get('event','escalated')} and what to do next. "
         "Be specific and action-oriented; do not restate the obvious.\n\n"
-        f"Task: \"{t.get('title','')}\"\nStatus: {t.get('status','')}\n"
-        f"Owner: {t.get('ownerName') or t.get('owner','')}\n"
-        f"Why flagged: {state.get('reason') or t.get('blockReason') or 'unspecified'}\n"
-        + (f"Stuck for: ~{state['daysStuck']} day(s)\n" if state.get("daysStuck") is not None else "")
-        + f"Due: {t.get('due') or 'n/a'}"
+        + fence(
+            f"Task: \"{t.get('title','')}\"\nStatus: {t.get('status','')}\n"
+            f"Owner: {t.get('ownerName') or t.get('owner','')}\n"
+            f"Why flagged: {state.get('reason') or t.get('blockReason') or 'unspecified'}\n"
+            + (f"Stuck for: ~{state['daysStuck']} day(s)\n" if state.get("daysStuck") is not None else "")
+            + f"Due: {t.get('due') or 'n/a'}"
+        )
     )
     content = complete("Sentry", prompt, "smart", f"{state.get('event','')} {t.get('id','')}")
     line = (content or "").strip().split("\n")[0].strip("\"'")[:200]

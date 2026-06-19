@@ -15,9 +15,20 @@ runs through the `relay-agent` proxy.
 | `sentry`  | generate → enforce one-line/length → regenerate-if-empty |
 | `curator` | fetch corrections → group by agent → distill rules → persist to `relay_agents.memory` |
 
+## Reliability & safety
+- **Structured output:** every agent call is forced into a Pydantic schema
+  (`graphs/schemas.py`) via `.with_structured_output` and validated before any DB
+  write — no regex JSON parsing.
+- **Prompt-injection guardrail:** untrusted input (transcripts, DB rows, human
+  drafts) is wrapped with `fence()` and a standing system message tells the model
+  to treat it as data, never instructions. `fence()` strips injected markers.
+- **Resilience:** each call retries with exponential backoff, then falls back to
+  the other model tier (smart↔fast) before degrading to an empty result.
+
 ## Layout
 - `llm.py` — model client (OpenRouter, LangSmith-traced) + Supabase REST (select/insert/update)
-- `graphs/common.py` — memory injection + `ai_runs` logging shared by every agent
+- `graphs/common.py` — structured/text model calls, memory injection, guardrail, `ai_runs` logging
+- `graphs/schemas.py` — Pydantic output schemas (one per agent)
 - `graphs/<agent>.py` — one graph each; `graphs/test_*.py` — pure-logic checks
 - `modal_app.py` — Modal endpoints (`/run/advisor`, `/run/scribe`, `/run/rollup`, `/run/sentry`, `/run/curator`)
 
@@ -45,7 +56,7 @@ The graphs run; the browser/cron still call the old TS agents. To switch over:
 ## Test (pure logic — no network)
 ```
 cd agents && pip install -r requirements.txt
-python graphs/test_advisor.py && python graphs/test_scribe.py
+python graphs/test_advisor.py && python graphs/test_scribe.py && python graphs/test_common.py
 ```
 
 ## Run a real agent locally
