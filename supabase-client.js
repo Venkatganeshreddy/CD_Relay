@@ -606,6 +606,8 @@
     // writes the human-facing rationale + recommended action. Returns a one-line
     // string, or null on failure so the caller can fall back to a template.
     async runSentry({ task, event, target, targetLevel, daysStuck, reason }) {
+      const m = await this._tryModal('sentry', { task, event, target, targetLevel, daysStuck, reason });
+      if (m) return m.line || null;
       const prompt = `You are Sentry, the task-escalation agent for an ops team. ` +
         `A task needs a manager's attention. Write ONE concise line (max 160 chars, no preamble, no quotes) ` +
         `that tells ${target || 'the manager'}${targetLevel ? ` (${targetLevel})` : ''} why this is being ${event} and what to do next. ` +
@@ -694,6 +696,17 @@
     // into durable preference rules, and write them to relay_agents.data.memory
     // so memoryFor() injects them into that agent's future runs.
     async runCurator(agentName) {
+      const m = await this._tryModal('curator', { agent: agentName || '' });
+      if (m) {
+        const results = Array.isArray(m.results) ? m.results : [];
+        // Modal already persisted memory to relay_agents; mirror it into the live
+        // session so memoryFor() injects the new rules without a reload.
+        for (const r of results) {
+          const a = (window.CDC.RELAY_AGENTS || []).find((x) => x.name === r.agent);
+          if (a) a.memory = { rules: r.rules, distilledFrom: r.distilledFrom, ts: nowStr() };
+        }
+        return results;
+      }
       const byAgent = {};
       (window.CDC.ENGRAM || []).forEach((e) => {
         if (!e || e.action === 'accept') return;          // edits/rejects carry the teaching signal

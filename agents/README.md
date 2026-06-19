@@ -65,8 +65,14 @@ runs through the `relay-agent` proxy.
   prompt otherwise. Set `MODAL_SCRIBE_URL` on the `relay-agent` function to enable.
   The prompt-injection guardrail (`fence()`) lives in the Python graph — watch
   `ai_runs` for Scribe ERROR rows when monitoring.
-- **Still on the old TS path:** Sentry, Curator, and the browser
-  "Run Advisor now" button. Do those after Scribe is stable in prod.
+- **Sentry → Modal: wired.** `runSentry` tries `/run/sentry` via the proxy (set
+  `MODAL_SENTRY_URL`); returns the one-line brief, falls back to the inline template.
+- **Curator → Modal: wired.** `runCurator` tries `/run/curator` (set `MODAL_CURATOR_URL`);
+  Modal persists distilled rules to `relay_agents`, and the client mirrors them into the
+  live session so `memoryFor()` picks them up without a reload. Falls back to inline.
+- **Still on the old TS path:** only the browser "Run Advisor now" button (the cron
+  Advisor already runs on Modal). Wire it via the same `MODAL_ADVISOR_URL` proxy if/when
+  you want the manual button on Modal too.
 
 ### First cut-over (you run these)
 ```
@@ -88,11 +94,13 @@ supabase secrets set MODAL_ROLLUP_URL=<run_rollup URL> RELAY_AGENT_SECRET=<same 
 # rollback:  supabase secrets unset MODAL_ROLLUP_URL   (client falls back to inline)
 ```
 
-### Scribe cut-over (browser path)
+### Scribe / Sentry / Curator cut-over (browser path)
 ```
-supabase secrets set MODAL_SCRIBE_URL=<run_scribe URL> RELAY_AGENT_SECRET=<same secret as Modal>
-# then in the app: run the MOM loader on a transcript.
-# rollback:  supabase secrets unset MODAL_SCRIBE_URL
+supabase secrets set MODAL_SCRIBE_URL=<run_scribe URL> \
+  MODAL_SENTRY_URL=<run_sentry URL> MODAL_CURATOR_URL=<run_curator URL> \
+  RELAY_AGENT_SECRET=<same secret as Modal>
+# exercise each in the app: MOM loader (Scribe), an escalation (Sentry), a Curator run.
+# rollback any one:  supabase secrets unset MODAL_<AGENT>_URL
 ```
 
 `ai_runs` now records real token counts, a rough `costUsd`, the resolved model
