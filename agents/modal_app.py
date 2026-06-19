@@ -27,6 +27,13 @@ def _auth(x_relay_secret: str):
         raise HTTPException(status_code=401, detail="bad secret")
 
 
+@app.function(image=image, secrets=[secret])
+@modal.fastapi_endpoint(method="GET")
+def health():
+    # Unauthenticated liveness check: confirms the app boots and the model slug is set.
+    return {"ok": True, "model": os.environ.get("LLM_MODEL_SMART", "anthropic/claude-sonnet-4.6")}
+
+
 @app.function(image=image, secrets=[secret], timeout=120)
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_advisor(item: dict, x_relay_secret: str = ""):

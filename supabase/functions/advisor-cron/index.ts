@@ -98,6 +98,46 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   // Shared-secret gate (function is deployed with verify_jwt = false for cron).
   if (CRON_SECRET && req.headers.get("x-cron-secret") !== CRON_SECRET) return json({ error: "unauthorized" }, 401);
+
+  const allowed = ["operational", "process", "priorities", "people"];
+  // Map Advisor items -> recommendation rows and insert. Shared by the Modal and
+  // inline paths so the persisted DB shape is identical either way.
+  async function persist(rawItems: any[]): Promise<{ ok: boolean; count: number }> {
+    const items = (rawItems || []).filter((it) => it && it.title && allowed.includes(it.kind));
+    const now = new Date().toISOString();
+    const batch = Date.now().toString(36); // row.id must equal data.id (triage matches on it)
+    const rows = items.map((it, i) => {
+      const id = `rec-cron-${batch}-${i}`;
+      return {
+        id, kind: it.kind, dept: it.dept || null, status: "new",
+        data: { id, kind: it.kind, title: it.title, detail: it.detail || "", dept: it.dept || "", severity: it.severity || "medium", refs: it.refs || [], status: "new", agent: "Advisor", ts: now, by: "scheduled" },
+      };
+    });
+    const ok = rows.length ? await insertRecs(rows) : true;
+    return { ok, count: rows.length };
+  }
+
+  // ── Cut-over: delegate to the Python LangGraph Advisor on Modal when wired.
+  // Unset MODAL_ADVISOR_URL to instantly roll back to the inline path below.
+  const MODAL_URL = Deno.env.get("MODAL_ADVISOR_URL");
+  const RELAY_SECRET = Deno.env.get("RELAY_AGENT_SECRET");
+  if (MODAL_URL && RELAY_SECRET) {
+    try {
+      const mr = await fetch(MODAL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-relay-secret": RELAY_SECRET },
+        body: JSON.stringify({ kinds: allowed }),
+      });
+      if (!mr.ok) throw new Error(`Modal ${mr.status}`);
+      const mj = await mr.json();
+      const r = await persist(mj.items || []);
+      return json({ ok: r.ok, generated: r.count, model: "modal:advisor", path: "modal" });
+    } catch (e) {
+      console.error("[advisor-cron] Modal path failed, falling back to inline:", String((e as Error)?.message || e));
+      // fall through to the inline OpenRouter path
+    }
+  }
+
   if (!OR_KEY) return json({ error: "OPENROUTER_API_KEY not set" }, 500);
 
   try {
@@ -113,7 +153,6 @@ Deno.serve(async (req) => {
     ]);
     const ctx = buildBrief({ depts, emps, logs, flags, kpis, digest: digests[0] || null, moms });
 
-    const allowed = ["operational", "process", "priorities", "people"];
     const prompt = `You are Advisor, the recommendation engine for a Curriculum Development department's operating copilot.\n` +
       `Read the BRIEF below (the department's structure plus its recent captured activity) and propose concrete, actionable suggestions.\n` +
       `Allowed kinds: ${allowed.join(", ")}.\n` +
@@ -148,19 +187,9 @@ Deno.serve(async (req) => {
 
     let items: any[] = [];
     try { items = JSON.parse((content.match(/\{[\s\S]*\}/) || ["{}"])[0]).items || []; } catch (_) { /* ignore */ }
-    items = items.filter((it) => it && it.title && allowed.includes(it.kind));
 
-    const now = new Date().toISOString();
-    const batch = Date.now().toString(36); // computed once: row.id must equal data.id (triage matches on it)
-    const rows = items.map((it, i) => {
-      const id = `rec-cron-${batch}-${i}`;
-      return {
-        id, kind: it.kind, dept: it.dept || null, status: "new",
-        data: { id, kind: it.kind, title: it.title, detail: it.detail || "", dept: it.dept || "", severity: it.severity || "medium", refs: it.refs || [], status: "new", agent: "Advisor", ts: now, by: "scheduled" },
-      };
-    });
-    const ok = await insertRecs(rows);
-    return json({ ok, generated: rows.length, model: MODEL });
+    const r = await persist(items);
+    return json({ ok: r.ok, generated: r.count, model: MODEL, path: "inline" });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }

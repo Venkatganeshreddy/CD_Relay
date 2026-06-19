@@ -46,12 +46,27 @@ runs through the `relay-agent` proxy.
    ```
 3. `modal deploy agents/modal_app.py` → note the endpoint URL.
 
-## Wire it up (not done yet)
-The graphs run; the browser/cron still call the old TS agents. To switch over:
-- **Cron path:** point `advisor-cron` at the Modal `/run/advisor` URL (send `x-relay-secret`).
-- **Browser path:** have the authed `relay-agent` edge function forward to the matching
-  Modal endpoint with the secret, so the browser never holds it (Supabase JWT still gates).
-- Repoint `window.CDC.agents.run*` callers from the inline prompts to those endpoints.
+## Cut-over status
+- **advisor-cron → Modal: wired.** When `MODAL_ADVISOR_URL` + `RELAY_AGENT_SECRET`
+  are set on the edge function, the cron delegates to Modal's `/run/advisor` (sending
+  `x-relay-secret`) and persists the returned items. On any Modal error it **auto-falls
+  back** to the inline OpenRouter path, and **unsetting `MODAL_ADVISOR_URL` rolls back
+  instantly**. Cron is server-to-server, so it uses the shared secret only — no JWT.
+- **Still on the old TS path:** Scribe, Rollup, Sentry, Curator, and the browser
+  "Run Advisor now" button. Do those after Advisor is stable in prod.
+- **Browser path (later):** the authed `relay-agent` edge function forwards to the
+  matching Modal endpoint with the secret, so the browser never holds it (JWT still gates).
+
+### First cut-over (you run these)
+```
+modal deploy agents/modal_app.py                 # note the printed URLs
+curl "$HEALTH_URL"                                # GET /health -> {"ok":true,...}
+# point the cron at Modal:
+supabase secrets set MODAL_ADVISOR_URL=<run_advisor URL> RELAY_AGENT_SECRET=<same secret as Modal>
+# smoke-test Advisor end-to-end (expects {"path":"modal",...}):
+curl -X POST "$CRON_URL" -H "x-cron-secret: $CRON_SECRET"
+# rollback if needed:  supabase secrets unset MODAL_ADVISOR_URL
+```
 
 ## Test (pure logic — no network)
 ```
