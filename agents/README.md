@@ -47,32 +47,28 @@ runs through the `relay-agent` proxy.
 3. `modal deploy agents/modal_app.py` → note the endpoint URL.
 
 ## Cut-over status
-- **advisor-cron → Modal: wired.** When `MODAL_ADVISOR_URL` + `RELAY_AGENT_SECRET`
-  are set on the edge function, the cron delegates to Modal's `/run/advisor` (sending
-  `x-relay-secret`) and persists the returned items. On any Modal error it **auto-falls
-  back** to the inline OpenRouter path, and **unsetting `MODAL_ADVISOR_URL` rolls back
-  instantly**. Cron is server-to-server, so it uses the shared secret only — no JWT.
-- **Rollup → Modal: wired (browser path).** Rollup is interactive, not a cron, so it
-  cuts over through the `relay-agent` proxy: the browser (JWT-gated by Supabase) calls
-  `relay-agent` with `{ modal: "rollup", payload }`; the function forwards to Modal's
-  `/run/rollup` with `x-relay-secret` (secret stays server-side) and returns `path:"modal"`.
-  If `MODAL_ROLLUP_URL` is unset or Modal errors, the client **falls back to its inline
-  prompt**. Rollback = unset `MODAL_ROLLUP_URL` on the `relay-agent` function. Covers both
-  `runRollup` (sections) and `runWeeklyDigest` (one payload shape, same endpoint).
-- **Scribe → Modal: wired (browser path).** Same proxy pattern: `runScribe` calls
-  `relay-agent` with `{ modal:"scribe", payload:{transcript} }` → Modal `/run/scribe`,
-  returns the `{agenda, attendees, summary, items}` shape; falls back to the inline
-  prompt otherwise. Set `MODAL_SCRIBE_URL` on the `relay-agent` function to enable.
-  The prompt-injection guardrail (`fence()`) lives in the Python graph — watch
-  `ai_runs` for Scribe ERROR rows when monitoring.
-- **Sentry → Modal: wired.** `runSentry` tries `/run/sentry` via the proxy (set
-  `MODAL_SENTRY_URL`); returns the one-line brief, falls back to the inline template.
-- **Curator → Modal: wired.** `runCurator` tries `/run/curator` (set `MODAL_CURATOR_URL`);
-  Modal persists distilled rules to `relay_agents`, and the client mirrors them into the
-  live session so `memoryFor()` picks them up without a reload. Falls back to inline.
-- **Still on the old TS path:** only the browser "Run Advisor now" button (the cron
-  Advisor already runs on Modal). Wire it via the same `MODAL_ADVISOR_URL` proxy if/when
-  you want the manual button on Modal too.
+
+All five LLM agents run on Modal with the **same safe pattern**: try Modal first →
+auto-fallback to the original inline path → instant rollback by unsetting the agent's
+URL. Every response/run carries a `path` (`modal`|`inline`) for monitoring.
+
+| Agent | Trigger | Enable secret | Endpoint | Fallback |
+|-------|---------|---------------|----------|----------|
+| **Advisor** | cron (server→server) | `MODAL_ADVISOR_URL` on `advisor-cron` | `/run/advisor` | inline OpenRouter |
+| **Rollup** (+ digest) | browser → `relay-agent` proxy | `MODAL_ROLLUP_URL` on `relay-agent` | `/run/rollup` | inline prompt |
+| **Scribe** | browser → `relay-agent` proxy | `MODAL_SCRIBE_URL` on `relay-agent` | `/run/scribe` | inline prompt |
+| **Sentry** | browser → `relay-agent` proxy | `MODAL_SENTRY_URL` on `relay-agent` | `/run/sentry` | inline template |
+| **Curator** | browser → `relay-agent` proxy | `MODAL_CURATOR_URL` on `relay-agent` | `/run/curator` | inline distill |
+| **Dispatcher** | — | — (stays in JS, deterministic routing, no LLM) | — | — |
+
+Notes:
+- **Advisor** is the only cron path — server-to-server, shared secret only (no JWT).
+  The browser "Run Advisor now" button still uses the inline prompt; wire it via the
+  proxy later if wanted.
+- **Browser-path agents** go through `relay-agent`, which is JWT-gated by Supabase, so
+  the shared secret never leaves the server. `RELAY_AGENT_SECRET` must match Modal's.
+- **Curator** writes distilled rules to `relay_agents` on Modal; the client mirrors them
+  into the live session so `memoryFor()` applies them without a reload.
 
 ### First cut-over (you run these)
 ```
@@ -118,3 +114,25 @@ cd agents
 OPENROUTER_API_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
 python -c "from graphs.advisor import run; print(run())"
 ```
+
+## Production cut-over checklist
+Do these in order. Each agent can be enabled (and rolled back) independently.
+
+1. **Deploy Modal.** `modal deploy agents/modal_app.py` → note the per-endpoint URLs.
+   Create the `relay-agents` Modal secret (see "Deploy" above): `OPENROUTER_API_KEY`,
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RELAY_AGENT_SECRET`, optional
+   `LANGCHAIN_*` / `LLM_MODEL_*`.
+2. **Health check.** `curl "$HEALTH_URL"` → `{"ok":true,...}`.
+3. **Deploy the edge functions** (they now contain the Modal-forward branches):
+   `supabase functions deploy relay-agent` and the `advisor-cron` deploy script.
+   Confirm `relay-agent` keeps **`verify_jwt` ON** (the browser-path security basis).
+4. **Enable agents one at a time** by setting the secret, then exercising it:
+   - Advisor: `supabase secrets set MODAL_ADVISOR_URL=...` on `advisor-cron`; trigger the cron.
+   - Rollup / Scribe / Sentry / Curator: `supabase secrets set MODAL_<AGENT>_URL=...` +
+     `RELAY_AGENT_SECRET=...` on `relay-agent`; exercise in the app.
+5. **Verify each** in `ai_runs`: a row per run with the correct `agent`, `model` slug,
+   `via:"modal"`, non-zero `tokensIn/Out`, and a `costUsd`. Cron/Advisor responses show
+   `"path":"modal"`.
+6. **Test fallback** for one agent: unset its `MODAL_<AGENT>_URL` → confirm it still
+   works (inline path) with no user-visible error. Re-set to re-enable.
+7. **Rollback** anytime: `supabase secrets unset MODAL_<AGENT>_URL` — no redeploy.
