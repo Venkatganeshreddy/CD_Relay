@@ -88,6 +88,14 @@
   if (sb) {
     window.CDC.auth = {
       signIn: (email, password) => sb.auth.signInWithPassword({ email, password }),
+      // Microsoft (Azure AD) SSO. Supabase creates the auth.users row with the
+      // user's MS email; the link_auth_user trigger (05_auth.sql) matches it to
+      // employees.email — so SSO users must already be on the roster with that
+      // exact email. Redirects to the provider, then back to this page.
+      signInWithMicrosoft: () => sb.auth.signInWithOAuth({
+        provider: 'azure',
+        options: { scopes: 'email openid profile', redirectTo: location.origin + location.pathname },
+      }),
       signOut: () => sb.auth.signOut(),
       session: () => sb.auth.getSession(),
       onChange: (cb) => sb.auth.onAuthStateChange(cb),
@@ -128,8 +136,8 @@
     window.CDC.loadFromSupabase = loadFromSupabase;
 
     // Phase 5 — real agents via the relay-agent Edge Function (OpenRouter proxy).
-    window.CDC.askAgent = async ({ messages, model }) => {
-      const { data, error } = await sb.functions.invoke('relay-agent', { body: { messages, model: model || 'smart' } });
+    window.CDC.askAgent = async ({ messages, model, agent }) => {
+      const { data, error } = await sb.functions.invoke('relay-agent', { body: { messages, model: model || 'smart', agent } });
       if (error) throw error;
       if (data && data.error) throw new Error(data.error);
       return data; // { content, model, usage }
@@ -491,7 +499,7 @@
       let content = '', usage = null, outcome = 'OK', errMsg = null;
       try {
         if (!window.CDC.askAgent) throw new Error('agent endpoint unavailable');
-        const r = await window.CDC.askAgent({ messages: msgs, model: model || 'smart' });
+        const r = await window.CDC.askAgent({ messages: msgs, model: model || 'smart', agent });
         content = r.content || ''; usage = r.usage || null;
       } catch (e) { outcome = 'ERROR'; errMsg = e.message || String(e); }
 

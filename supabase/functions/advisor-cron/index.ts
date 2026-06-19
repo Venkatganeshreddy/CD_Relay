@@ -127,9 +127,16 @@ Deno.serve(async (req) => {
       `"severity" is one of low/medium/high. "refs" lists any ids from the brief you used.\n` +
       `Return ONLY JSON: {"items":[{"kind":"operational","title":"...","detail":"...","dept":"","severity":"medium","refs":[]}]}. No preamble.\n\nBRIEF:\n${ctx}`;
 
-    const ai = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // Trace through Helicone when configured (tag: advisor); else direct.
+    const HELI = Deno.env.get("HELICONE_API_KEY");
+    const ai = await fetch(
+      HELI ? "https://openrouter.helicone.ai/api/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${OR_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://relay.nxtwave.io", "X-Title": "Relay Advisor" },
+      headers: {
+        Authorization: `Bearer ${OR_KEY}`, "Content-Type": "application/json",
+        "HTTP-Referer": "https://relay.nxtwave.io", "X-Title": "Relay Advisor",
+        ...(HELI ? { "Helicone-Auth": `Bearer ${HELI}`, "Helicone-Property-Agent": "advisor" } : {}),
+      },
       body: JSON.stringify({ model: MODEL, messages: [{ role: "user", content: prompt }], max_tokens: 2048, temperature: 0.3 }),
     });
     const aj = await ai.json();

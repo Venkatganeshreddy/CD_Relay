@@ -30,19 +30,35 @@ Deno.serve(async (req) => {
     const key = Deno.env.get("OPENROUTER_API_KEY");
     if (!key) return json({ error: "OPENROUTER_API_KEY not set on the function" }, 500);
 
-    const { messages, model, max_tokens, temperature } = await req.json();
+    const { messages, model, max_tokens, temperature, agent } = await req.json();
     if (!Array.isArray(messages) || messages.length === 0) {
       return json({ error: "`messages` (non-empty array) required" }, 400);
     }
     const slug = MODELS[model as string] || (model as string) || MODELS.smart;
 
-    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // Observability: if HELICONE_API_KEY is set, route through Helicone's
+    // OpenRouter gateway so every call is traced (cost/latency/tokens) and
+    // tagged by agent. Unset → hit OpenRouter directly, unchanged.
+    //   supabase secrets set HELICONE_API_KEY=sk-helicone-...
+    const helicone = Deno.env.get("HELICONE_API_KEY");
+    const endpoint = helicone
+      ? "https://openrouter.helicone.ai/api/v1/chat/completions"
+      : "https://openrouter.ai/api/v1/chat/completions";
+    const heliconeHeaders: Record<string, string> = helicone
+      ? {
+          "Helicone-Auth": `Bearer ${helicone}`,
+          ...(agent ? { "Helicone-Property-Agent": String(agent) } : {}),
+        }
+      : {};
+
+    const r = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://relay.nxtwave.io",
         "X-Title": "Relay",
+        ...heliconeHeaders,
       },
       body: JSON.stringify({
         model: slug,

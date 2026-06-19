@@ -16,6 +16,16 @@ function LoginScreen({ onAuthed, onDemo }) {
 
   function switchMode(m) { setMode(m); setErr(''); setInfo(''); setPw(''); setPw2(''); }
 
+  async function msSignIn() {
+    if (!window.CDC || !window.CDC.auth || !window.CDC.auth.signInWithMicrosoft) {
+      setErr('Microsoft sign-in is unavailable.'); return;
+    }
+    setBusy(true); setErr('');
+    // Redirects to Microsoft; the page reloads and the session is picked up on return.
+    const { error } = await window.CDC.auth.signInWithMicrosoft();
+    if (error) { setErr(error.message); setBusy(false); }
+  }
+
   async function forgot() {
     if (!email.trim()) { setErr('Enter your email above first, then click "Forgot password?".'); return; }
     setBusy(true); setErr(''); setInfo('');
@@ -74,6 +84,28 @@ function LoginScreen({ onAuthed, onDemo }) {
             {signup ? 'Create an account with your company email — you must already be on the employee roster.'
               : 'Department Operating Copilot · use your company email'}
           </div>
+          {!signup && (
+            <React.Fragment>
+              <button type="button" onClick={msSignIn} disabled={!canAuth || busy}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '9px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  background: 'var(--panel, #fff)', color: 'var(--text, #1b1b1b)',
+                  border: '1px solid var(--border, #d8d9dd)', borderRadius: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true">
+                  <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                  <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                  <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                </svg>
+                Sign in with Microsoft
+              </button>
+              <div className="row" style={{ alignItems: 'center', gap: 10, margin: '16px 0' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border, #e6e7ea)' }} />
+                <span className="muted" style={{ fontSize: 11.5 }}>or</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border, #e6e7ea)' }} />
+              </div>
+            </React.Fragment>
+          )}
           <form onSubmit={submit}>
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Email</label>
             <input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
