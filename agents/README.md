@@ -59,8 +59,14 @@ runs through the `relay-agent` proxy.
   If `MODAL_ROLLUP_URL` is unset or Modal errors, the client **falls back to its inline
   prompt**. Rollback = unset `MODAL_ROLLUP_URL` on the `relay-agent` function. Covers both
   `runRollup` (sections) and `runWeeklyDigest` (one payload shape, same endpoint).
-- **Still on the old TS path:** Scribe, Sentry, Curator, and the browser
-  "Run Advisor now" button. Do those after Rollup is stable in prod.
+- **Scribe → Modal: wired (browser path).** Same proxy pattern: `runScribe` calls
+  `relay-agent` with `{ modal:"scribe", payload:{transcript} }` → Modal `/run/scribe`,
+  returns the `{agenda, attendees, summary, items}` shape; falls back to the inline
+  prompt otherwise. Set `MODAL_SCRIBE_URL` on the `relay-agent` function to enable.
+  The prompt-injection guardrail (`fence()`) lives in the Python graph — watch
+  `ai_runs` for Scribe ERROR rows when monitoring.
+- **Still on the old TS path:** Sentry, Curator, and the browser
+  "Run Advisor now" button. Do those after Scribe is stable in prod.
 
 ### First cut-over (you run these)
 ```
@@ -81,6 +87,16 @@ supabase secrets set MODAL_ROLLUP_URL=<run_rollup URL> RELAY_AGENT_SECRET=<same 
 # verify Modal ran: ai_runs shows a Rollup row with no client-side duplicate.
 # rollback:  supabase secrets unset MODAL_ROLLUP_URL   (client falls back to inline)
 ```
+
+### Scribe cut-over (browser path)
+```
+supabase secrets set MODAL_SCRIBE_URL=<run_scribe URL> RELAY_AGENT_SECRET=<same secret as Modal>
+# then in the app: run the MOM loader on a transcript.
+# rollback:  supabase secrets unset MODAL_SCRIBE_URL
+```
+
+`ai_runs` now records real token counts, a rough `costUsd`, the resolved model
+slug, and `via:"modal"` for every agent run on the Python service.
 
 ## Test (pure logic — no network)
 ```

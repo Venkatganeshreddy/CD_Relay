@@ -622,6 +622,15 @@
     },
     // Scribe — extract action items from a meeting transcript.
     async runScribe(transcript) {
+      // Modal-first (prompt-injection hardening + grounding live in the Python graph).
+      // Same {agenda, attendees, summary, items} shape; falls back to the inline prompt.
+      const m = await this._tryModal('scribe', { transcript });
+      if (m) return {
+        agenda: m.agenda || '',
+        attendees: Array.isArray(m.attendees) ? m.attendees : [],
+        summary: m.summary || { businessDirection: '', alignment: '', guidelines: '' },
+        items: Array.isArray(m.items) ? m.items : [],
+      };
       // Give Scribe the real roster so it (a) captures every item and (b) returns an
       // EXACT name/team the Dispatcher can map without guessing.
       const roster = (window.CDC.USERS || [])
