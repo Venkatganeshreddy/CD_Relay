@@ -2,4 +2,8 @@ node_modules/
 *.log
 .DS_Store
 obsidian-vault/.obsidian/
-data.js.bak
+*.bak
+.claude/
+__pycache__/
+*.pyc
+.venv/
