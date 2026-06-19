@@ -27,10 +27,33 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
+    const { messages, model, max_tokens, temperature, agent, modal: modalAgent, payload } = await req.json();
+
+    // ── Modal forward: delegate to a Python LangGraph agent on Modal when wired.
+    // Supabase verifies the browser's JWT before invoking this function (verify_jwt
+    // on), so the shared secret never leaves the server. Returns path:"modal" on
+    // success, or a non-"modal" path the client uses to fall back to its inline
+    // prompt. Roll back instantly by unsetting MODAL_<AGENT>_URL.
+    if (modalAgent) {
+      const url = Deno.env.get(`MODAL_${String(modalAgent).toUpperCase()}_URL`);
+      const secret = Deno.env.get("RELAY_AGENT_SECRET");
+      if (!url || !secret) return json({ path: "unconfigured" });
+      try {
+        const mr = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-relay-secret": secret },
+          body: JSON.stringify(payload || {}),
+        });
+        if (!mr.ok) return json({ path: "error", status: mr.status });
+        return json({ ...(await mr.json()), path: "modal" });
+      } catch (e) {
+        return json({ path: "error", error: String((e as Error)?.message || e) });
+      }
+    }
+
     const key = Deno.env.get("OPENROUTER_API_KEY");
     if (!key) return json({ error: "OPENROUTER_API_KEY not set on the function" }, 500);
 
-    const { messages, model, max_tokens, temperature, agent } = await req.json();
     if (!Array.isArray(messages) || messages.length === 0) {
       return json({ error: "`messages` (non-empty array) required" }, 400);
     }

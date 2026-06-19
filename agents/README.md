@@ -52,10 +52,15 @@ runs through the `relay-agent` proxy.
   `x-relay-secret`) and persists the returned items. On any Modal error it **auto-falls
   back** to the inline OpenRouter path, and **unsetting `MODAL_ADVISOR_URL` rolls back
   instantly**. Cron is server-to-server, so it uses the shared secret only — no JWT.
-- **Still on the old TS path:** Scribe, Rollup, Sentry, Curator, and the browser
-  "Run Advisor now" button. Do those after Advisor is stable in prod.
-- **Browser path (later):** the authed `relay-agent` edge function forwards to the
-  matching Modal endpoint with the secret, so the browser never holds it (JWT still gates).
+- **Rollup → Modal: wired (browser path).** Rollup is interactive, not a cron, so it
+  cuts over through the `relay-agent` proxy: the browser (JWT-gated by Supabase) calls
+  `relay-agent` with `{ modal: "rollup", payload }`; the function forwards to Modal's
+  `/run/rollup` with `x-relay-secret` (secret stays server-side) and returns `path:"modal"`.
+  If `MODAL_ROLLUP_URL` is unset or Modal errors, the client **falls back to its inline
+  prompt**. Rollback = unset `MODAL_ROLLUP_URL` on the `relay-agent` function. Covers both
+  `runRollup` (sections) and `runWeeklyDigest` (one payload shape, same endpoint).
+- **Still on the old TS path:** Scribe, Sentry, Curator, and the browser
+  "Run Advisor now" button. Do those after Rollup is stable in prod.
 
 ### First cut-over (you run these)
 ```
@@ -66,6 +71,15 @@ supabase secrets set MODAL_ADVISOR_URL=<run_advisor URL> RELAY_AGENT_SECRET=<sam
 # smoke-test Advisor end-to-end (expects {"path":"modal",...}):
 curl -X POST "$CRON_URL" -H "x-cron-secret: $CRON_SECRET"
 # rollback if needed:  supabase secrets unset MODAL_ADVISOR_URL
+```
+
+### Rollup cut-over (browser path)
+```
+# relay-agent holds the Modal URL + secret; the browser only sends {modal,payload}.
+supabase secrets set MODAL_ROLLUP_URL=<run_rollup URL> RELAY_AGENT_SECRET=<same secret as Modal>
+# then in the app: open a weekly (runRollup) / generate a digest (runWeeklyDigest).
+# verify Modal ran: ai_runs shows a Rollup row with no client-side duplicate.
+# rollback:  supabase secrets unset MODAL_ROLLUP_URL   (client falls back to inline)
 ```
 
 ## Test (pure logic — no network)

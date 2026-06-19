@@ -523,8 +523,22 @@
       if (outcome === 'ERROR') throw new Error(errMsg);
       return content;
     },
+    // Try the Modal-hosted LangGraph agent via the relay-agent proxy (which holds
+    // the MODAL_<AGENT>_URL + secret server-side; the browser is JWT-gated). Returns
+    // the Modal response when path==='modal', else null so the caller falls back to
+    // its inline prompt. Rollback: unset MODAL_<AGENT>_URL on the relay-agent function.
+    async _tryModal(agent, payload) {
+      if (!sb) return null;
+      try {
+        const { data, error } = await sb.functions.invoke('relay-agent', { body: { modal: agent, payload } });
+        if (error || !data || data.path !== 'modal') return null;
+        return data;
+      } catch (_) { return null; }
+    },
     // Rollup — draft a weekly summary from a department's daily reports.
     async runRollup(weekly) {
+      const m = await this._tryModal('rollup', { weekly: { id: weekly.id, dept: weekly.dept, deptName: weekly.deptName } });
+      if (m) return m.sections || null;
       const reports = (window.CDC.REPORTS || []).filter((r) => r.dept === weekly.dept && !r.missing);
       const ctx = reports.map((r) => `[${r.id}] ${r.sub} (${r.date}): ` +
         (r.items || []).map((i) => `(${i.kind}) ${i.text}`).join(' | ')).join('\n') || '(no reports in scope)';
@@ -540,6 +554,8 @@
     // Returns an array of achievement sentences in the SAME order, or null.
     async runWeeklyDigest({ sub, weekLabel, streams }) {
       if (!Array.isArray(streams) || !streams.length) return null;
+      const m = await this._tryModal('rollup', { sub, weekLabel, streams });
+      if (m) return Array.isArray(m.digest) ? m.digest : null;
       const numbered = streams.map((s, i) => `${i + 1}. ${s}`).join('\n');
       const prompt = `You are Rollup, consolidating one week (${weekLabel}) of daily reports for the sub-department "${sub}".\n` +
         `For EACH numbered work-stream below, write ONE concise sentence (max 24 words) stating what was achieved that week. ` +
