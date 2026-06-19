@@ -6,7 +6,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # agents/
 
-from graphs.common import fence, UNTRUSTED_OPEN, UNTRUSTED_CLOSE
+from graphs.common import fence, UNTRUSTED_OPEN, UNTRUSTED_CLOSE, _cost
 
 
 def test_fence_wraps_content():
@@ -23,7 +23,15 @@ def test_fence_strips_injected_markers():
     assert out.count(UNTRUSTED_CLOSE) == 1
 
 
+def test_cost_estimate():
+    # sonnet: 1M in @ $3 + 1M out @ $15 = $18; unknown slug falls back to sonnet rate.
+    assert _cost("anthropic/claude-sonnet-4.6", 1_000_000, 1_000_000) == 18.0
+    assert _cost("anthropic/claude-haiku-4.5", 1_000_000, 0) == 1.0
+    assert _cost("some/unknown-model", 0, 0) == 0.0
+
+
 if __name__ == "__main__":
     test_fence_wraps_content()
     test_fence_strips_injected_markers()
+    test_cost_estimate()
     print("ok")
