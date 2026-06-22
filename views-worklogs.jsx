@@ -7,7 +7,10 @@ const { useState: useStWL, useMemo: useMWL, useEffect: useEffWL, useRef: useRefW
 
 function WorklogsView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
-  const all = useMWL(() => CDC.filterWorklogs(currentUser.id), [currentUser.id]);
+  // Recompute every render (not memoized on currentUser.id) so the live-refresh
+  // poll picks up added/deleted worklogs — otherwise a stale cached array hides
+  // changes until reload. filterWorklogs is a cheap array filter.
+  const all = CDC.filterWorklogs(currentUser.id);
 
   // Title mirrors the viewer's actual scope: L3/Admin see the whole department,
   // a manager (L2 or anyone with reportees) sees their team, an L1/L0 sees only
