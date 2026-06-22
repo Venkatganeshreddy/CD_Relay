@@ -383,6 +383,9 @@ function TasksView({ tweaks, currentUser }) {
   const reportees = (CDC.USERS || []).filter((u) => u.managerId === me.id);
   const isManager = me.level === 'L2' || me.level === 'L3' || me.level === 'Admin' ||
     ['L2', 'L3', 'ADMIN', 'PRODUCT_OWNER', 'DEPARTMENT_LEAD', 'SUB_LEAD', 'CENTRAL_OPS'].includes(me.role);
+  // L3/Admin only — can hard-delete tasks (clean up test/demo rows). Matches the
+  // is_hod_admin server RLS, so the remote delete actually succeeds.
+  const isAdmin = me.level === 'L3' || me.level === 'Admin' || ['L3', 'ADMIN', 'PRODUCT_OWNER'].includes(me.role);
   const reporteeIds = new Set(reportees.map((r) => r.id));
 
   const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
@@ -392,6 +395,13 @@ function TasksView({ tweaks, currentUser }) {
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [editing, setEditing] = useState_o(null);
   const [creating, setCreating] = useState_o(false);
+  const [, setTick] = useState_o(0);   // force re-render after a delete
+
+  async function removeTask(id) {
+    if (!window.confirm('Delete this task permanently? This cannot be undone.')) return;
+    if (CDC.db && CDC.db.deleteTask) await CDC.db.deleteTask(id);
+    setTick((n) => n + 1);
+  }
 
   const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
   // Escalation queue = anything escalated, blocked, or overdue (what L3 reviews "separately").
@@ -723,20 +733,26 @@ function TasksView({ tweaks, currentUser }) {
                     )}
                   </td>
                   <td>
-                    {status === 'SUGGESTED' ? (
-                      decided === 'approved' ? <Pill tone="green" dot>approved</Pill> :
-                      decided === 'rejected' ? <Pill tone="red" dot>rejected</Pill> :
-                      <div className="row" style={{ gap: 4 }}>
-                        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(t)}><Icon name="edit" size={11} /></button>
-                        <button className="btn" data-size="sm" data-variant="danger" onClick={() => reject(t.id)}>Reject</button>
-                        <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
-                      </div>
-                    ) : (status === 'BLOCKED' || status === 'ESCALATED') ? (
-                      <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11 }}>
-                        {t.escalatedTo && <span className="muted" title={t.escalReason || 'Currently escalated to'}>→ {nm(t.escalatedTo)} ({(CDC.lookup.user(t.escalatedTo) || {}).level || '—'})</span>}
-                        {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
-                      </div>
-                    ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
+                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                      {status === 'SUGGESTED' ? (
+                        decided === 'approved' ? <Pill tone="green" dot>approved</Pill> :
+                        decided === 'rejected' ? <Pill tone="red" dot>rejected</Pill> :
+                        <div className="row" style={{ gap: 4 }}>
+                          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(t)}><Icon name="edit" size={11} /></button>
+                          <button className="btn" data-size="sm" data-variant="danger" onClick={() => reject(t.id)}>Reject</button>
+                          <button className="btn" data-size="sm" data-variant="primary" onClick={() => approve(t.id)}>Approve</button>
+                        </div>
+                      ) : (status === 'BLOCKED' || status === 'ESCALATED') ? (
+                        <div className="row" style={{ gap: 6, alignItems: 'center', fontSize: 11 }}>
+                          {t.escalatedTo && <span className="muted" title={t.escalReason || 'Currently escalated to'}>→ {nm(t.escalatedTo)} ({(CDC.lookup.user(t.escalatedTo) || {}).level || '—'})</span>}
+                          {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
+                        </div>
+                      ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
+                      {isAdmin && status !== 'SUGGESTED' && (
+                        <button className="btn" data-size="sm" data-variant="danger" title="Delete task (admin)"
+                          style={{ marginLeft: 'auto' }} onClick={() => removeTask(t.id)}>Delete</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

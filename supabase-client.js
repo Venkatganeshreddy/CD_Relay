@@ -360,6 +360,15 @@
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
     },
+    // Hard-delete a task (admin clean-up of test/demo rows). RLS task_write
+    // (is_hod_admin or owner_in_scope) gates the server delete; in-memory is
+    // always removed so it disappears immediately.
+    async deleteTask(id) {
+      const arr = window.CDC.TASKS; const i = arr ? arr.findIndex((x) => x.id === id) : -1;
+      if (i >= 0) arr.splice(i, 1);
+      const remoteOk = await remote(() => sb.from('tasks').delete().eq('id', id));
+      return { remoteOk };
+    },
     // 6:30 PM check-in: owner acknowledges an open task. Records lastAckDate so
     // the task drops out of the unacknowledged-escalation path; optional status
     // change maps the xlsx label to the board status (Blocked also arms escalation).
