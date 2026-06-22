@@ -1281,11 +1281,33 @@ function relayPickUser(setTweak, id) {
     return;
   }
 
+  // Resolve the session, but when we're returning from an OAuth redirect the
+  // session may not be in storage yet (supabase-js is still exchanging the
+  // code/token in the background). Without this wait the page renders the login
+  // screen again even though the user just authenticated with Google — a loop.
+  async function resolveSession() {
+    let res = await window.CDC.auth.session();
+    if (res && res.data && res.data.session) return res.data.session;
+    const oauthReturn = /[?&]code=/.test(location.search) || /access_token=/.test(location.hash);
+    if (oauthReturn && window.RELAY_SB) {
+      const s = await new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; try { sub.subscription.unsubscribe(); } catch (_) {} resolve(v); };
+        const { data: sub } = window.RELAY_SB.auth.onAuthStateChange((_e, sess) => { if (sess) finish(sess); });
+        setTimeout(() => finish(null), 6000);
+      });
+      if (s) return s;
+      res = await window.CDC.auth.session();
+      return res && res.data && res.data.session ? res.data.session : null;
+    }
+    return null;
+  }
+
   let me = null, real = null, authMode = 'demo';
   try {
     if (window.CDC && window.CDC.auth) {
-      const { data } = await window.CDC.auth.session();
-      if (data && data.session) {
+      const session = await resolveSession();
+      if (session) {
         me = await window.CDC.whoami();
         real = window.CDC.whoamiReal ? await window.CDC.whoamiReal() : me;
         if (me) { authMode = 'authed'; await window.CDC.loadFromSupabase(); }
