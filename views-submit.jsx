@@ -31,9 +31,12 @@ window.CDC.snapshotPhase = snapshotPhase;
 function GlanceView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
-  const mine = (CDC.TASKS || []).filter((t) =>
-    t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
-  const pending = mine.filter((t) => t.lastAckDate !== todayStr).length;
+  // Scoped tasks (managers see their whole team; L1 sees their own), open
+  // statuses only. Always visible — not gated to the 6-8 PM window.
+  const scoped = (CDC.filterTasks(currentUser.id) || []).filter((t) =>
+    ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
+  const mineOwn = scoped.filter((t) => t.owner === currentUser.id);
+  const pending = mineOwn.filter((t) => t.lastAckDate !== todayStr).length;
 
   // A 30s tick keeps the window state (and the unlock/close moment) fresh.
   const [, setTick] = useS(0);
@@ -100,47 +103,25 @@ function GlanceView({ tweaks, currentUser, nav }) {
     <div className="fadein">
       <SectionHeader
         title="Day-end glance"
-        subtitle={`The 6:00 PM check-in (open 6:00–8:00 PM IST). Add your tasks for today, then set each one's status; add a reason if blocked. Tasks left unacknowledged when the window closes escalate up the manager graph.`}
+        subtitle={`This is the only place to change a task's status. Add a task, then set its status (add a reason if blocked). A task stays here until it's marked Done — once it passes its due date it escalates up the manager graph.`}
         actions={
           <>
             <Pill tone={phase !== 'open' ? 'neutral' : pending ? 'amber' : 'green'} dot>
               {phase === 'before' ? 'opens 6:00 PM IST' : phase === 'after' ? 'closed (8:00 PM)' : pending ? `${pending} awaiting ack` : 'all acknowledged'}
             </Pill>
-            {phase === 'open' && mine.length > 0 && addBtn('ghost')}
+            {scoped.length > 0 && addBtn('ghost')}
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('my-tasks')}>
               <Icon name="tasks" size={11} /> Open Tasks
             </button>
           </>
         }
       />
-      {phase === 'before' ? (
-        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>🕕</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>The 6:00 PM snapshot isn't open yet</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            Opens in {fmtH(minsLeft)} (at 18:00 IST) and closes at 20:00 IST.
-            {mine.length > 0 && ` You have ${mine.length} open task${mine.length === 1 ? '' : 's'} to review then.`}
-            {' '}Until then you can update tasks anytime from My Tasks.
-          </div>
-        </div>
-      ) : phase === 'after' ? (
-        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>🌙</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>The 6:00 PM snapshot has closed for today</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            The window was open 6:00–8:00 PM IST.
-            {pending > 0
-              ? ` ${pending} task${pending === 1 ? '' : 's'} went unacknowledged and will escalate.`
-              : ' All your open tasks were acknowledged — nice.'}
-            {' '}You can still update tasks from My Tasks; the snapshot reopens at 6:00 PM tomorrow.
-          </div>
-        </div>
-      ) : mine.length === 0 ? (
+      {scoped.length === 0 ? (
         <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 10 }}>📝</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>No tasks for today yet</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No open tasks</div>
           <div className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-            Add the tasks you worked on today — once you add one, the 6:00 PM snapshot opens below so you can set each task's status.
+            Add a task, then set its status here — task status is changed only on this Day-end glance.
           </div>
           {addBtn('primary')}
         </div>
@@ -502,12 +483,14 @@ const NOTE_STATUSES = new Set(['Blocked', 'Overdue', 'Backlog']);
 function AckPanel({ currentUser }) {
   const CDC = window.CDC;
   const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
-  const mine = () => (CDC.TASKS || []).filter((t) =>
-    t.owner === currentUser.id && ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
+  // Scoped tasks (managers see the whole team, L1 sees their own), open
+  // statuses only. Status is editable on your OWN tasks; others are read-only.
+  const visible = () => (CDC.filterTasks(currentUser.id) || []).filter((t) =>
+    ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const [, force] = useS(0);
   const [draft, setDraft] = useS({});   // taskId -> { status, note }
 
-  const tasks = mine();
+  const tasks = visible();
   if (tasks.length === 0) return null;
 
   const baseOf = (t) => ({ status: INTERNAL_TO_LABEL[t.status] || 'In-progress', note: t.backlogNote || t.blockReason || '' });
@@ -522,13 +505,13 @@ function AckPanel({ currentUser }) {
     force((n) => n + 1);
   }
 
-  const pending = tasks.filter((t) => t.lastAckDate !== todayStr);
+  const pending = tasks.filter((t) => t.owner === currentUser.id && t.lastAckDate !== todayStr);
   const backlog = tasks.filter((t) => t.status === 'BACKLOG');
 
   return (
     <div className="card" style={{ marginBottom: 12, padding: 14 }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 600 }}>6:00 PM snapshot — your tasks
+        <div style={{ fontWeight: 600 }}>Task status — set yours here
           <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> · {pending.length} awaiting{backlog.length ? ` · ${backlog.length} in backlog` : ''}</span>
         </div>
         <Pill tone={pending.length ? 'amber' : 'green'} dot>{pending.length ? 'action needed' : 'all acknowledged'}</Pill>
@@ -539,25 +522,31 @@ function AckPanel({ currentUser }) {
           const acked = t.lastAckDate === todayStr;
           const d = draftFor(t);
           const dirty = !!draft[t.id];
+          const isOwn = t.owner === currentUser.id;
+          const ownerName = (CDC.lookup.user(t.owner) || {}).name || '';
           return (
             <div key={t.id} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', opacity: acked && !dirty ? 0.65 : 1 }}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{t.title}</div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                    {t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${t.due}` : ''}
+                    {!isOwn && ownerName ? `${ownerName} · ` : ''}{t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${t.due}` : ''}
                     {acked && t.lastAckStatus ? ` · acknowledged: ${t.lastAckStatus}` : ''}
                   </div>
                 </div>
-                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                  <select value={d.status} onChange={(e) => setField(t, { status: e.target.value })}
-                    style={{ fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                    {SNAPSHOT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button className="btn" data-size="sm" data-variant="primary" onClick={() => save(t)}>Save</button>
-                </div>
+                {isOwn ? (
+                  <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                    <select value={d.status} onChange={(e) => setField(t, { status: e.target.value })}
+                      style={{ fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      {SNAPSHOT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button className="btn" data-size="sm" data-variant="primary" onClick={() => save(t)}>Save</button>
+                  </div>
+                ) : (
+                  <Pill tone="outline" dot>{t.status.toLowerCase()}</Pill>
+                )}
               </div>
-              {NOTE_STATUSES.has(d.status) && (
+              {isOwn && NOTE_STATUSES.has(d.status) && (
                 <input className="field-input" style={{ marginTop: 8, width: '100%' }}
                   placeholder={d.status === 'Backlog' ? 'What is the backlog? (stored, visible later)' : `Reason it's ${d.status.toLowerCase()}…`}
                   value={d.note} onChange={(e) => setField(t, { note: e.target.value })} />

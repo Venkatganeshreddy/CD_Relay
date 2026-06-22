@@ -415,16 +415,12 @@ function TasksView({ tweaks, currentUser }) {
   // Returns a human reason if a task crosses a time threshold, else null.
   // Thresholds (the day a trigger fires): in progress > 2 days (3rd day),
   // blocked > 1 day (2nd day), overdue > 2 days (3rd day).
+  // Escalation is driven ONLY by the due date: a task escalates once it is past
+  // its due date (overdue). No blocked-age / in-progress-age / unack triggers.
   const escalationTrigger = (t) => {
     if (['DONE', 'SUGGESTED', 'REJECTED'].includes(t.status)) return null;
     const od = daysOverdue(t);
-    if (od > 2) return `Overdue ${od} days (due ${t.due})`;
-    // When already ESCALATED, keep evaluating the state it came from so it can climb further.
-    const eff = t.status === 'ESCALATED' ? (t.escalPrevStatus || '') : t.status;
-    if (eff === 'BLOCKED' && fullDaysSince(t.blockedAt || t.created) > 1) return `Blocked ${fullDaysSince(t.blockedAt || t.created)} days`;
-    if (eff === 'ACTIVE' && fullDaysSince(t.created) > 2) return `In progress ${fullDaysSince(t.created)} days`;
-    // Prompted at a past 6:00 check-in and still not acknowledged.
-    if (t.ackPending && t.ackPromptDate && t.ackPromptDate < todayStr) return `Unacknowledged since ${t.ackPromptDate}`;
+    if (od >= 1) return `Overdue ${od} day${od === 1 ? '' : 's'} (due ${t.due})`;
     return null;
   };
 
@@ -745,15 +741,12 @@ function TasksView({ tweaks, currentUser }) {
                     {t.due || '—'}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>overdue</span>}
                   </td>
                   <td>
-                    {canSetStatus ? (
-                      <select value={status} onChange={(e) => setStatus(t.id, e.target.value)}
-                        style={{ fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                        {TASK_STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
-                      </select>
-                    ) : status === 'SUGGESTED' ? (
+                    {/* Read-only on the board — status is changed only on the
+                        Day-end glance (the 6:00 PM check-in). */}
+                    {status === 'SUGGESTED' ? (
                       <Pill tone="outline" dot>suggested</Pill>
                     ) : (
-                      <Pill tone={meta.tone} dot title={isOwner ? '' : `Only ${ownerName} can change this`}>{meta.label}</Pill>
+                      <Pill tone={meta.tone} dot title="Status is set on the Day-end glance">{meta.label}</Pill>
                     )}
                   </td>
                   <td>
