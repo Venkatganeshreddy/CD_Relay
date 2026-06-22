@@ -521,6 +521,14 @@ function TasksView({ tweaks, currentUser }) {
       reason: `Escalated to ${nm(target)} by ${me.name}`, userId: me.id });
     setStatusOv((s) => ({ ...s }));
   }
+  // Refresh: dynamically re-pull the latest scoped data from Supabase, re-render,
+  // then run the escalation scan on the fresh data. Backs the "Refresh" button.
+  async function refreshNow() {
+    if (window.CDC.loadFromSupabase) { try { await window.CDC.loadFromSupabase(); } catch (_) {} }
+    setTick((n) => n + 1);
+    await scanNow();
+  }
+
   // Scan: tasks crossing a time threshold (in-progress > 2d, blocked > 1d, overdue
   // > 2d) get a trigger, flip to ESCALATED, and climb one level up the chain
   // (L1 → L2 → L3). Each scan advances one more level until the top is reached.
@@ -652,7 +660,7 @@ function TasksView({ tweaks, currentUser }) {
         subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see their team mates' tasks via the team mates tab + reportee filter."
         actions={
           <>
-            <button className="btn" data-size="sm" onClick={scanNow} title="Send overdue triggers to originators; refresh escalations"><Icon name="refresh" size={12} /> Scan now</button>
+            <button className="btn" data-size="sm" onClick={refreshNow} title="Re-pull the latest data and refresh escalations"><Icon name="refresh" size={12} /> Refresh</button>
             <button className="btn" data-size="sm" data-variant="primary" onClick={() => setCreating(true)}><Icon name="check" size={12} /> New task</button>
           </>
         }
