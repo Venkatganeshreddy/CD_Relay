@@ -67,7 +67,12 @@ function WorklogsView({ tweaks, currentUser, nav }) {
     const ids = [...new Set(all.map((w) => w.userId))];
     return ids.map((id) => CDC.lookup.user(id)).filter(Boolean);
   }, [all]);
-  const products = useMWL(() => [...new Set(all.flatMap((w) => w.products || []))].sort(), [all]);
+  // Full product catalog (Product-Audience), so every product is selectable even
+  // before it has a logged worklog. Falls back to products present in the data.
+  const products = useMWL(() => {
+    const cat = (window.CDC.TASK_CATALOG || {}).PRODUCTS || [];
+    return cat.length ? cat : [...new Set(all.flatMap((w) => w.products || []))].sort();
+  }, [all]);
   const stacks = useMWL(() => [...new Set(all.flatMap((w) => w.stacks))], [all]);
   const categories = useMWL(() => [...new Set(all.map((w) => w.outputCategory))].sort(), [all]);
 
