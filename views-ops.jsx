@@ -793,7 +793,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const map = outputCategory ? CAT.OUTPUT_MAP[outputCategory] : null;
   const taskCategory = map ? map.task : '';
   const countNA = outputCategory ? CAT.COUNT_NA.has(outputCategory) : false;
-  const fields = TASK_TEMPLATES_REF(CAT)[taskCategory] || [];
+  const fields = TASK_TEMPLATES_REF(CAT)[taskCategory] || CAT.DEFAULT_TEMPLATE || [];
   const needsReason = status === 'Blocked' || status === 'Overdue';
   const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
 

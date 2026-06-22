@@ -706,7 +706,7 @@ function CountInput({ onCountSubmit }) {
 }
 
 function TemplateInput({ currentTask, onTemplateSubmit }) {
-  const fields = TASK_TEMPLATES[currentTask.taskCategory] || [];
+  const fields = TASK_TEMPLATES[currentTask.taskCategory] || (window.CDC.TASK_CATALOG.DEFAULT_TEMPLATE) || [];
   const [vals, setVals] = useS(() => Object.fromEntries(fields.map((f) => [f.id, ''])));
   const filledCount = fields.filter((f) => (vals[f.id] || '').toString().trim()).length;
   return (

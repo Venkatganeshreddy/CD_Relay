@@ -1491,7 +1491,15 @@
     ],
   };
 
-  const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES };
+  // Fallback template — used when an output category's task has no specific
+  // template (e.g. an admin-added output category). Guarantees every selected
+  // output category shows a usable "what was achieved" form, never a blank.
+  const DEFAULT_TEMPLATE = [
+    { id: 'item', label: 'Work item', type: 'text', ph: 'What was produced / done…' },
+    { id: 'detail', label: 'Details', type: 'textarea', ph: 'Scope, specifics, notes…' },
+  ];
+
+  const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, DEFAULT_TEMPLATE };
 
   // Weekly Digests — consolidated, all-departments weekly glance (Second Brain).
   // Starts empty; filled live from Supabase (weekly_digests) or generated in-app.
