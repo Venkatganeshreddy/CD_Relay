@@ -674,7 +674,7 @@ function AdminView({ tweaks, currentUser, nav }) {
   async function updateEmployeeRow(f) {
     const deptName = (CDC.lookup.dept(f.dept) || {}).name || f.dept || '';
     const title = `${f.role_level} · ${f.sub || deptName}`;
-    const patch = { name: f.name, level: f.role_level, role: f.role_level, dept: f.dept || null,
+    const patch = { name: f.name, email: f.email || null, level: f.role_level, role: f.role_level, dept: f.dept || null,
       sub: f.sub || null, managerId: f.manager_id || null, title, crossDept: !!f.is_cross_dept };
     let res;
     try {
@@ -682,7 +682,7 @@ function AdminView({ tweaks, currentUser, nav }) {
     } catch (e) { return e.message || 'Update failed'; }
     if (CDC.db && CDC.db.authed && CDC.db.authed() && res && res.ok === false) return 'Saved locally, but the server rejected the update (permissions / RLS).';
     setRows((prev) => (prev || []).map((x) => x.id === f.id
-      ? { ...x, name: f.name, role_level: f.role_level, dept: f.dept, sub: f.sub, title, manager_id: f.manager_id || null, is_cross_dept: !!f.is_cross_dept }
+      ? { ...x, name: f.name, email: f.email || x.email, role_level: f.role_level, dept: f.dept, sub: f.sub, title, manager_id: f.manager_id || null, is_cross_dept: !!f.is_cross_dept }
       : x));
     return null;
   }

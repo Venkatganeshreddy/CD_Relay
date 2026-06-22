@@ -400,6 +400,9 @@
       if (u) Object.assign(u, patch);
       const cols = {};
       if (patch.name != null) cols.name = patch.name;
+      // Email is the SSO match key (link_auth_user → employees.email), so it must
+      // persist to its own column, not just data jsonb. Empty string clears it.
+      if (patch.email !== undefined) cols.email = patch.email || null;
       if (patch.level != null) { cols.role_level = patch.level; }
       if (patch.dept !== undefined) cols.dept = patch.dept;
       if (patch.sub !== undefined) cols.sub = patch.sub;
