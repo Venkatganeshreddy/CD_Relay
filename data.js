@@ -737,7 +737,11 @@
     if (s.kind === 'dept') return WORKLOGS.filter((w) => w.dept === s.dept);
     // L2 / L1: own + everyone in their management subtree (not sub-string match,
     // so DS&ML / DS&Algo reportees show even if sub labels differ).
-    if (s.kind === 'sub') return WORKLOGS.filter((w) => (w.dept === s.dept && w.sub === s.sub) || inMgmtSubtree(userId, w.userId));
+    if (s.kind === 'sub') {
+      // Leads see the whole sub-team; an L1 IC sees only their own (+ reports).
+      if (!isTeamLead(userId)) return WORKLOGS.filter((w) => inMgmtSubtree(userId, w.userId));
+      return WORKLOGS.filter((w) => (w.dept === s.dept && w.sub === s.sub) || inMgmtSubtree(userId, w.userId));
+    }
     return [];
   }
 
@@ -1235,6 +1239,15 @@
     return { kind: 'none' };
   }
 
+  // A team lead (L2+) sees their whole sub-team; an L1 IC sees only their own
+  // work (plus any direct reports). Used to gate sub-team-wide visibility.
+  function isTeamLead(userId) {
+    const u = USERS.find((x) => x.id === userId);
+    if (!u) return false;
+    return ['L2', 'L3', 'Admin'].includes(u.level) ||
+      ['L2', 'L3', 'ADMIN', 'PRODUCT_OWNER', 'DEPARTMENT_LEAD', 'SUB_LEAD', 'CENTRAL_OPS'].includes(u.role);
+  }
+
   function filterDepartments(userId) {
     const s = scopeForUser(userId);
     if (s.kind === 'all') return DEPARTMENTS;
@@ -1273,6 +1286,8 @@
         }
         return false;
       };
+      // Only leads see the whole sub-team; an L1 IC sees only their own (+ reports).
+      if (!isTeamLead(userId)) return TASKS.filter((t) => inSubtree(t.owner));
       const sameSub = (ownerId) => { const u = USERS.find((x) => x.id === ownerId); return !!(u && u.dept === s.dept && u.sub === s.sub); };
       return TASKS.filter((t) => sameSub(t.owner) || inSubtree(t.owner));
     }
