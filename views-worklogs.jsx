@@ -24,6 +24,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   const [range, setRange] = useStWL('week');           // today | week | month | all
   const [groupBy, setGroupBy] = useStWL('person');     // person | category | stack | day
   const [filterUser, setFilterUser] = useStWL('all');
+  const [filterProduct, setFilterProduct] = useStWL('all');
   const [filterStack, setFilterStack] = useStWL('all');
   const [filterCat, setFilterCat] = useStWL('all');
   const [filterStatus, setFilterStatus] = useStWL('all');
@@ -35,6 +36,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
     return all.filter((w) => {
       if (w.daysAgo > cutoff) return false;
       if (filterUser !== 'all' && w.userId !== filterUser) return false;
+      if (filterProduct !== 'all' && !(w.products || []).includes(filterProduct)) return false;
       if (filterStack !== 'all' && !w.stacks.includes(filterStack)) return false;
       if (filterCat !== 'all' && w.outputCategory !== filterCat) return false;
       if (filterStatus !== 'all' && w.status !== filterStatus) return false;
@@ -44,7 +46,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
       }
       return true;
     });
-  }, [all, range, filterUser, filterStack, filterCat, filterStatus, search]);
+  }, [all, range, filterUser, filterProduct, filterStack, filterCat, filterStatus, search]);
 
   // Aggregates
   const totalHrs = filtered.reduce((s, w) => s + (w.hours || 0), 0);
@@ -65,6 +67,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
     const ids = [...new Set(all.map((w) => w.userId))];
     return ids.map((id) => CDC.lookup.user(id)).filter(Boolean);
   }, [all]);
+  const products = useMWL(() => [...new Set(all.flatMap((w) => w.products || []))].sort(), [all]);
   const stacks = useMWL(() => [...new Set(all.flatMap((w) => w.stacks))], [all]);
   const categories = useMWL(() => [...new Set(all.map((w) => w.outputCategory))].sort(), [all]);
 
@@ -185,6 +188,8 @@ function WorklogsView({ tweaks, currentUser, nav }) {
         <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
           <DropdownFilter label="Person" value={filterUser} setValue={setFilterUser}
             options={[{ value: 'all', label: 'All people' }, ...users.map((u) => ({ value: u.id, label: u.name }))]} />
+          <DropdownFilter label="Product" value={filterProduct} setValue={setFilterProduct}
+            options={[{ value: 'all', label: 'All products' }, ...products.map((p) => ({ value: p, label: p }))]} />
           <DropdownFilter label="Stack" value={filterStack} setValue={setFilterStack}
             options={[{ value: 'all', label: 'All stacks' }, ...stacks.map((s) => ({ value: s, label: s }))]} />
           <DropdownFilter label="Category" value={filterCat} setValue={setFilterCat}
