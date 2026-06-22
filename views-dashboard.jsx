@@ -414,23 +414,30 @@ function DepartmentView({ deptId, tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const dept = CDC.lookup.dept(deptId);
   if (!dept) return <div className="empty">Department not found</div>;
-  const health = CDC.DEPT_HEALTH[deptId] || {
-    score: null, status: 'muted', trend: 0,
-    reportRate: null, kpiOnTrack: null, openBlockers: 0, overdueTasks: 0,
-    sparkline: [], activeReports: 0, totalExpected: 0,
-  };
 
   // Determine sub-teams shown for this user
   let visibleSubs = dept.subs;
   const scope = CDC.scopeForUser(currentUser.id);
   if (scope.kind === 'sub') visibleSubs = [scope.sub];
 
-  const allReports = CDC.REPORTS.filter((r) => r.dept === deptId && visibleSubs.includes(r.sub));
+  // Live data for this department — worklogs + tasks (read fresh each render so
+  // the 20s poll keeps this live). The old report/dept_health snapshot is gone.
   const kpis = CDC.KPIS.filter((k) => k.dept === deptId);
-  const flags = CDC.FLAGS.filter((f) => f.target?.dept === deptId);
+  const deptWorklogs = (CDC.WORKLOGS || []).filter((w) => w.dept === deptId);
+  const deptTasks = (CDC.TASKS || []).filter((t) => t.dept === deptId);
+  const todayStr = CDC.fmt(CDC.today);
 
-  const [selectedReport, setSelectedReport] = useState_d(allReports.find((r) => !r.missing)?.id || null);
-  const selected = allReports.find((r) => r.id === selectedReport);
+  const last7 = deptWorklogs.filter((w) => (w.daysAgo ?? 0) <= 6);
+  const hours7 = last7.reduce((s, w) => s + (Number(w.hours) || 0), 0);
+  const contributors7 = new Set(last7.map((w) => w.userId)).size;
+  const deptMembers = (CDC.USERS || []).filter((u) => u.dept === deptId).length;
+  const blockers = deptTasks.filter((t) => t.status === 'BLOCKED' || t.status === 'ESCALATED').length;
+  const overdue = deptTasks.filter((t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'REJECTED').length;
+  const kpiGreen = kpis.filter((k) => k.status === 'green').length;
+  const kpiPct = kpis.length ? Math.round((kpiGreen / kpis.length) * 100) : 0;
+
+  const [selectedWl, setSelectedWl] = useState_d(null);
+  const selected = deptWorklogs.find((w) => w.id === selectedWl) || null;
 
   return (
     <div className="fadein">
@@ -455,96 +462,97 @@ function DepartmentView({ deptId, tweaks, currentUser, nav }) {
         }
       />
 
-      {/* Stat strip */}
+      {/* Stat strip — all live from worklogs/tasks */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        <div className="kpi-tile" data-tone={health.status}>
-          <div className="kpi-name">Health score</div>
-          <div className="kpi-value">{health.score} <span style={{ fontSize: 13, color: `var(--${health.status})`, fontWeight: 500 }}>{health.trend > 0 ? '+' : ''}{health.trend}</span></div>
-          <Sparkline data={health.sparkline} width={140} height={28} color={`var(--${health.status})`} />
+        <div className="kpi-tile">
+          <div className="kpi-name">Hours logged (7d)</div>
+          <div className="kpi-value">{hours7.toFixed(1)}</div>
+          <div className="kpi-meta"><span>{last7.length} worklog entries</span></div>
         </div>
         <div className="kpi-tile">
-          <div className="kpi-name">Report rate (7d)</div>
-          <div className="kpi-value">{Math.round(health.reportRate * 100)}%</div>
-          <div className="kpi-meta"><span>{health.activeReports} of {health.totalExpected} expected</span></div>
+          <div className="kpi-name">Contributors (7d)</div>
+          <div className="kpi-value">{contributors7}</div>
+          <div className="kpi-meta"><span>of {deptMembers} in department</span></div>
         </div>
-        <div className="kpi-tile">
+        <div className="kpi-tile" data-tone={blockers ? 'red' : 'muted'}>
           <div className="kpi-name">Open blockers</div>
-          <div className="kpi-value">{health.openBlockers}</div>
-          <div className="kpi-meta"><span>{health.overdueTasks} overdue tasks</span></div>
+          <div className="kpi-value">{blockers}</div>
+          <div className="kpi-meta"><span>{overdue} overdue tasks</span></div>
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">KPIs on track</div>
-          <div className="kpi-value">{Math.round(health.kpiOnTrack * 100)}%</div>
-          <div className="kpi-meta"><span>{kpis.filter((k) => k.status === 'green').length} of {kpis.length}</span></div>
+          <div className="kpi-value">{kpiPct}%</div>
+          <div className="kpi-meta"><span>{kpiGreen} of {kpis.length}</span></div>
         </div>
       </div>
 
-      <h2 className="h-section">Sub-teams & daily reports</h2>
+      <h2 className="h-section">Sub-teams & recent worklogs</h2>
       <div className="split" style={{ height: 540 }}>
         <div className="split-list">
           {visibleSubs.map((sub) => {
-            const subReports = allReports.filter((r) => r.sub === sub);
-            const latest = subReports[0];
+            const subWl = deptWorklogs.filter((w) => w.sub === sub);
             return (
               <div key={sub} style={{ marginBottom: 4 }}>
                 <div className="row" style={{ justifyContent: 'space-between', padding: '6px 4px', fontSize: 11, color: 'var(--text-faint)', letterSpacing: 0.06, textTransform: 'uppercase', fontWeight: 600 }}>
                   <span>{sub}</span>
-                  <span className="mono">{subReports.length}</span>
+                  <span className="mono">{subWl.length}</span>
                 </div>
-                {subReports.map((r) => {
-                  const author = CDC.lookup.author(r.author);
-                  return (
-                    <div
-                      key={r.id}
-                      className="list-row"
-                      data-active={selectedReport === r.id}
-                      onClick={() => setSelectedReport(r.id)}
-                    >
-                      <div className="row" style={{ justifyContent: 'space-between' }}>
-                        <div className="row" style={{ gap: 8 }}>
-                          <Avatar user={{ initials: (author?.name || '').split(' ').map((p) => p[0]).join('') }} size={20} />
-                          <div>
-                            <div style={{ fontWeight: 500, fontSize: 12.5 }}>{author?.name}</div>
-                            <div className="muted" style={{ fontSize: 11 }}>{r.date} · {r.submittedAt}</div>
-                          </div>
-                        </div>
-                        <div className="row" style={{ gap: 4 }}>
-                          <ConfChip value={r.confidence} show={tweaks.confidence} />
+                {subWl.map((w) => (
+                  <div key={w.id} className="list-row" data-active={selectedWl === w.id} onClick={() => setSelectedWl(w.id)}>
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <div className="row" style={{ gap: 8 }}>
+                        <Avatar user={{ initials: w.userInitials || (w.userName || '').split(' ').map((p) => p[0]).join('') }} size={20} />
+                        <div>
+                          <div style={{ fontWeight: 500, fontSize: 12.5 }}>{w.userName}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>{w.outputCategory || '—'} · {w.date}</div>
                         </div>
                       </div>
-                      <div className="row" style={{ gap: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-                        {r.missing ? (
-                          <Pill tone="red" dot>missing</Pill>
-                        ) : (
-                          <>
-                            {countKind(r, 'done') > 0 && <Pill tone="green">{countKind(r, 'done')} done</Pill>}
-                            {countKind(r, 'blocker') > 0 && <Pill tone="red">{countKind(r, 'blocker')} blocker</Pill>}
-                            {countKind(r, 'risk') > 0 && <Pill tone="amber">{countKind(r, 'risk')} risk</Pill>}
-                            {r.validation === 'PARTIAL' && <Pill tone="amber">partial</Pill>}
-                          </>
-                        )}
+                      <div className="row" style={{ gap: 4, alignItems: 'center' }}>
+                        <span className="mono" style={{ fontSize: 11 }}>{(Number(w.hours) || 0).toFixed(1)}h</span>
+                        <Pill tone={w.status === 'Blocked' || w.status === 'Overdue' ? 'red' : w.status === 'Done' ? 'green' : 'outline'} dot>{(w.status || '—').toLowerCase()}</Pill>
                       </div>
                     </div>
-                  );
-                })}
-                {subReports.length === 0 && (
+                  </div>
+                ))}
+                {subWl.length === 0 && (
                   <div className="list-row" style={{ background: 'var(--panel)', borderStyle: 'dashed' }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <Pill tone="red" dot>no report today</Pill>
-                    </div>
-                    <div className="muted" style={{ fontSize: 11 }}>{sub}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>No worklogs yet · {sub}</div>
                   </div>
                 )}
               </div>
             );
           })}
+          {deptWorklogs.length === 0 && (
+            <div className="empty" style={{ padding: 16 }}>No worklogs logged in this department yet.</div>
+          )}
         </div>
 
         <div className="split-pane">
           {selected ? (
-            <ReportDetail report={selected} tweaks={tweaks} />
+            <div className="detail-b" style={{ padding: 16 }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{selected.userName} <span className="muted" style={{ fontWeight: 400 }}>· {selected.sub || dept.name}</span></h3>
+              <div className="muted" style={{ fontSize: 11.5, marginBottom: 14 }}><span className="mono">{selected.id}</span> · {selected.date}</div>
+              <dl className="kv" style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '8px 12px', fontSize: 13 }}>
+                <dt className="muted">Output category</dt><dd>{selected.outputCategory || '—'}{selected.outputCount != null ? ` ×${selected.outputCount}` : ''}</dd>
+                <dt className="muted">Products</dt><dd>{(selected.products || []).join(' · ') || '—'}</dd>
+                <dt className="muted">Stacks</dt><dd>{(selected.stacks || []).join(' · ') || '—'}</dd>
+                <dt className="muted">Hours</dt><dd>{(Number(selected.hours) || 0).toFixed(1)}</dd>
+                <dt className="muted">Status</dt><dd>{selected.status || '—'}</dd>
+                {selected.reason ? <><dt className="muted">Note</dt><dd>{selected.reason}</dd></> : null}
+              </dl>
+              {selected.template && Object.keys(selected.template).length > 0 && (
+                <>
+                  <div className="detail-section" style={{ marginTop: 16 }}>Details</div>
+                  <dl className="kv" style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '6px 12px', fontSize: 13 }}>
+                    {Object.entries(selected.template).filter(([, v]) => v).map(([k, v]) => (
+                      <React.Fragment key={k}><dt className="muted">{k}</dt><dd>{String(v)}</dd></React.Fragment>
+                    ))}
+                  </dl>
+                </>
+              )}
+            </div>
           ) : (
-            <div className="empty">Select a report to view detail.</div>
+            <div className="empty">Select a worklog to view detail.</div>
           )}
         </div>
       </div>
