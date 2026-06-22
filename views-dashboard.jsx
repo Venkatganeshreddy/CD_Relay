@@ -13,19 +13,21 @@ function Dashboard({ tweaks, currentUser, nav }) {
   const weekly = CDC.filterWeekly(currentUser.id);
   const worklogs = CDC.filterWorklogs(currentUser.id);
 
-  // 1. Reports today — true %
-  const totalExpected = depts.reduce((s, d) => s + (CDC.DEPT_HEALTH[d.id]?.totalExpected || 0), 0);
-  const totalReports = depts.reduce((s, d) => s + (CDC.DEPT_HEALTH[d.id]?.activeReports || 0), 0);
+  // 1. Logged today — live: distinct contributors with a worklog today vs members.
+  const dashToday = CDC.fmt(CDC.today);
+  const deptIdSet = new Set(depts.map((d) => d.id));
+  const totalExpected = (CDC.USERS || []).filter((u) => deptIdSet.has(u.dept)).length;
+  const totalReports = new Set(worklogs.filter((w) => w.date === dashToday).map((w) => w.userId)).size;
   const missingCount = Math.max(0, totalExpected - totalReports);
   const reportPct = totalExpected > 0 ? Math.round((totalReports / totalExpected) * 100) : 0;
   const reportTone = reportPct >= 80 ? 'green' : reportPct >= 60 ? 'amber' : 'red';
 
-  // 2. Flagged reports
+  // 2. Flagged — live: open low-content flags + genuinely overdue tasks.
   const vagueFlags = flags.filter((f) => f.kind === 'low_content' && f.state === 'open');
-  const overdueTasks = tasks.filter((t) => t.status === 'ACTIVE' || t.status === 'SUGGESTED').filter((t) => (t.reason || '').toLowerCase().includes('overdue') || t.status === 'SUGGESTED').slice(0, 12);
+  const overdueTasks = tasks.filter((t) => t.due && t.due < dashToday && t.status !== 'DONE' && t.status !== 'REJECTED').slice(0, 50);
 
-  // 3. Escalations (team-level) — derive from flags + missing-report streaks
-  const escalations = computeEscalations(CDC, depts);
+  // 3. Escalations — live from tasks (status ESCALATED).
+  const escalations = computeEscalations(CDC, depts, tasks);
 
   // 4. Agentic adoption — % of worklogs in last 7d that have a workflow used (we'll proxy from template.workflow presence)
   const adoption = computeAdoption(CDC, depts, worklogs);
@@ -36,18 +38,21 @@ function Dashboard({ tweaks, currentUser, nav }) {
     return { dept: d, w };
   });
 
-  // 6. Dept chart (Reports today, Blockers, Overdue, Backlog)
+  // 6. Dept chart — all live from worklogs/tasks (no dept_health snapshot).
   const deptChart = depts.map((d) => {
-    const h = CDC.DEPT_HEALTH[d.id] || {};
     const deptTasks = tasks.filter((t) => t.dept === d.id);
-    const backlog = deptTasks.filter((t) => t.status !== 'DONE').length;
+    const members = (CDC.USERS || []).filter((u) => u.dept === d.id).length;
+    const loggedToday = new Set(worklogs.filter((w) => w.dept === d.id && w.date === dashToday).map((w) => w.userId)).size;
+    const backlog = deptTasks.filter((t) => t.status !== 'DONE' && t.status !== 'REJECTED').length;
+    const blockers = deptTasks.filter((t) => t.status === 'BLOCKED' || t.status === 'ESCALATED').length;
+    const overdue = deptTasks.filter((t) => t.due && t.due < dashToday && t.status !== 'DONE' && t.status !== 'REJECTED').length;
     return {
-      d, h,
-      reportsToday: `${h.activeReports || 0}/${h.totalExpected || 0}`,
-      reportsTone: (h.activeReports || 0) / Math.max(1, h.totalExpected || 1) >= 0.8 ? 'green' : 'amber',
-      blockers: h.openBlockers || 0,
+      d,
+      reportsToday: `${loggedToday}/${members}`,
+      reportsTone: loggedToday / Math.max(1, members) >= 0.8 ? 'green' : 'amber',
+      blockers,
       blockerReason: topBlockerReason(CDC, d.id),
-      overdue: h.overdueTasks || 0,
+      overdue,
       backlog,
       completionPct: deptTasks.length > 0 ? Math.round(deptTasks.filter((t) => t.status === 'DONE').length / deptTasks.length * 100) : null,
     };
@@ -91,10 +96,10 @@ function Dashboard({ tweaks, currentUser, nav }) {
       {/* Section 1: Reports today */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
         <div className="kpi-tile" data-tone={reportTone}>
-          <div className="kpi-name">Reports today</div>
+          <div className="kpi-name">Logged today</div>
           <div className="kpi-value">{totalReports}<span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>/{totalExpected}</span></div>
           <div className="kpi-meta">
-            <span>{missingCount} missing</span>
+            <span>{missingCount} not logged</span>
             <Pill tone={reportTone} dot>{reportPct}%</Pill>
           </div>
         </div>
@@ -340,26 +345,20 @@ function Dashboard({ tweaks, currentUser, nav }) {
 window.Dashboard = Dashboard;
 
 // ── Helpers for the new dashboard ──────────────────────────────────────
-function computeEscalations(CDC, depts) {
-  const esc = [];
-  // Missing reports streak
-  if (CDC.DEPT_HEALTH['d-dsalgo']?.reportRate < 0.75) {
-    esc.push({ deptId: 'd-dsalgo', deptName: 'Content — DS&Algo', team: 'Content — DS&Algo',
-      managerId: 'NW0002023', reason: 'Missing reports 2 days', trigger: '2 of last 5 daily reports missing',
-      tone: 'red',
+function computeEscalations(CDC, depts, tasks) {
+  // Live: one row per task currently ESCALATED, scoped to the visible departments.
+  const deptIds = new Set(depts.map((d) => d.id));
+  return (tasks || [])
+    .filter((t) => t.status === 'ESCALATED' && (!t.dept || deptIds.has(t.dept)))
+    .map((t) => {
+      const owner = CDC.lookup.user(t.owner) || {};
+      const d = CDC.lookup.dept(t.dept) || {};
+      return {
+        deptId: t.dept, deptName: d.name || t.dept || '—', team: owner.sub || d.name || '—',
+        managerId: t.escalatedTo || owner.managerId, reason: t.escalReason || 'Escalated',
+        trigger: t.title, tone: 'red',
+      };
     });
-  }
-  // Recurring blocker
-  esc.push({ deptId: 'd-fsgci', deptName: 'Content — FS, GenAI & CO', team: 'Central Ops',
-    managerId: 'NW0001771', reason: 'Recurring blocker 3+ days', trigger: 'NAT throttle blocker cited 3d running',
-    tone: 'amber',
-  });
-  // SLA breach
-  esc.push({ deptId: 'd-fsgci', deptName: 'Content — FS, GenAI & CO', team: 'Content — GenAI',
-    managerId: 'NW0001778', reason: 'Budget SLA — paid-tier ask aging', trigger: 'Vector-DB free-tier exhaustion in 3w',
-    tone: 'amber',
-  });
-  return esc;
 }
 
 function computeAdoption(CDC, depts, worklogs) {
@@ -385,13 +384,12 @@ function computeAdoption(CDC, depts, worklogs) {
 }
 
 function topBlockerReason(CDC, deptId) {
-  const reps = CDC.REPORTS.filter((r) => r.dept === deptId);
-  const blockers = reps.flatMap((r) => r.items?.filter((it) => it.kind === 'blocker') || []);
-  if (blockers.length === 0) return null;
-  // Take the shortest distinctive phrase
-  const text = blockers[0].text.split('.')[0];
-  const short = text.length > 40 ? text.slice(0, 38) + '…' : text;
-  return short;
+  // Live: first blocked task's reason in this department.
+  const blocked = (CDC.TASKS || []).find((t) => t.dept === deptId && (t.status === 'BLOCKED' || t.status === 'ESCALATED'));
+  const text = blocked && (blocked.blockReason || blocked.escalReason);
+  if (!text) return null;
+  const first = String(text).split('.')[0];
+  return first.length > 40 ? first.slice(0, 38) + '…' : first;
 }
 
 function ragRowProps(treatment, status) {
