@@ -1201,12 +1201,12 @@
   ];
 
   const CODEX_GUIDELINES = [
-    { id: 'gl-daily', name: 'Daily Report SOP', version: 'v6', updated: '2026-05-24', updatedBy: 'NW0005116', source: 'Curator proposal gp-4',
-      summary: 'Every reporter logs by 22:00 IST with Product-Audience, Stack, Output Category, Course/Module/Topic, Hours, Status, Agent workflow used.' },
-    { id: 'gl-weekly', name: 'Weekly Report Guidelines', version: 'v4', updated: '2026-05-24', updatedBy: 'NW0005116', source: 'Curator proposal gp-1',
-      summary: 'Structure by Product-Audience × Output × Stack matrix. Risks always paired with an explicit Ask. Highlights credit the driver. Generate only when ≥80% of inputs present.' },
-    { id: 'gl-task', name: 'Task Format Guidelines', version: 'v3', updated: '2026-05-22', updatedBy: 'NW0002526', source: 'Manual edit',
-      summary: 'Every task has owner, due date, source (mom/manual/derived/ticket/checkin). No priority field — status only (In-Progress/Done/Blocked/Overdue).' },
+    { id: 'gl-daily', name: 'Daily Report SOP', version: 'v7', updated: '2026-06-22', updatedBy: 'NW0005116', source: 'Feature sync',
+      summary: 'Log the day in the Submit chat by 22:00 IST: pick Product-Audience, an Output Category (auto-derives Task/Activity/Metric), optional Stack, then the output count and the tailored template — every category now requires at least a written description. Finish with hours and status. Each task mirrors into a worklog instantly.' },
+    { id: 'gl-weekly', name: 'Weekly Report Guidelines', version: 'v5', updated: '2026-06-22', updatedBy: 'NW0005116', source: 'Feature sync',
+      summary: 'Rollup drafts the weekly from the week\'s daily reports into Highlights / Risks / Asks, each citing source report ids. Risks are always paired with an explicit Ask. Drafts are review-gated before publish; the Weekly Digest consolidates one achievement line per work-stream per sub-department.' },
+    { id: 'gl-task', name: 'Task Format Guidelines', version: 'v4', updated: '2026-06-22', updatedBy: 'NW0002526', source: 'Feature sync',
+      summary: 'Every task has an owner (managers pick from their reporting subtree — an L2 sees their L1s), a required Task details description, an Output Category, a required due date, and a status (In-progress/Done/Blocked/Overdue/Backlog) — no priority field. Optional Product-Audience, Stack and template fields. Only the owner changes status; Blocked arms the Sentry escalation chain.' },
     { id: 'gl-metric', name: 'Metric Map', version: 'v2', updated: '2026-05-18', updatedBy: 'NW0005116', source: 'Manual edit',
       summary: 'Output Category → Task Category → Activity Category → Metric Category. Used by Dispatcher to bucket items and by Ledger to compute monthly worklog rollups.' },
     { id: 'gl-econ', name: 'Unit Economics', version: 'v1', updated: '2026-05-12', updatedBy: 'NW0005116', source: 'Manual edit',
