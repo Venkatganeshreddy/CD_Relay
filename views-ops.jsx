@@ -563,8 +563,9 @@ function TasksView({ tweaks, currentUser }) {
     const owner = CDC.lookup.user(form.owner);
     const m = (CDC.TASK_CATALOG.OUTPUT_MAP || {})[form.outputCategory] || {};
     const tmplSummary = form.template ? Object.values(form.template).filter(Boolean).join(' · ') : '';
+    const note = (form.details || '').trim();
     const title = (form.title && form.title.trim()) ||
-      `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${tmplSummary ? ` — ${tmplSummary}` : ''}`;
+      `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${(tmplSummary || note) ? ` — ${tmplSummary || note}` : ''}`;
     const status = STATUS_MAP[form.status] || 'ACTIVE';
     const task = {
       id: `task-${Date.now()}`, title, status,
@@ -576,6 +577,7 @@ function TasksView({ tweaks, currentUser }) {
       outputCategory: form.outputCategory || null, taskCategory: m.task || '',
       activityCategory: m.activity || '', metricCategory: m.metric || '',
       outputCount: form.outputCount ?? null, template: form.template || {},
+      desc: note,
       estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
       blockReason: form.reason || '',
     };
@@ -783,10 +785,11 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const [status, setStatus] = useState_o('In-progress');
   const [due, setDue] = useState_o('');
   const [reason, setReason] = useState_o('');
+  const [details, setDetails] = useState_o('');
   useEffect_o(() => {
     if (open) {
       setOwner(me.id); setProducts([]); setStacks([]); setOutputCategory(''); setCatSearch('');
-      setOutputCount(''); setTemplate({}); setEstHours(''); setStatus('In-progress'); setDue(''); setReason('');
+      setOutputCount(''); setTemplate({}); setEstHours(''); setStatus('In-progress'); setDue(''); setReason(''); setDetails('');
     }
   }, [open]);
 
@@ -801,6 +804,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   // Status and Due date are mandatory.
   const valid = products.length > 0 && !!outputCategory &&
     !!status && !!due &&
+    details.trim().length > 0 &&
     (!needsReason || reason.trim().length > 0);
 
   const label = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
@@ -826,13 +830,14 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
           {!outputCategory ? 'Pick a product-audience & output category'
+            : !details.trim() ? 'Task details are required'
             : !due ? 'Due date is required'
             : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
             : `${map.metric} · ${map.task}`}
         </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
-          onClick={() => onCreate({ owner, products, stacks, outputCategory,
+          onClick={() => onCreate({ owner, products, stacks, outputCategory, details,
             outputCount: countNA ? null : Number(outputCount), template, estHours, status, due: due || null, reason })}>
           Create task
         </button>
@@ -914,6 +919,17 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
             </div>
           )}
         </div>
+
+        {/* Always-required task description — every output category gets at least
+            this box, on top of any tailored template fields above. */}
+        {map && (
+          <div>
+            <div style={label()}>Task details <span style={{ color: 'var(--rose, #c0392b)' }}>*</span> <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· describe what this task is</span></div>
+            <textarea className="field-input" style={{ width: '100%', height: 56, padding: 8, resize: 'vertical' }}
+              placeholder="What needs to be done for this output? Be specific."
+              value={details} onChange={(e) => setDetails(e.target.value)} />
+          </div>
+        )}
 
         {map && fields.length > 0 && (
           <div>
