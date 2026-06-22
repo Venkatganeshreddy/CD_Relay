@@ -367,11 +367,11 @@ function computeAdoption(CDC, depts, worklogs) {
   const result = [];
   for (const d of depts) {
     for (const sub of d.subs) {
-      const subLogs = worklogs.filter((w) => w.sub === sub && w.daysAgo <= 6);
+      const subLogs = worklogs.filter((w) => w.sub === sub && (w.daysAgo ?? 0) <= 6);
       const users = new Set(subLogs.map((w) => w.userId));
       const withWorkflow = new Set(subLogs.filter((w) => (w.template?.workflow || w.template?.tool)).map((w) => w.userId));
-      // Synthesize an expected count from DEPT_HEALTH if no data
-      const expectedTotal = users.size || 3;
+      // Live denominator: distinct contributors who logged this week (no synthetic fallback).
+      const expectedTotal = users.size;
       result.push({
         sub, dept: d.short || d.name,
         totalReports: expectedTotal,
