@@ -807,6 +807,18 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
   const toggle = (set, val) => set((s) => s.includes(val) ? s.filter((x) => x !== val) : [...s, val]);
 
+  // Owner choices: yourself + everyone who reports up to you (your subtree), so
+  // an L2 sees their L1s to assign work; an L3 sees their L2s and L1s. A
+  // non-manager (no reportees) sees only themselves.
+  // ponytail: plain BFS over managerId — the roster is small.
+  const myTeam = (() => {
+    const byMgr = {};
+    (people || []).forEach((u) => { (byMgr[u.managerId] = byMgr[u.managerId] || []).push(u); });
+    const out = []; const stack = [me.id];
+    while (stack.length) { for (const c of (byMgr[stack.pop()] || [])) { out.push(c); stack.push(c.id); } }
+    return out;
+  })();
+
   const sectionGap = { display: 'flex', flexDirection: 'column', gap: 16 };
   const selCount = (n) => <span className="muted" style={{ textTransform: 'none', fontWeight: 400, fontSize: 11 }}>{n ? `· ${n} selected` : '· multi-select'}</span>;
   return (
@@ -832,7 +844,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
           <div style={label()}>Owner <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· EMP ID auto-filled</span></div>
           <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
             <option value={me.id}>{me.name} (me)</option>
-            {(people || []).filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+            {myTeam.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
           </select>
         </div>
 
