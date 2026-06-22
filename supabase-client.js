@@ -362,11 +362,26 @@
     },
     // Hard-delete a task (admin clean-up of test/demo rows). RLS task_write
     // (is_hod_admin or owner_in_scope) gates the server delete; in-memory is
-    // always removed so it disappears immediately.
+    // always removed so it disappears immediately. Also removes the worklog that
+    // was mirrored from this task (linked by data.taskId) so the Worklogs view
+    // stays consistent. Demo worklogs created before the link won't carry a
+    // taskId — delete those directly via deleteWorklog.
     async deleteTask(id) {
       const arr = window.CDC.TASKS; const i = arr ? arr.findIndex((x) => x.id === id) : -1;
       if (i >= 0) arr.splice(i, 1);
+      // Cascade to the mirrored worklog(s).
+      const wl = window.CDC.WORKLOGS;
+      if (Array.isArray(wl)) for (let j = wl.length - 1; j >= 0; j--) if (wl[j] && wl[j].taskId === id) wl.splice(j, 1);
       const remoteOk = await remote(() => sb.from('tasks').delete().eq('id', id));
+      await remote(() => sb.from('worklogs').delete().eq('data->>taskId', id));
+      return { remoteOk };
+    },
+    // Hard-delete a single worklog entry (admin clean-up). RLS worklog_write
+    // (owner or is_hod_admin) gates the server delete.
+    async deleteWorklog(id) {
+      const arr = window.CDC.WORKLOGS; const i = arr ? arr.findIndex((x) => x.id === id) : -1;
+      if (i >= 0) arr.splice(i, 1);
+      const remoteOk = await remote(() => sb.from('worklogs').delete().eq('id', id));
       return { remoteOk };
     },
     // 6:30 PM check-in: owner acknowledges an open task. Records lastAckDate so

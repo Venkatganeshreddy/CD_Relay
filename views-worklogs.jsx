@@ -33,6 +33,16 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   const [filterStatus, setFilterStatus] = useStWL('all');
   const [search, setSearch] = useStWL('');
   const [selected, setSelected] = useStWL(null);
+  const [, setWlTick] = useStWL(0);   // force re-render after a delete
+  const isAdmin = currentUser.level === 'L3' || currentUser.level === 'Admin' ||
+    ['L3', 'ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role);
+
+  async function removeWorklog(id) {
+    if (!window.confirm('Delete this worklog entry permanently? This cannot be undone.')) return;
+    if (CDC.db && CDC.db.deleteWorklog) await CDC.db.deleteWorklog(id);
+    setSelected(null);
+    setWlTick((n) => n + 1);
+  }
 
   const filtered = useMWL(() => {
     const cutoff = range === 'today' ? 0 : range === 'week' ? 6 : range === 'month' ? 30 : 999;
@@ -248,7 +258,10 @@ function WorklogsView({ tweaks, currentUser, nav }) {
         </div>
       </div>
 
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected ? `Worklog ${selected.id}` : ''} width={680}>
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected ? `Worklog ${selected.id}` : ''} width={680}
+        footer={isAdmin && selected ? (
+          <button className="btn" data-variant="danger" onClick={() => removeWorklog(selected.id)}>Delete entry</button>
+        ) : undefined}>
         {selected && <WorklogDetail w={selected} />}
       </Modal>
     </div>

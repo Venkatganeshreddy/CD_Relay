@@ -616,7 +616,7 @@ function TasksView({ tweaks, currentUser }) {
     // dashboard, worklogs page, and rollups (all WORKLOGS-driven). Owned by the
     // selected owner, so a manager creating for a reportee logs against them.
     CDC.db.addWorklog({
-      id: `wl-${Date.now()}`, userId: form.owner, userName: owner ? owner.name : form.owner, userInitials: owner ? owner.initials : '',
+      id: `wl-${Date.now()}`, taskId: task.id, userId: form.owner, userName: owner ? owner.name : form.owner, userInitials: owner ? owner.initials : '',
       empId: form.owner, dept: owner ? owner.dept : me.dept, sub: owner ? (owner.sub || null) : (me.sub || null), date: todayStr, daysAgo: 0,
       products: form.products || [], stacks: form.stacks || [],
       outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
