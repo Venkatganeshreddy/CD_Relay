@@ -393,6 +393,7 @@ function TasksView({ tweaks, currentUser }) {
   // Managers open to their direct reports' tasks (L3 → L2s, L2 → their L1s); ICs open to their own.
   const [filter, setFilter] = useState_o('MINE');
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
+  const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
   const [creating, setCreating] = useState_o(false);
   const [, setTick] = useState_o(0);   // force re-render after a delete
@@ -437,10 +438,15 @@ function TasksView({ tweaks, currentUser }) {
     f === 'ESCALATED' ? isEscalated(t) :
     t.status === f;
 
+  // Team = the owner's sub-department (Content — GenAI, — Fullstack, etc.).
+  const teamOf = (t) => (CDC.lookup.user(t.owner) || {}).sub || '';
+  const teams = [...new Set(allTasks.map(teamOf).filter(Boolean))].sort();
+
   const list = allTasks
     .filter((t) => t.status !== 'SUGGESTED')
     .filter((t) => matchesTab(t, filter))
     .filter((t) => !reporteeSel || t.owner === reporteeSel)
+    .filter((t) => !teamSel || teamOf(t) === teamSel)
     .map((t) => ({ ...t, _decision: decisions[t.id] }));
 
   function approve(id) {
@@ -658,6 +664,14 @@ function TasksView({ tweaks, currentUser }) {
           </button>
         ))}
         <span style={{ flex: 1 }} />
+        {teams.length > 1 && (
+          <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)}
+            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
+            title="Filter by team">
+            <option value="">All teams</option>
+            {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
+          </select>
+        )}
         {reportees.length > 0 && (
           <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)}
             style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
