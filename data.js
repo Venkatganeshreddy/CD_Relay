@@ -737,7 +737,7 @@
     if (s.kind === 'dept') return WORKLOGS.filter((w) => w.dept === s.dept);
     // L2 / L1: own + everyone in their management subtree (not sub-string match,
     // so DS&ML / DS&Algo reportees show even if sub labels differ).
-    if (s.kind === 'sub') return WORKLOGS.filter((w) => inMgmtSubtree(userId, w.userId));
+    if (s.kind === 'sub') return WORKLOGS.filter((w) => (w.dept === s.dept && w.sub === s.sub) || inMgmtSubtree(userId, w.userId));
     return [];
   }
 
@@ -1261,7 +1261,9 @@
     if (s.kind === 'all') return TASKS;            // L3 / Admin: whole org (all L2s and below)
     if (s.kind === 'dept') return TASKS.filter((t) => t.dept === s.dept);
     if (s.kind === 'sub') {
-      // L2 / L1: own tasks + everyone in their management subtree (their reports).
+      // L2 / L1: their whole sub-team (everyone with the same dept+sub) PLUS
+      // anyone in their management subtree (catches cross-sub reportees). So
+      // co-leads of a sub-team both see the full team, not just direct reports.
       const inSubtree = (ownerId) => {
         if (ownerId === userId) return true;
         let u = USERS.find((x) => x.id === ownerId), guard = 0;
@@ -1271,7 +1273,8 @@
         }
         return false;
       };
-      return TASKS.filter((t) => inSubtree(t.owner));
+      const sameSub = (ownerId) => { const u = USERS.find((x) => x.id === ownerId); return !!(u && u.dept === s.dept && u.sub === s.sub); };
+      return TASKS.filter((t) => sameSub(t.owner) || inSubtree(t.owner));
     }
     return [];
   }
