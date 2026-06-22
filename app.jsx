@@ -181,8 +181,8 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     { id: 'second-brain', label: 'Second Brain', icon: 'sparkles' },
   ] : [];
   const groupIntel = [
-    // Concierge is hidden for L1/L0 contributors (managers+ keep it).
-    ...(!isContributor ? [{ id: 'copilot', label: 'Concierge', icon: 'copilot' }] : []),
+    // Concierge is L3/Admin only (hidden for L1/L0 contributors and L2).
+    ...(isL3orAdmin ? [{ id: 'copilot', label: 'Concierge', icon: 'copilot' }] : []),
     // Agent Farm is L3/Admin only (L1/L2 don't manage the agent catalog).
     ...(isL3orAdmin ? [{ id: 'farm', label: 'Agent Farm', icon: 'plug' }] : []),
   ];
