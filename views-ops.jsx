@@ -439,8 +439,10 @@ function TasksView({ tweaks, currentUser }) {
     t.status === f;
 
   // Team = the owner's sub-department (Content — GenAI, — Fullstack, etc.).
+  // Options come from the full roster so every team shows even before it has
+  // tasks; filtering still keys off the task owner's sub.
   const teamOf = (t) => (CDC.lookup.user(t.owner) || {}).sub || '';
-  const teams = [...new Set(allTasks.map(teamOf).filter(Boolean))].sort();
+  const teams = [...new Set((CDC.USERS || []).map((u) => u.sub).filter(Boolean))].sort();
 
   const list = allTasks
     .filter((t) => t.status !== 'SUGGESTED')
@@ -664,7 +666,7 @@ function TasksView({ tweaks, currentUser }) {
           </button>
         ))}
         <span style={{ flex: 1 }} />
-        {teams.length > 1 && (
+        {teams.length > 0 && (
           <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)}
             style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
             title="Filter by team">
