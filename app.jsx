@@ -70,6 +70,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
   const [route, setRoute] = useState_a(() => routeFromHash() || { name: 'dashboard', params: {} });
   const [copilotPrefill, setCopilotPrefill] = useState_a(null);
   const [momOpen, setMomOpen] = useState_a(false);
+  const [, setRefreshTick] = useState_a(0);   // bumped by the live-refresh poll
 
   // Authed → the logged-in (or impersonated) employee drives scope; demo → tweak switch.
   const currentUser = useMemo_a(
@@ -130,6 +131,22 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     }
     // L1/L0 users now have a dashboard too (own dashboard) — don't auto-redirect them
   }, [currentUser.id]);
+
+  // Live refresh: re-pull scoped data from Supabase on an interval and re-render,
+  // so Worklogs / Dashboard / Missing reports / Department reflect new entries
+  // without a manual reload. Authed only (demo has no server data); skips while
+  // the tab is hidden. ponytail: 20s poll — switch to Supabase Realtime
+  // subscriptions only if this load becomes a problem.
+  useEffect_a(() => {
+    if (authMode !== 'authed' || !window.CDC.loadFromSupabase) return;
+    let alive = true;
+    const tick = async () => {
+      if (document.hidden) return;
+      try { await window.CDC.loadFromSupabase(); if (alive) setRefreshTick((n) => n + 1); } catch (_) {}
+    };
+    const id = setInterval(tick, 20000);
+    return () => { alive = false; clearInterval(id); };
+  }, [authMode]);
 
   // Back/forward: restore the route the browser is navigating to.
   useEffect_a(() => {
