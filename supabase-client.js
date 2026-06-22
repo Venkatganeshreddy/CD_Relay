@@ -96,6 +96,20 @@
         provider: 'azure',
         options: { scopes: 'email openid profile', redirectTo: location.origin + location.pathname },
       }),
+      // Google Workspace SSO ("company Gmail"). Same roster gate as Microsoft:
+      // the link_auth_user trigger (05_auth.sql) matches the Google email to an
+      // employees.email row, so the user must already be on the roster.
+      // hd= hints Google to pre-pick the nxtwave.co.in domain; it's a UX nudge, NOT
+      // the security boundary (the roster trigger is). ponytail: hardcoded hd, lift
+      // to a config value only if a second workspace domain ever appears.
+      signInWithGoogle: () => sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'email openid profile',
+          queryParams: { hd: 'nxtwave.co.in', prompt: 'select_account' },
+          redirectTo: location.origin + location.pathname,
+        },
+      }),
       signOut: () => sb.auth.signOut(),
       session: () => sb.auth.getSession(),
       onChange: (cb) => sb.auth.onAuthStateChange(cb),
