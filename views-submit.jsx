@@ -533,6 +533,24 @@ function AckPanel({ currentUser }) {
                     {!isOwn && ownerName ? `${ownerName} · ` : ''}{t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${t.due}` : ''}
                     {acked && t.lastAckStatus ? ` · acknowledged: ${t.lastAckStatus}` : ''}
                   </div>
+                  {/* Full task detail so the whole task is visible at a glance. */}
+                  {(t.taskCategory || t.outputCategory || (t.products || []).length || (t.stacks || []).length) ? (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                      {[
+                        t.taskCategory,
+                        t.outputCategory ? `${t.outputCategory}${t.outputCount != null ? ` ×${t.outputCount}` : ''}` : '',
+                        (t.products || []).join(', '),
+                        (t.stacks || []).join(', '),
+                        (t.estHours != null && t.estHours !== '') ? `${t.estHours}h est` : '',
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  ) : null}
+                  {(t.desc || t.blockReason || t.backlogNote) ? (
+                    <div style={{ fontSize: 11.5, marginTop: 3 }}>{t.desc || t.blockReason || t.backlogNote}</div>
+                  ) : null}
+                  {t.template && Object.values(t.template).filter(Boolean).length > 0 ? (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{Object.values(t.template).filter(Boolean).join(' · ')}</div>
+                  ) : null}
                 </div>
                 {isOwn ? (
                   <div className="row" style={{ gap: 6, alignItems: 'center' }}>
