@@ -356,6 +356,19 @@
       const t = (window.CDC.TASKS || []).find((x) => x.id === id); if (t) t.status = status;
       await remote(() => sb.from('tasks').update({ status, data: t || { id, status } }).eq('id', id));
     },
+    // Owner fills in execution data (template fields like iterations/accuracy,
+    // and the task description) on a task assigned to them. Merges the patch into
+    // the task and keeps the mirrored worklog's template in sync so rollups match.
+    async updateTaskFields(id, patch) {
+      const t = (window.CDC.TASKS || []).find((x) => x.id === id);
+      if (t) Object.assign(t, patch);
+      await remote(() => sb.from('tasks').update({ data: t || { id, ...patch } }).eq('id', id));
+      const wl = (window.CDC.WORKLOGS || []).find((w) => w.taskId === id);
+      if (wl) {
+        if (patch.template) wl.template = patch.template;
+        await remote(() => sb.from('worklogs').update({ data: wl }).eq('id', wl.id));
+      }
+    },
     async addTask(task) {
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
