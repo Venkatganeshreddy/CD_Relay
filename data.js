@@ -1459,7 +1459,7 @@
       { id: 'status', label: 'Interview status', type: 'choice', options: ['Sourced', 'Screened', 'Panel', 'Offer', 'Joined', 'Dropped'] },
     ],
     'Reporting Analysis': [
-      { id: 'cadence', label: 'Reporting cadence', type: 'choice', options: ['Weekly', 'Monthly'] },
+      { id: 'cadence', label: 'Reporting cadence', type: 'choice', options: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually'] },
     ],
     'Employee Engagement': [
       { id: 'activity', label: 'Activity name', type: 'text', ph: 'e.g. Friday team lunch' },
