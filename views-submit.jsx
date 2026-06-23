@@ -500,13 +500,14 @@ function AckPanel({ currentUser }) {
   const [editId, setEditId] = useS(null);     // task being detail-edited
   const [edit, setEdit] = useS({});           // { template: {...}, desc }
 
-  // Open the detail editor for a task you own, prefilled with its current values.
+  // Open the number editor for a task you own. Owners edit only the template
+  // numbers (iterations, accuracy, output) — not the task name, details, etc.
   function openEdit(t) {
     setEditId(t.id);
-    setEdit({ template: { ...(t.template || {}) }, desc: t.desc || '' });
+    setEdit({ template: { ...(t.template || {}) } });
   }
   async function saveEdit(t) {
-    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(t.id, { template: edit.template || {}, desc: edit.desc || '' });
+    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(t.id, { template: edit.template || {} });
     setEditId(null);
     force((n) => n + 1);
   }
@@ -596,7 +597,7 @@ function AckPanel({ currentUser }) {
               )}
               {isOwn && editId === t.id && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                  <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>Fill in this task's details{t.taskCategory ? ` — ${t.taskCategory}` : ''}.</div>
+                  <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>Fill in your numbers{t.taskCategory ? ` — ${t.taskCategory}` : ''}.</div>
                   <div className="template-form">
                     {fieldsFor(t).map((f) => (
                       <React.Fragment key={f.id}>
@@ -605,10 +606,6 @@ function AckPanel({ currentUser }) {
                           onChange={(v) => setEdit((e) => ({ ...e, template: { ...(e.template || {}), [f.id]: v } }))} />
                       </React.Fragment>
                     ))}
-                    <label>Task details</label>
-                    <textarea className="field-input" style={{ height: 56, padding: 8, resize: 'vertical' }}
-                      placeholder="What needs to be done / what was done? Be specific."
-                      value={edit.desc || ''} onChange={(e) => setEdit((ed) => ({ ...ed, desc: e.target.value }))} />
                   </div>
                   <div className="row" style={{ gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
                     <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditId(null)}>Cancel</button>
