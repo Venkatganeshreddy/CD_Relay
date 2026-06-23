@@ -965,6 +965,10 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
                     <input className="field-input" placeholder={f.ph} value={template[f.id] || ''}
                       onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
                   )}
+                  {f.type === 'number' && (
+                    <input className="field-input" type="number" min={f.min != null ? f.min : 0} max={f.max} step="1" placeholder={f.ph} value={template[f.id] || ''}
+                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
+                  )}
                   {f.type === 'textarea' && (
                     <textarea className="field-input" style={{ height: 56, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={template[f.id] || ''}
                       onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />

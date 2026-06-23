@@ -729,6 +729,9 @@ function TemplateInput({ currentTask, onTemplateSubmit }) {
             {f.type === 'text' && (
               <input className="field-input" placeholder={f.ph} value={vals[f.id]} onChange={(e) => setVals((v) => ({ ...v, [f.id]: e.target.value }))} />
             )}
+            {f.type === 'number' && (
+              <input className="field-input" type="number" min={f.min != null ? f.min : 0} max={f.max} step="1" placeholder={f.ph} value={vals[f.id]} onChange={(e) => setVals((v) => ({ ...v, [f.id]: e.target.value }))} />
+            )}
             {f.type === 'textarea' && (
               <textarea className="field-input" style={{ height: 64, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={vals[f.id]} onChange={(e) => setVals((v) => ({ ...v, [f.id]: e.target.value }))} />
             )}

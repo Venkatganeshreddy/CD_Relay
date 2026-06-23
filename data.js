@@ -1335,6 +1335,7 @@
     'Academy-AI Fullstack Project',
     'NxtWave- Agentic Workflow/Services',
     'NxtWave',
+    'Agentic workflow',
   ];
 
   const STACKS = [
@@ -1358,6 +1359,7 @@
     'Testing & Learning Portal Configurations': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
     'Video Session': { task: 'Recording & Production', activity: 'Planned Content Creation', metric: 'Content Velocity' },
     'Agentic Workflow Initiative, R&D, Tools': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
+    'Agentic workflow': { task: 'Agentic Workflow', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
     'Feedback & Backpropagation': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
     'Industry Upgrade': { task: 'Industry Review & Quality Check', activity: 'Initiatives / Upgrades', metric: 'Content Relevance' },
     'Stakeholder Request Fulfillment': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
@@ -1420,6 +1422,11 @@
 
   // Fill-in-the-blanks template per task category.
   const TASK_TEMPLATES = {
+    'Agentic Workflow': [
+      { id: 'iterations', label: 'No. of iterations', type: 'number', ph: 'e.g. 5' },
+      { id: 'accuracy', label: 'Accuracy rate of agent (%)', type: 'number', ph: 'e.g. 92', min: 0, max: 100 },
+      { id: 'outputs', label: 'Output generated', type: 'number', ph: 'e.g. 120' },
+    ],
     'Content Creation & Review': [
       { id: 'course', label: 'Course', type: 'text', ph: 'e.g. Fullstack — Java' },
       { id: 'module', label: 'Module', type: 'text', ph: 'e.g. Authentication' },
