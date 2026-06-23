@@ -1335,7 +1335,6 @@
     'Academy-AI Fullstack Project',
     'NxtWave- Agentic Workflow/Services',
     'NxtWave',
-    'Agentic workflow',
   ];
 
   const STACKS = [
