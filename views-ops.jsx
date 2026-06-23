@@ -840,6 +840,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   // Status and Due date are mandatory.
   const valid = products.length > 0 && !!outputCategory &&
     !!status && !!due &&
+    details.trim().length > 0 &&
     (!needsReason || reason.trim().length > 0);
 
   const label = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
@@ -865,6 +866,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
           {!outputCategory ? 'Pick a product-audience & output category'
+            : !details.trim() ? 'Task details are required'
             : !due ? 'Due date is required'
             : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
             : `${map.metric} · ${map.task}`}
@@ -990,7 +992,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
         {/* Task details — optional free-text, sits below the tailored template. */}
         {map && (
           <div>
-            <div style={label()}>Task details <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· optional · describe what this task is</span></div>
+            <div style={label()}>Task details <span style={{ color: 'var(--rose, #c0392b)' }}>*</span> <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· describe what this task is</span></div>
             <textarea className="field-input" style={{ width: '100%', height: 56, padding: 8, resize: 'vertical' }}
               placeholder="What needs to be done for this output? Be specific."
               value={details} onChange={(e) => setDetails(e.target.value)} />
