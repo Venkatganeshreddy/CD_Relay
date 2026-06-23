@@ -178,8 +178,13 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
   const role = currentUser.role;
   const isContributor = isContributorRole(role);
   const isL2 = role === 'L2' || role === 'SUB_LEAD' || role === 'DEPARTMENT_LEAD' || role === 'CENTRAL_OPS';
-  const isL3orAdmin = role === 'L3' || role === 'ADMIN' || role === 'PRODUCT_OWNER';
-  const isAdmin = role === 'ADMIN';
+  // Drive the org-wide sidebar off SCOPE, not the brittle role string: Admins
+  // arrive from the DB with assorted role/level casings ('Admin' vs 'ADMIN') but
+  // always resolve to full ('all') scope — same as L3 — so anyone who sees the
+  // whole org gets the full L3/Admin sidebar.
+  const seesAll = window.CDC.scopeForUser(currentUser.id).kind === 'all';
+  const isL3orAdmin = seesAll || ['L3', 'ADMIN', 'Admin', 'PRODUCT_OWNER'].includes(role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  const isAdmin = role === 'ADMIN' || role === 'Admin' || currentUser.level === 'Admin';
 
   // ── Sidebar groups (Daily Worklog / Department / Intelligence / System) ─
   const groupDaily = [
