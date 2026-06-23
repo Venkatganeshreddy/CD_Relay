@@ -80,21 +80,20 @@
 
   // ── Users (with L-level + manager_id tree) ─────────────────────────────
   const USERS = [
-    { id: 'NW0001240', name: 'Tejaswini Venkata', initials: 'TV', role: 'L2', level: 'L2', dept: 'd-aptenglish', sub: 'Content — English', title: 'L2 · Content — English', managerId: 'NW0002526' },
     { id: 'NW0002849', name: 'Poojitha pachava', initials: 'PP', role: 'L2', level: 'L2', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L2 · Content — Aptitude', managerId: 'NW0002526' },
     { id: 'NW0003323', name: 'Sai Krishna Chakradhar Pasupuleti', initials: 'SP', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
-    { id: 'NW0003881', name: 'Renna Fathima', initials: 'RF', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0001240' },
-    { id: 'NW0004107', name: 'Sannamuri Sri Naga Poojitha', initials: 'SP', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0001240' },
+    { id: 'NW0003881', name: 'Renna Fathima', initials: 'RF', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
+    { id: 'NW0004107', name: 'Sannamuri Sri Naga Poojitha', initials: 'SP', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
     { id: 'NW0004629', name: 'Paturi Vivek', initials: 'PV', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
     { id: 'NW0004661', name: 'Vivek Vijayan', initials: 'VV', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
     { id: 'NW0004785', name: 'Manish Boosa', initials: 'MB', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
-    { id: 'NW0004831', name: 'Jithendra Venkata Sai Bonam', initials: 'JB', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Assessment Intelligence', title: 'L1 · Assessment Intelligence', managerId: 'NW0001240' },
-    { id: 'NW0004881', name: 'Mariyam Khan', initials: 'MK', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0001240' },
+    { id: 'NW0004831', name: 'Jithendra Venkata Sai Bonam', initials: 'JB', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
+    { id: 'NW0004881', name: 'Mariyam Khan', initials: 'MK', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
     { id: 'NW0004998', name: 'Pinisetti Srinivas', initials: 'PS', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
-    { id: 'NW0005042', name: 'Thadigiri Prem Deep', initials: 'TD', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0001240' },
+    { id: 'NW0005042', name: 'Thadigiri Prem Deep', initials: 'TD', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
     { id: 'NW0005117', name: 'Viswanadh Pinisetti', initials: 'VP', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — Aptitude', title: 'L1 · Content — Aptitude', managerId: 'NW0002849' },
-    { id: 'NW0005886', name: 'Namitha Mohasin', initials: 'NM', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Assessment Intelligence', title: 'L1 · Assessment Intelligence', managerId: 'NW0001240' },
-    { id: 'NW0006195', name: 'Pratik Bhattacharjee', initials: 'PB', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: null, title: 'L1 · Content — Aptitude & English', managerId: 'NW0001240' },
+    { id: 'NW0005886', name: 'Namitha Mohasin', initials: 'NM', role: 'L1', level: 'L1', dept: 'd-aptenglish', sub: 'Content — English', title: 'L1 · Content — English', managerId: 'NW0006195' },
+    { id: 'NW0006195', name: 'Pratik Bhattacharjee', initials: 'PB', role: 'L2', level: 'L2', dept: 'd-aptenglish', sub: 'Content — English', title: 'L2 · Content — English', managerId: 'NW0002526' },
     { id: 'NW0001429', name: 'Sreenu Gampala', initials: 'SG', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW0003727', name: 'Alka Kumari', initials: 'AK', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW0004593', name: 'Srutthi Sri G', initials: 'SG', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
@@ -193,7 +192,7 @@
     { id: 'k-4', name: 'Central Ops report-rate',     dept: 'd-fsgci', target: 95, current: 96, unit: '%',  status: 'green', trend: [92, 93, 94, 95, 95, 96], owner: 'NW-VIJAY-CO' },
 
     { id: 'k-5', name: 'Aptitude problem coverage',   dept: 'd-aptenglish', target: 95, current: 91, unit: '%', status: 'amber', trend: [86, 88, 89, 90, 90, 91], owner: 'NW0002849' },
-    { id: 'k-6', name: 'English unit completion',     dept: 'd-aptenglish', target: 85, current: 88, unit: '%', status: 'green', trend: [82, 84, 85, 86, 87, 88], owner: 'NW0001240' },
+    { id: 'k-6', name: 'English unit completion',     dept: 'd-aptenglish', target: 85, current: 88, unit: '%', status: 'green', trend: [82, 84, 85, 86, 87, 88], owner: 'NW0006195' },
 
     { id: 'k-7', name: 'DS&ML curriculum coverage',   dept: 'd-dsml',   target: 95, current: 82, unit: '%', status: 'amber', trend: [78, 79, 80, 81, 82, 82], owner: 'NW0005433' },
     { id: 'k-8', name: 'DS&ML mentor NPS',            dept: 'd-dsml',   target: 72, current: 75, unit: '',  status: 'green', trend: [70, 72, 73, 74, 74, 75], owner: 'NW0005433' },
@@ -261,7 +260,7 @@
       kpiHits: ['k-5'],
     },
     {
-      id: 'r-1006', author: 'NW0001240', date: fmt(daysAgo(1)), submittedAt: '19:55 IST',
+      id: 'r-1006', author: 'NW0006195', date: fmt(daysAgo(1)), submittedAt: '19:55 IST',
       sub: 'Content — English', dept: 'd-aptenglish', validation: 'PARTIAL', confidence: 0.64,
       items: [
         { kind: 'done', text: 'Updated business-English module with 12 new scenarios.' },
@@ -304,7 +303,7 @@
     },
     // Two days ago, Tejaswini
     {
-      id: 'r-1010', author: 'NW0001240', date: fmt(daysAgo(2)), submittedAt: '20:11 IST',
+      id: 'r-1010', author: 'NW0006195', date: fmt(daysAgo(2)), submittedAt: '20:11 IST',
       sub: 'Content — English', dept: 'd-aptenglish', validation: 'OK', confidence: 0.86,
       items: [
         { kind: 'done', text: 'Recorded 4 video explanations for grammar deep-dive.' },
@@ -362,7 +361,7 @@
     {
       id: 't-8', title: 'English module readability review',
       status: 'DONE', reason: 'Manual',
-      sourceReports: ['r-1010'], owner: 'NW0001240', dept: 'd-aptenglish',
+      sourceReports: ['r-1010'], owner: 'NW0006195', dept: 'd-aptenglish',
       created: fmt(daysAgo(5)), confidence: null,
     },
   ];
@@ -553,7 +552,7 @@
     'NW0001771':       { stack: ['FS — Python', 'DS/ML'],               products: ['NxtWave'] },
     'NW0002526':    { stack: ['FS — Java', 'FS — Python'],           products: ['NxtWave'] },
     'NW0002849':      { stack: ['Aptitude'],                           products: ['Launchpad', 'Academy'] },
-    'NW0001240':   { stack: ['English'],                            products: ['Launchpad', 'Academy'] },
+    'NW0006195':   { stack: ['English'],                            products: ['Launchpad', 'Academy'] },
     'NW0005433':   { stack: ['DS/ML'],                              products: ['NIAT - B2', 'Academy'] },
     'NW0002023':  { stack: ['DSA'],                                products: ['NIAT - B1', 'Academy', 'Intensive Offline'] },
   };
@@ -642,8 +641,8 @@
     ['NW0002849',   1, 'Pedagogy Initiative',                       2.5, 'Done'],
     ['NW0002849',   1, 'Content-Assessment Alignment',              2.0, 'Done'],
 
-    ['NW0001240',1, 'TR-Doc',                                    2.0, 'Done'],
-    ['NW0001240',1, 'Video Session',                             1.5, 'Done'],
+    ['NW0006195',1, 'TR-Doc',                                    2.0, 'Done'],
+    ['NW0006195',1, 'Video Session',                             1.5, 'Done'],
 
     ['NW0005433',1, 'Industry Upgrade',                          2.0, 'Done'],
     ['NW0005433',1, 'TR-Doc',                                    2.5, 'Done'],
@@ -665,7 +664,7 @@
     ['NW0002526', 2, 'Stakeholder Request Fulfillment',           1.5, 'Done'],
 
     ['NW0002849',   2, 'Content-Assessment Alignment',              3.0, 'Done'],
-    ['NW0001240',2, 'Vernacular Content',                        2.5, 'Done'],
+    ['NW0006195',2, 'Vernacular Content',                        2.5, 'Done'],
 
     ['NW0005433',2, 'Upskilling & Learning hours',               1.0, 'Done'],
     ['NW0005433',2, 'Projects',                                  3.0, 'Done'],
@@ -686,7 +685,7 @@
     ['NW0001771', 4, 'TR-Doc',                                    2.5, 'Done'],
     ['NW0001778',   4, 'Pedagogy Initiative',                       2.0, 'Done'],
     ['NW0001771',    4, 'Industry Upgrade',                          2.5, 'Done'],
-    ['NW0001240',4, 'TR-Doc',                                    2.0, 'Done'],
+    ['NW0006195',4, 'TR-Doc',                                    2.0, 'Done'],
     ['NW0005433',4, 'Industry Upgrade',                          2.0, 'Done'],
   ];
 
@@ -1055,7 +1054,7 @@
       createdAt: '2026-04-04',
     },
     {
-      id: 'fa-8', name: 'Vernacular Translator', owner: 'NW0001240',
+      id: 'fa-8', name: 'Vernacular Translator', owner: 'NW0006195',
       description: 'Translates English curriculum content into Hindi & Telugu with pedagogical preservation.',
       level: 'L0', scope: 'sub', deployUrl: 'https://relay.nxtwave.io/agents/vernacular',
       health: 'idle', tags: ['content', 'english', 'i18n'],
@@ -1090,7 +1089,7 @@
   const MOMS = [
     {
       id: 'mom-1', title: 'Content Leadership Sync — Q3 Hiring',
-      attendees: ['NW0002526', 'NW0001771', 'NW0001778', 'NW0001771', 'NW0002849', 'NW0001240'],
+      attendees: ['NW0002526', 'NW0001771', 'NW0001778', 'NW0001771', 'NW0002849', 'NW0006195'],
       date: fmt(daysAgo(1)), duration: 47, channel: 'Teams · Content Leadership',
       source: 'Teams transcript', scribeRun: 'run-1214',
       summary: 'Reviewed Q3 hiring forecast. Aligned on +6 mentors for DS&ML cohort 4. Discussed mentor capacity ratio gap (1:48 actual vs 1:35 planned). Decided to bring Q3 hiring forward to next planning cycle.',
@@ -1142,7 +1141,7 @@
       { userId: 'NW0005433',  mtdUsd: 2010.00, tokens: 8_900_000,  anomaly: false },
       { userId: 'NW0002849',     mtdUsd: 1640.00, tokens: 7_100_000,  anomaly: false },
       { userId: 'NW0002023', mtdUsd: 1480.00, tokens: 6_300_000,  anomaly: false },
-      { userId: 'NW0001240',  mtdUsd: 870.00,  tokens: 3_700_000,  anomaly: false },
+      { userId: 'NW0006195',  mtdUsd: 870.00,  tokens: 3_700_000,  anomaly: false },
       { userId: 'NW0002526',   mtdUsd: 720.00,  tokens: 3_100_000,  anomaly: false },
       { userId: 'NW0006025',  mtdUsd: 660.00,  tokens: 2_800_000,  anomaly: false },
       { userId: 'NW0002526',    mtdUsd: 480.00,  tokens: 1_900_000,  anomaly: false },
