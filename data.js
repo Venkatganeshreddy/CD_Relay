@@ -1334,6 +1334,7 @@
     'NIAT-GRIT', 'NIAT-MINT',
     'Academy-AI Fullstack Project',
     'NxtWave- Agentic Workflow/Services',
+    'NxtWave',
   ];
 
   const STACKS = [
