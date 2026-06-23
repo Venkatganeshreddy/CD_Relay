@@ -849,9 +849,12 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
 
   // Owner choices: yourself + everyone who reports up to you (your subtree), so
   // an L2 sees their L1s to assign work; an L3 sees their L2s and L1s. A
-  // non-manager (no reportees) sees only themselves.
+  // non-manager (no reportees) sees only themselves. Full-scope users (Admin/L3)
+  // can assign to ANYONE, so they get the whole roster.
   // ponytail: plain BFS over managerId — the roster is small.
+  const ownerSeesAll = window.CDC.scopeForUser(me.id).kind === 'all';
   const myTeam = (() => {
+    if (ownerSeesAll) return (people || []).filter((u) => u.id !== me.id);
     const byMgr = {};
     (people || []).forEach((u) => { (byMgr[u.managerId] = byMgr[u.managerId] || []).push(u); });
     const out = []; const stack = [me.id];
