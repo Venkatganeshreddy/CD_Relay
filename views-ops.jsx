@@ -386,12 +386,15 @@ function TasksView({ tweaks, currentUser }) {
   // L3/Admin only — can hard-delete tasks (clean up test/demo rows). Matches the
   // is_hod_admin server RLS, so the remote delete actually succeeds.
   const isAdmin = me.level === 'L3' || me.level === 'Admin' || ['L3', 'ADMIN', 'PRODUCT_OWNER'].includes(me.role);
+  // Full-org scope (L3 / Admin): sees everyone's tasks, so the "team mates" tab
+  // applies even with no direct reportees (an Admin typically has none).
+  const seesAll = CDC.scopeForUser(me.id).kind === 'all';
   const reporteeIds = new Set(reportees.map((r) => r.id));
 
   const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
   const [statusOv, setStatusOv] = useState_o({});      // id -> status (forces re-render after update)
   // Managers open to their direct reports' tasks (L3 → L2s, L2 → their L1s); ICs open to their own.
-  const [filter, setFilter] = useState_o('MINE');
+  const [filter, setFilter] = useState_o((seesAll && !reportees.length) ? 'ALL' : 'MINE');
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
@@ -425,7 +428,7 @@ function TasksView({ tweaks, currentUser }) {
   };
 
   const TAB_LABELS = { MINE: 'self', ALL: 'team mates' };
-  const tabs = ['MINE', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', ...(reportees.length ? ['ALL'] : [])];
+  const tabs = ['MINE', 'BACKLOG', 'ACTIVE', 'ESCALATED', 'BLOCKED', 'OVERDUE', 'DONE', ...((reportees.length || seesAll) ? ['ALL'] : [])];
   const matchesTab = (t, f) =>
     f === 'ALL' ? true :
     f === 'MINE' ? t.owner === me.id :
