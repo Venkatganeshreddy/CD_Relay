@@ -375,6 +375,60 @@ const TASK_STATUSES = [
 ];
 const statusMeta = (s) => TASK_STATUSES.find((x) => x.v === s) || { label: (s || '').toLowerCase(), tone: 'outline' };
 
+// Month-grid calendar for the Tasks board. Days with tasks show a count; click a
+// day to filter the list to that date. Toggle counts/filter by Due vs Created.
+function TaskCalendar({ tasks, dateMode, setDateMode, dateSel, onPick }) {
+  const today = window.CDC.today;
+  const [ym, setYm] = useState_o(() => ({ y: today.getFullYear(), m: today.getMonth() }));
+  const pad = (n) => String(n).padStart(2, '0');
+  const mk = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const dateOf = (t) => dateMode === 'due' ? t.due : t.created;
+  const counts = {};
+  for (const t of tasks) { const d = dateOf(t); if (d) counts[d] = (counts[d] || 0) + 1; }
+  const first = new Date(ym.y, ym.m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate();
+  const todayStr = mk(today.getFullYear(), today.getMonth(), today.getDate());
+  const monthName = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const step = (delta) => setYm((s) => { let m = s.m + delta, y = s.y; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } return { y, m }; });
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  return (
+    <div className="card card-pad" style={{ width: 300 }}>
+      <div className="seg" style={{ marginBottom: 8 }}>
+        <button data-active={dateMode === 'due'} onClick={() => setDateMode('due')}>Due date</button>
+        <button data-active={dateMode === 'created'} onClick={() => setDateMode('created')}>Created</button>
+      </div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => step(-1)}>‹</button>
+        <strong style={{ fontSize: 13 }}>{monthName}</strong>
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={() => step(1)}>›</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, textAlign: 'center' }}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="muted" style={{ fontSize: 10, fontWeight: 600 }}>{d}</div>)}
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const ds = mk(ym.y, ym.m, d);
+          const n = counts[ds] || 0;
+          const sel = dateSel === ds;
+          return (
+            <div key={i} onClick={() => onPick(sel ? null : ds)} title={n ? `${n} task${n === 1 ? '' : 's'}` : ''}
+              style={{ cursor: 'pointer', padding: '3px 0', borderRadius: 6, fontSize: 12, lineHeight: 1.1,
+                border: ds === todayStr ? '1px solid var(--accent-border)' : '1px solid transparent',
+                background: sel ? 'var(--accent)' : n ? 'var(--accent-soft)' : 'transparent',
+                color: sel ? '#fff' : 'var(--text)' }}>
+              <div>{d}</div>
+              <div style={{ fontSize: 9, height: 11, color: sel ? '#fff' : 'var(--accent)' }}>{n || ''}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="muted" style={{ fontSize: 10.5, marginTop: 8 }}>Click a day to filter · highlighted = has tasks.</div>
+    </div>
+  );
+}
+
 function TasksView({ tweaks, currentUser }) {
   const CDC = window.CDC;
   const me = currentUser;
@@ -400,6 +454,10 @@ function TasksView({ tweaks, currentUser }) {
   const [editing, setEditing] = useState_o(null);
   const [creating, setCreating] = useState_o(false);
   const [, setTick] = useState_o(0);   // force re-render after a delete
+  const [dateSel, setDateSel] = useState_o(null);       // 'YYYY-MM-DD' or null (calendar pick)
+  const [dateMode, setDateMode] = useState_o('due');    // 'due' | 'created'
+  const [showCal, setShowCal] = useState_o(false);
+  const dateOf = (t) => dateMode === 'due' ? t.due : t.created;
 
   async function removeTask(id) {
     if (!window.confirm('Delete this task permanently? This cannot be undone.')) return;
@@ -449,6 +507,7 @@ function TasksView({ tweaks, currentUser }) {
     .filter((t) => matchesTab(t, filter))
     .filter((t) => !reporteeSel || t.owner === reporteeSel)
     .filter((t) => !teamSel || teamOf(t) === teamSel)
+    .filter((t) => !dateSel || dateOf(t) === dateSel)
     .map((t) => ({ ...t, _decision: decisions[t.id] }));
 
   function approve(id) {
@@ -660,6 +719,7 @@ function TasksView({ tweaks, currentUser }) {
         subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see their team mates' tasks via the team mates tab + reportee filter."
         actions={
           <>
+            <button className="btn" data-size="sm" data-variant={showCal ? 'primary' : 'ghost'} onClick={() => setShowCal((v) => !v)} title="Toggle the calendar"><Icon name="weekly" size={12} /> Calendar</button>
             <button className="btn" data-size="sm" onClick={refreshNow} title="Re-pull the latest data and refresh escalations"><Icon name="refresh" size={12} /> Refresh</button>
             <button className="btn" data-size="sm" data-variant="primary" onClick={() => setCreating(true)}><Icon name="check" size={12} /> New task</button>
           </>
@@ -692,6 +752,19 @@ function TasksView({ tweaks, currentUser }) {
         )}
         {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12 }}>{reviewed} of {suggested.length} triaged</span>}
       </div>
+
+      {showCal && (
+        <div className="row" style={{ gap: 12, alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' }}>
+          <TaskCalendar tasks={allTasks.filter((t) => t.status !== 'SUGGESTED')} dateMode={dateMode} setDateMode={setDateMode} dateSel={dateSel} onPick={setDateSel} />
+        </div>
+      )}
+      {dateSel && (
+        <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 10, fontSize: 12 }}>
+          <span className="muted">Showing tasks {dateMode === 'due' ? 'due on' : 'created on'}</span>
+          <Pill tone="accent" dot>{dateSel}</Pill>
+          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setDateSel(null)}>Clear date</button>
+        </div>
+      )}
 
       <Card pad={false}>
         <table className="tbl">
