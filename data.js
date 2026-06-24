@@ -100,7 +100,7 @@
     { id: 'NW0005113', name: 'Kompella Sai Manvish', initials: 'KM', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW0005433', name: 'Rushikesh Chandrakant Konapure', initials: 'RK', role: 'L2', level: 'L2', dept: 'd-dsml', sub: null, title: 'L2 · Content — DS&ML', managerId: 'NW0002526' },
     { id: 'NW0005962', name: 'Kavya Bhemana', initials: 'KB', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
-    { id: 'NW0006145', name: 'Aditya Singh', initials: 'AS', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
+    { id: 'NW0006708', name: 'Sofi Altamsh Yusuf Shah', initials: 'SS', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW0006190', name: 'Nangunoori Chandu', initials: 'NC', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW0006237', name: 'Tejeswara Rao N', initials: 'TN', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
     { id: 'NW1005903', name: 'Lavanya Sri Rentala', initials: 'LR', role: 'L1', level: 'L1', dept: 'd-dsml', sub: null, title: 'L1 · Content — DS&ML', managerId: 'NW0005433' },
