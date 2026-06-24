@@ -1752,13 +1752,24 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
   const rows = CDC.filterNonpayroll(currentUser.id) || [];
   const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
-  const [period, setPeriod] = useStP('ALL');               // default to the full FY
-  const cur = period === 'ALL' ? rows : rows.filter((r) => r.period === period);
+  const allCats = useMP(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort(), [rows]);
+  const allSubs = useMP(() => [...new Set(rows.map((r) => r.sub || '—'))].sort(), [rows]);
+  // Filters: months is multi-select ([] = all months); category/team single ('' = all).
+  const [months, setMonths] = useStP([]);
+  const [cat, setCat] = useStP('');
+  const [sub, setSub] = useStP('');
+  const toggleMonth = (p) => setMonths((s) => s.includes(p) ? s.filter((x) => x !== p) : [...s, p]);
+  const cur = rows.filter((r) =>
+    (months.length === 0 || months.includes(r.period)) &&
+    (!cat || r.category === cat) &&
+    (!sub || (r.sub || '—') === sub));
 
   // INR, Indian grouping (lakh/crore). '2026-08' → "Aug '26".
   const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const pLabel = (p) => { const m = /^(\d{4})-(\d{2})$/.exec(p || ''); return m ? `${MON[+m[2] - 1]} '${m[1].slice(2)}` : p; };
+  const selStyle = { fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' };
+  const monthsLabel = months.length === 0 ? 'full year' : months.length === 1 ? pLabel(months[0]) : `${months.length} months`;
 
   const budget = cur.reduce((s, r) => s + (Number(r.planned) || 0), 0);
   // Group current rows by a key → [{ k, budget, count }] desc by budget.
@@ -1774,12 +1785,17 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const byCategory = useMP(() => groupBy('category'), [cur]);
   const byTool = useMP(() => groupBy('tool'), [cur]);
   const bySub = useMP(() => groupBy('sub'), [cur]);
-  // Monthly budget across every scoped period (chronological).
+  // Monthly budget across the full timeline (respects category/team filters, but
+  // not the month filter — so the trend shows every month while you select some).
   const trend = useMP(() => {
     const m = new Map();
-    for (const r of rows) m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
+    for (const r of rows) {
+      if (cat && r.category !== cat) continue;
+      if (sub && (r.sub || '—') !== sub) continue;
+      m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
+    }
     return [...m.entries()].map(([p, v]) => ({ period: p, budget: v })).sort((a, b) => a.period.localeCompare(b.period));
-  }, [rows]);
+  }, [rows, cat, sub]);
 
   // One budget breakdown row: label, bar (share of the largest), amount + share.
   const BudgetRow = ({ label, value, max }) => (
@@ -1818,9 +1834,19 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         title="Non-Payroll Budget"
         subtitle={seesAll ? "Budgeted non-payroll spend across all teams (Apr'26–Mar'27, INR excl GST). Actuals to follow." : "Your team's budgeted non-payroll spend (INR excl GST). Actuals to follow."}
         actions={
-          <div className="seg">
-            <button data-active={period === 'ALL'} onClick={() => setPeriod('ALL')}>FY</button>
-            {periods.map((p) => <button key={p} data-active={period === p} onClick={() => setPeriod(p)}>{pLabel(p)}</button>)}
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <div className="seg">
+              <button data-active={months.length === 0} onClick={() => setMonths([])}>All</button>
+              {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
+            </div>
+            <select value={cat} onChange={(e) => setCat(e.target.value)} style={selStyle}>
+              <option value="">All categories</option>
+              {allCats.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={sub} onChange={(e) => setSub(e.target.value)} style={selStyle}>
+              <option value="">All teams</option>
+              {allSubs.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         }
       />
@@ -1830,7 +1856,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         <div className="kpi-tile">
           <div className="kpi-name">Budget</div>
           <div className="kpi-value">{inr(budget)}</div>
-          <div className="kpi-meta"><span>{period === 'ALL' ? 'full year' : pLabel(period)}</span></div>
+          <div className="kpi-meta"><span>{monthsLabel}{cat ? ` · ${cat}` : ''}{sub ? ` · ${sub}` : ''}</span></div>
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Line items</div>
@@ -1858,13 +1884,13 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>{(m.budget / 1e5).toFixed(1)}L</span>
-                  <div title={inr(m.budget)} style={{ width: '100%', height: `${(m.budget / max) * 100}%`, background: period === m.period ? 'var(--accent)' : 'var(--accent-soft)', borderRadius: 4, minHeight: 6, cursor: 'pointer' }} onClick={() => setPeriod(m.period)} />
+                  <div title={inr(m.budget)} style={{ width: '100%', height: `${(m.budget / max) * 100}%`, background: (months.length === 0 || months.includes(m.period)) ? 'var(--accent)' : 'var(--accent-soft)', borderRadius: 4, minHeight: 6, cursor: 'pointer' }} onClick={() => toggleMonth(m.period)} />
                   <span className="muted" style={{ fontSize: 9.5, whiteSpace: 'nowrap' }}>{pLabel(m.period)}</span>
                 </div>
               );
             })}
           </div>
-          <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Click a bar to filter that month. Amounts in ₹ lakh.</div>
+          <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Click bars to select/deselect months (multi-select). Amounts in ₹ lakh.</div>
         </Card>
       )}
 
