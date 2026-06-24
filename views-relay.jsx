@@ -1743,93 +1743,84 @@ function ExpenseView({ tweaks, currentUser, nav }) {
 }
 window.ExpenseView = ExpenseView;
 
-// ── Non-Payroll Expense — planned vs actual, by tool & category, per team ──
-// Scoped per role: L3/Admin see every team (+ cross-team table); an L2 sees only
-// their own team's budget (window.CDC.filterNonpayroll handles the scoping).
+// ── Non-Payroll Expense — budget (planned) by vendor, category & team ──────
+// The maintained sheet carries budgeted amounts only (INR, excl GST); actuals
+// are not yet wired, so this is a budget dashboard. Scoped per role: L3/Admin
+// see all teams; an L2 sees only their own (window.CDC.filterNonpayroll).
 function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
   const rows = CDC.filterNonpayroll(currentUser.id) || [];
-  const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort().reverse(), [rows]);
-  const [period, setPeriod] = useStP(periods[0] || '');
-  const cur = rows.filter((r) => r.period === (period || periods[0]));
+  const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
+  const [period, setPeriod] = useStP('ALL');               // default to the full FY
+  const cur = period === 'ALL' ? rows : rows.filter((r) => r.period === period);
 
-  const usd = (n) => `$${Math.round(n).toLocaleString()}`;
-  const sum = (arr, k) => arr.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-  const planned = sum(cur, 'planned'), actual = sum(cur, 'actual');
-  const variance = actual - planned;                       // + = over budget
-  const pct = planned ? (actual / planned) * 100 : 0;
-  const overTone = variance > 0 ? 'red' : 'green';
+  // INR, Indian grouping (lakh/crore). '2026-08' → "Aug '26".
+  const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pLabel = (p) => { const m = /^(\d{4})-(\d{2})$/.exec(p || ''); return m ? `${MON[+m[2] - 1]} '${m[1].slice(2)}` : p; };
 
-  // Group current-period rows by an arbitrary key into {planned, actual}.
+  const budget = cur.reduce((s, r) => s + (Number(r.planned) || 0), 0);
+  // Group current rows by a key → [{ k, budget, count }] desc by budget.
   const groupBy = (key) => {
     const m = new Map();
     for (const r of cur) {
-      const k = typeof key === 'function' ? key(r) : r[key];
-      const v = m.get(k) || { planned: 0, actual: 0 };
-      v.planned += Number(r.planned) || 0; v.actual += Number(r.actual) || 0;
-      m.set(k, v);
+      const k = (typeof key === 'function' ? key(r) : r[key]) || '—';
+      const v = m.get(k) || { budget: 0, count: 0 };
+      v.budget += Number(r.planned) || 0; v.count += 1; m.set(k, v);
     }
-    return [...m.entries()].map(([k, v]) => ({ k, ...v, variance: v.actual - v.planned }))
-      .sort((a, b) => b.actual - a.actual);
+    return [...m.entries()].map(([k, v]) => ({ k, ...v })).sort((a, b) => b.budget - a.budget);
   };
-  const byTool = useMP(() => groupBy('tool'), [cur]);
   const byCategory = useMP(() => groupBy('category'), [cur]);
-  const byTeam = useMP(() => groupBy((r) => r.dept), [cur]);
-  // Planned-vs-actual trend across every scoped period (oldest → newest).
+  const byTool = useMP(() => groupBy('tool'), [cur]);
+  const bySub = useMP(() => groupBy('sub'), [cur]);
+  // Monthly budget across every scoped period (chronological).
   const trend = useMP(() => {
     const m = new Map();
-    for (const r of rows) {
-      const v = m.get(r.period) || { planned: 0, actual: 0 };
-      v.planned += Number(r.planned) || 0; v.actual += Number(r.actual) || 0;
-      m.set(r.period, v);
-    }
-    return [...m.entries()].map(([p, v]) => ({ period: p, ...v })).sort((a, b) => a.period.localeCompare(b.period));
+    for (const r of rows) m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
+    return [...m.entries()].map(([p, v]) => ({ period: p, budget: v })).sort((a, b) => a.period.localeCompare(b.period));
   }, [rows]);
 
-  const varPill = (v) => <Pill tone={v > 0 ? 'red' : v < 0 ? 'green' : 'muted'}>{v > 0 ? '+' : ''}{usd(v)}</Pill>;
-
-  // One breakdown row: label, planned vs actual bars, variance.
-  const BreakdownRow = ({ label, planned: p, actual: a, variance: v, max }) => (
+  // One budget breakdown row: label, bar (share of the largest), amount + share.
+  const BudgetRow = ({ label, value, max }) => (
     <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
       <div className="row" style={{ justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
         <span style={{ fontWeight: 500 }}>{label}</span>
-        <span className="mono">{usd(a)} <span className="muted">/ {usd(p)}</span></span>
+        <span className="mono">{inr(value)}</span>
       </div>
-      <div style={{ position: 'relative', height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${max ? (p / max) * 100 : 0}%`, background: 'var(--accent-soft)' }} />
-        <div style={{ position: 'absolute', inset: 0, width: `${max ? (a / max) * 100 : 0}%`, background: v > 0 ? 'var(--red)' : 'var(--accent)' }} />
+      <div style={{ height: 5, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${max ? (value / max) * 100 : 0}%`, height: '100%', background: 'var(--accent)' }} />
       </div>
-      <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>
-        {v > 0 ? 'over' : v < 0 ? 'under' : 'on'} budget by {usd(Math.abs(v))} · {p ? Math.round((a / p) * 100) : 0}% of plan
-      </div>
+      <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>{budget ? ((value / budget) * 100).toFixed(0) : 0}% of budget</div>
     </div>
   );
 
   if (rows.length === 0) {
     return (
       <div className="fadein">
-        <SectionHeader title="Non-Payroll Expense" subtitle="Planned vs actual non-payroll spend by tool, category and team." />
+        <SectionHeader title="Non-Payroll Budget" subtitle="Budgeted non-payroll spend by vendor, category and team." />
         <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 10 }}>📊</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>No expense data in your scope yet</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No budget data in your scope yet</div>
           <div className="muted" style={{ fontSize: 13 }}>Ingest the Non-Payroll Expense sheet with <span className="mono">scripts/import_nonpayroll.cjs</span>.</div>
         </div>
       </div>
     );
   }
 
-  const maxTool = Math.max(1, ...byTool.map((t) => Math.max(t.planned, t.actual)));
-  const maxCat = Math.max(1, ...byCategory.map((t) => Math.max(t.planned, t.actual)));
+  const maxTool = Math.max(1, ...byTool.map((t) => t.budget));
+  const maxCat = Math.max(1, ...byCategory.map((t) => t.budget));
+  const top = byCategory[0] || { k: '—', budget: 0 };
 
   return (
     <div className="fadein">
       <SectionHeader
-        title="Non-Payroll Expense"
-        subtitle={seesAll ? 'Planned vs actual across all teams — single source of truth from the budget sheet.' : 'Planned vs actual for your team — tools, categories and budget variance.'}
+        title="Non-Payroll Budget"
+        subtitle={seesAll ? "Budgeted non-payroll spend across all teams (Apr'26–Mar'27, INR excl GST). Actuals to follow." : "Your team's budgeted non-payroll spend (INR excl GST). Actuals to follow."}
         actions={
           <div className="seg">
-            {periods.map((p) => <button key={p} data-active={(period || periods[0]) === p} onClick={() => setPeriod(p)}>{p}</button>)}
+            <button data-active={period === 'ALL'} onClick={() => setPeriod('ALL')}>FY</button>
+            {periods.map((p) => <button key={p} data-active={period === p} onClick={() => setPeriod(p)}>{pLabel(p)}</button>)}
           </div>
         }
       />
@@ -1837,84 +1828,71 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       {/* KPI tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile">
-          <div className="kpi-name">Planned</div>
-          <div className="kpi-value">{usd(planned)}</div>
-          <div className="kpi-meta"><span>budget for {period || periods[0]}</span></div>
-        </div>
-        <div className="kpi-tile" data-tone={pct > 100 ? 'red' : pct > 90 ? 'amber' : 'green'}>
-          <div className="kpi-name">Actual</div>
-          <div className="kpi-value">{usd(actual)}</div>
-          <div className="kpi-meta"><span>{pct.toFixed(0)}% of plan</span></div>
-        </div>
-        <div className="kpi-tile" data-tone={overTone}>
-          <div className="kpi-name">Variance</div>
-          <div className="kpi-value">{variance > 0 ? '+' : ''}{usd(variance)}</div>
-          <div className="kpi-meta"><span>{variance > 0 ? 'over' : 'under'} budget</span></div>
+          <div className="kpi-name">Budget</div>
+          <div className="kpi-value">{inr(budget)}</div>
+          <div className="kpi-meta"><span>{period === 'ALL' ? 'full year' : pLabel(period)}</span></div>
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Line items</div>
           <div className="kpi-value">{cur.length}</div>
-          <div className="kpi-meta"><span>{new Set(cur.map((r) => r.tool)).size} tools · {new Set(cur.map((r) => r.category)).size} categories</span></div>
+          <div className="kpi-meta"><span>{byTool.length} vendors · {byCategory.length} categories</span></div>
+        </div>
+        <div className="kpi-tile">
+          <div className="kpi-name">Top category</div>
+          <div className="kpi-value" style={{ fontSize: 16 }}>{top.k}</div>
+          <div className="kpi-meta"><span className="mono">{inr(top.budget)} · {budget ? ((top.budget / budget) * 100).toFixed(0) : 0}%</span></div>
+        </div>
+        <div className="kpi-tile">
+          <div className="kpi-name">Teams</div>
+          <div className="kpi-value">{bySub.length}</div>
+          <div className="kpi-meta"><span>sub-teams with budget</span></div>
         </div>
       </div>
 
-      {/* Planned vs actual + gap, with trend */}
-      <Card title={`Planned vs actual · ${period || periods[0]}`} meta={`${pct.toFixed(0)}% of plan`}>
-        <div style={{ height: 14, background: 'var(--panel-2)', borderRadius: 7, overflow: 'hidden', position: 'relative', marginBottom: 8 }}>
-          <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: pct > 100 ? 'var(--red)' : pct > 90 ? 'var(--amber)' : 'var(--green)', borderRadius: 7, transition: 'width 0.5s' }} />
-        </div>
-        <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
-          <span className="mono"><strong>{usd(actual)}</strong> actual</span>
-          <span className="muted">{variance > 0 ? `${usd(variance)} over` : `${usd(-variance)} under`} the {usd(planned)} plan</span>
-        </div>
-        {trend.length > 1 && (
-          <div style={{ marginTop: 18 }}>
-            <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 8 }}>Planned vs actual trend</div>
-            <div className="row" style={{ alignItems: 'flex-end', gap: 12, height: 90 }}>
-              {trend.map((m, i) => {
-                const max = Math.max(...trend.map((x) => Math.max(x.planned, x.actual)));
-                return (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                    <div className="row" style={{ alignItems: 'flex-end', gap: 3, height: 64, width: '100%', justifyContent: 'center' }}>
-                      <div title={`Planned ${usd(m.planned)}`} style={{ width: '38%', height: `${(m.planned / max) * 100}%`, background: 'var(--accent-soft)', borderRadius: 3, minHeight: 4 }} />
-                      <div title={`Actual ${usd(m.actual)}`} style={{ width: '38%', height: `${(m.actual / max) * 100}%`, background: m.actual > m.planned ? 'var(--red)' : 'var(--accent)', borderRadius: 3, minHeight: 4 }} />
-                    </div>
-                    <span className="muted" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{m.period}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Light bar = planned · solid = actual (red when over).</div>
+      {/* Monthly budget trend */}
+      {trend.length > 1 && (
+        <Card title="Monthly budget" meta={`${trend.length} months`}>
+          <div className="row" style={{ alignItems: 'flex-end', gap: 8, height: 90 }}>
+            {trend.map((m, i) => {
+              const max = Math.max(...trend.map((x) => x.budget));
+              return (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>{(m.budget / 1e5).toFixed(1)}L</span>
+                  <div title={inr(m.budget)} style={{ width: '100%', height: `${(m.budget / max) * 100}%`, background: period === m.period ? 'var(--accent)' : 'var(--accent-soft)', borderRadius: 4, minHeight: 6, cursor: 'pointer' }} onClick={() => setPeriod(m.period)} />
+                  <span className="muted" style={{ fontSize: 9.5, whiteSpace: 'nowrap' }}>{pLabel(m.period)}</span>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </Card>
-
-      {/* By tool / by category */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 12 }}>
-        <Card title="By tool" pad={false}>
-          {byTool.map((t) => <BreakdownRow key={t.k} label={t.k} planned={t.planned} actual={t.actual} variance={t.variance} max={maxTool} />)}
+          <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Click a bar to filter that month. Amounts in ₹ lakh.</div>
         </Card>
+      )}
+
+      {/* By category / by vendor */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 12 }}>
         <Card title="By category" pad={false}>
-          {byCategory.map((c) => <BreakdownRow key={c.k} label={c.k} planned={c.planned} actual={c.actual} variance={c.variance} max={maxCat} />)}
+          {byCategory.map((c) => <BudgetRow key={c.k} label={c.k} value={c.budget} max={maxCat} />)}
+        </Card>
+        <Card title="By vendor" pad={false}>
+          {byTool.map((t) => <BudgetRow key={t.k} label={t.k} value={t.budget} max={maxTool} />)}
         </Card>
       </div>
 
-      {/* Per-team utilization — cross-team for L3/Admin, single row for an L2 */}
+      {/* Per-team budget — cross-team for L3/Admin, own sub-teams for an L2 */}
       <div style={{ marginTop: 12 }}>
-      <Card title={seesAll ? 'Cross-team spend' : 'Team spend'} pad={false}>
+      <Card title={seesAll ? 'Budget by team' : 'Your team budget'} pad={false}>
         <table className="tbl">
-          <thead><tr><th>Team</th><th>L2 owner</th><th style={{ textAlign: 'right' }}>Planned</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Variance</th></tr></thead>
+          <thead><tr><th>Sub-team</th><th>L2 owner</th><th style={{ textAlign: 'right' }}>Line items</th><th style={{ textAlign: 'right' }}>Budget</th><th style={{ textAlign: 'right' }}>Share</th></tr></thead>
           <tbody>
-            {byTeam.map((row) => {
-              const teamRows = cur.filter((r) => r.dept === row.k);
-              const owner = CDC.lookup.user(teamRows.find((r) => r.ownerL2)?.ownerL2);
+            {bySub.map((row) => {
+              const owner = CDC.lookup.user(cur.find((r) => r.sub === row.k && r.ownerL2)?.ownerL2);
               return (
                 <tr key={row.k}>
-                  <td style={{ fontWeight: 500 }}>{CDC.lookup.dept(row.k)?.short || 'Cross-team'}</td>
+                  <td style={{ fontWeight: 500 }}>{row.k}</td>
                   <td className="muted">{owner?.name || '—'}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{usd(row.planned)}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{usd(row.actual)}</td>
-                  <td style={{ textAlign: 'right' }}>{varPill(row.variance)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{row.count}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{inr(row.budget)}</td>
+                  <td className="mono muted" style={{ textAlign: 'right' }}>{budget ? ((row.budget / budget) * 100).toFixed(0) : 0}%</td>
                 </tr>
               );
             })}

@@ -1159,27 +1159,27 @@
     ],
   };
 
-  // ── Non-payroll expense (planned vs actual, by tool & category, per team) ──
+  // ── Non-payroll expense (budget / planned spend, by vendor, category, team) ──
   // Structured ledger ingested from the maintained Non-Payroll Expense sheets
   // (scripts/import_nonpayroll.cjs → nonpayroll_expense table → here at runtime).
-  // One row per (period × team × category × tool). `planned` = budget, `actual`
-  // = spend; variance/gap are derived in the view. Seed rows below are demo data
-  // shown until the real sheet is ingested. ownerL2 = the L2 who owns the budget.
+  // The sheets carry BUDGETED amounts only (INR, excl GST); `actual` is null
+  // until an actuals source is wired. One row per (month × team × category ×
+  // vendor). Seed rows below are demo data shown until the real sheet is
+  // ingested. ownerL2 = the L2 who owns the budget. period = 'YYYY-MM'.
   const NONPAYROLL_EXPENSE = [
-    { id: 'npe-1',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'AI Tooling',          tool: 'OpenAI Team',    planned: 4200, actual: 4810, currency: 'USD', notes: 'Question-gen usage up' },
-    { id: 'npe-2',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — English',  ownerL2: 'NW0006195', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 3600, actual: 3120, currency: 'USD', notes: '' },
-    { id: 'npe-3',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'SaaS Subscriptions',   tool: 'Grammarly',      planned: 900,  actual: 900,  currency: 'USD', notes: '' },
-    { id: 'npe-4',  period: '2026-Q2', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'Compute',             tool: 'AWS GPU',        planned: 7800, actual: 9240, currency: 'USD', notes: 'Training runs overran' },
-    { id: 'npe-5',  period: '2026-Q2', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'AI Tooling',          tool: 'OpenRouter API', planned: 2600, actual: 2410, currency: 'USD', notes: '' },
-    { id: 'npe-6',  period: '2026-Q2', dept: 'd-dsalgo',     sub: null,                 ownerL2: 'NW0002023', category: 'Infrastructure',      tool: 'Pinecone',       planned: 1800, actual: 1980, currency: 'USD', notes: '' },
-    { id: 'npe-7',  period: '2026-Q2', dept: 'd-dsalgo',     sub: null,                 ownerL2: 'NW0002023', category: 'Content Production',   tool: 'Whisper API',    planned: 800,  actual: 640,  currency: 'USD', notes: '' },
-    { id: 'npe-8',  period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — Fullstack',ownerL2: 'NW0001771', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 5200, actual: 6010, currency: 'USD', notes: 'Agentic workflow expansion' },
-    { id: 'npe-9',  period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — GenAI',    ownerL2: 'NW0001778', category: 'AI Tooling',          tool: 'Perplexity Pro', planned: 1500, actual: 1620, currency: 'USD', notes: '' },
-    { id: 'npe-10', period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — GenAI',    ownerL2: 'NW0001778', category: 'SaaS Subscriptions',   tool: 'Figma',          planned: 600,  actual: 600,  currency: 'USD', notes: '' },
-    // Prior period for trend.
-    { id: 'npe-11', period: '2026-Q1', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'AI Tooling',          tool: 'OpenAI Team',    planned: 4000, actual: 3880, currency: 'USD', notes: '' },
-    { id: 'npe-12', period: '2026-Q1', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'Compute',             tool: 'AWS GPU',        planned: 7200, actual: 7010, currency: 'USD', notes: '' },
-    { id: 'npe-13', period: '2026-Q1', dept: 'd-fsgci',      sub: 'Content — Fullstack',ownerL2: 'NW0001771', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 4800, actual: 5120, currency: 'USD', notes: '' },
+    { id: 'npe-demo-1',  period: '2026-08', dept: 'd-fsgci',      sub: 'Central Ops',         ownerL2: 'NW-VIJAY-CO', category: 'Productivity Tools', tool: 'Open Router API', planned: 55279, actual: null, gst: 18, currency: 'INR', notes: 'Automation and application development' },
+    { id: 'npe-demo-2',  period: '2026-08', dept: 'd-fsgci',      sub: 'Content — GenAI',     ownerL2: 'NW0001778',   category: 'Productivity Tools', tool: 'Claude',          planned: 9224,  actual: null, gst: 18, currency: 'INR', notes: 'Efficient content development' },
+    { id: 'npe-demo-3',  period: '2026-08', dept: 'd-fsgci',      sub: 'Content — Fullstack', ownerL2: 'NW0001771',   category: 'Productivity Tools', tool: 'open router API', planned: 39525, actual: null, gst: 18, currency: 'INR', notes: '' },
+    { id: 'npe-demo-4',  period: '2026-08', dept: 'd-fsgci',      sub: 'University Partnership', ownerL2: 'NW0006700', category: 'Travel, Food & Accomodation', tool: 'Vendor Not Defined', planned: 37500, actual: null, gst: 18, currency: 'INR', notes: 'University visits for BOS discussions' },
+    { id: 'npe-demo-5',  period: '2026-08', dept: 'd-dsml',       sub: null,                  ownerL2: 'NW0005433',   category: 'Freelancer',         tool: 'Vendor Not Defined', planned: 90000, actual: null, gst: 18, currency: 'INR', notes: 'Part-time instructor' },
+    { id: 'npe-demo-6',  period: '2026-08', dept: 'd-dsalgo',     sub: null,                  ownerL2: 'NW0002023',   category: 'Productivity Tools', tool: 'Claude',          planned: 9224,  actual: null, gst: 18, currency: 'INR', notes: '' },
+    { id: 'npe-demo-7',  period: '2026-08', dept: 'd-aptenglish', sub: 'Content — Aptitude',  ownerL2: 'NW0002849',   category: 'Productivity Tools', tool: 'Claude',          planned: 9224,  actual: null, gst: 18, currency: 'INR', notes: '' },
+    { id: 'npe-demo-8',  period: '2026-08', dept: 'd-aptenglish', sub: 'Content — English',   ownerL2: 'NW0006195',   category: 'Tools Subscription', tool: 'Grammarly',       planned: 9000,  actual: null, gst: 18, currency: 'INR', notes: '' },
+    // Prior month for the trend.
+    { id: 'npe-demo-9',  period: '2026-07', dept: 'd-fsgci',      sub: 'Central Ops',         ownerL2: 'NW-VIJAY-CO', category: 'Productivity Tools', tool: 'Open Router API', planned: 55279, actual: null, gst: 18, currency: 'INR', notes: '' },
+    { id: 'npe-demo-10', period: '2026-07', dept: 'd-fsgci',      sub: 'Content — GenAI',     ownerL2: 'NW0001778',   category: 'Freelancers',        tool: 'Vendor Not Defined', planned: 500000, actual: null, gst: 18, currency: 'INR', notes: 'Part-time instructor — content recording' },
+    { id: 'npe-demo-11', period: '2026-07', dept: 'd-dsalgo',     sub: null,                  ownerL2: 'NW0002023',   category: 'Freelancer',         tool: 'Vendor Not Defined', planned: 90000, actual: null, gst: 18, currency: 'INR', notes: '' },
+    { id: 'npe-demo-12', period: '2026-07', dept: 'd-aptenglish', sub: 'Content — Aptitude',  ownerL2: 'NW0002849',   category: 'Productivity Tools', tool: 'Coursera',        planned: 5000,  actual: null, gst: 18, currency: 'INR', notes: '' },
   ];
 
   // ── Codex content: Workflows + Guidelines ─────────────────────────────
