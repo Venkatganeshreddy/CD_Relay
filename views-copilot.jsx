@@ -120,13 +120,14 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
               <Pill tone="accent" dot>claude-sonnet-4-6</Pill>
             </div>
             <div className="h-subtitle" style={{ fontSize: 12 }}>
-              Grounded in <strong>{corpus.reportCount}</strong> reports, <strong>{corpus.kpiCount}</strong> KPIs, <strong>{corpus.taskCount}</strong> tasks, <strong>{corpus.flagCount}</strong> flags · scope: <span className="mono code">{scopeLabelFor(currentUser)}</span>
+              Answers &amp; actions across your scope · <span className="mono code">{scopeLabelFor(currentUser)}</span>
             </div>
           </div>
           <div className="row" style={{ gap: 6 }}>
-            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5, background: (serverLLM || hasKey) ? 'var(--accent-soft)' : 'var(--panel)', border: '1px solid ' + ((serverLLM || hasKey) ? 'var(--accent-border)' : 'var(--border)'), color: (serverLLM || hasKey) ? 'var(--accent)' : 'var(--text-muted)' }}>
+            <span title={serverLLM ? 'Using the shared server key (relay-agent Edge Function) — no personal key needed.' : hasKey ? 'Using your personal OpenRouter key.' : 'No model reachable — add an OpenRouter key.'}
+              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5, background: (serverLLM || hasKey) ? 'var(--accent-soft)' : 'var(--panel)', border: '1px solid ' + ((serverLLM || hasKey) ? 'var(--accent-border)' : 'var(--border)'), color: (serverLLM || hasKey) ? 'var(--accent)' : 'var(--text-muted)' }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: (serverLLM || hasKey) ? 'var(--accent)' : 'var(--text-faint)' }} />
-              {serverLLM ? 'LLM connected · server' : hasKey ? 'LLM connected' : 'offline mode'}
+              {(serverLLM || hasKey) ? 'Connected' : 'Offline'}
             </span>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setShowKeyInput((v) => !v)}>
               <Icon name="plug" size={12} /> API key
@@ -175,25 +176,6 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
                     onClick={() => { setInput(q); if (composerRef.current) composerRef.current.focus(); }}>{q}</span>
                 ))}
               </div>
-            </div>
-
-            <div style={{ marginTop: 28 }} className="card card-pad">
-              <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-                <Icon name="plug" size={14} />
-                <strong style={{ fontSize: 13 }}>Use from Claude Desktop, Code, or Cursor</strong>
-              </div>
-              <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-                Relay exposes an MCP server with 11 read-only tools. Drop this into your client config:
-              </div>
-              <pre className="code" style={{ display: 'block', padding: 12, background: 'var(--panel)', borderRadius: 6, fontSize: 11.5, overflow: 'auto', margin: 0 }}>{`{
-  "mcpServers": {
-    "cd-copilot": {
-      "command": "npx",
-      "args": ["@cd-copilot/mcp"],
-      "env": { "CDC_TOKEN": "pat_••••••••••••" }
-    }
-  }
-}`}</pre>
             </div>
           </div>
         )}
