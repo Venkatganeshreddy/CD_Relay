@@ -1743,6 +1743,26 @@ function ExpenseView({ tweaks, currentUser, nav }) {
 }
 window.ExpenseView = ExpenseView;
 
+// Compact multi-select dropdown (checkbox list in a <details> popover). [] = all.
+function MultiSelect({ label, options, selected, onChange }) {
+  const sel = selected || [];
+  const toggle = (o) => onChange(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o]);
+  const btn = { fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: sel.length ? 'var(--accent-soft)' : 'var(--panel)', color: sel.length ? 'var(--accent)' : 'var(--text)', cursor: 'pointer', listStyle: 'none', whiteSpace: 'nowrap' };
+  return (
+    <details style={{ position: 'relative' }}>
+      <summary style={btn}>{sel.length ? `${label}: ${sel.length}` : `All ${label.toLowerCase()}`} ▾</summary>
+      <div style={{ position: 'absolute', zIndex: 30, marginTop: 4, right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-md)', padding: 6, maxHeight: 300, overflowY: 'auto', minWidth: 200 }}>
+        {sel.length > 0 && <div onClick={() => onChange([])} style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer', padding: '4px 6px', fontWeight: 500 }}>Clear all</div>}
+        {options.map((o) => (
+          <label key={o} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 6px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} /> {o}
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 // ── Non-Payroll Expense — budget (planned) by vendor, category & team ──────
 // The maintained sheet carries budgeted amounts only (INR, excl GST); actuals
 // are not yet wired, so this is a budget dashboard. Scoped per role: L3/Admin
@@ -1754,22 +1774,25 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
   const allCats = useMP(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort(), [rows]);
   const allSubs = useMP(() => [...new Set(rows.map((r) => r.sub || '—'))].sort(), [rows]);
-  // Filters: months is multi-select ([] = all months); category/team single ('' = all).
+  const allVendors = useMP(() => [...new Set(rows.map((r) => r.tool).filter(Boolean))].sort(), [rows]);
+  // Every filter is multi-select; an empty array means "all".
   const [months, setMonths] = useStP([]);
-  const [cat, setCat] = useStP('');
-  const [sub, setSub] = useStP('');
+  const [cats, setCats] = useStP([]);
+  const [subs, setSubs] = useStP([]);
+  const [vendors, setVendors] = useStP([]);
   const toggleMonth = (p) => setMonths((s) => s.includes(p) ? s.filter((x) => x !== p) : [...s, p]);
   const cur = rows.filter((r) =>
     (months.length === 0 || months.includes(r.period)) &&
-    (!cat || r.category === cat) &&
-    (!sub || (r.sub || '—') === sub));
+    (cats.length === 0 || cats.includes(r.category)) &&
+    (subs.length === 0 || subs.includes(r.sub || '—')) &&
+    (vendors.length === 0 || vendors.includes(r.tool)));
 
   // INR, Indian grouping (lakh/crore). '2026-08' → "Aug '26".
   const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const pLabel = (p) => { const m = /^(\d{4})-(\d{2})$/.exec(p || ''); return m ? `${MON[+m[2] - 1]} '${m[1].slice(2)}` : p; };
-  const selStyle = { fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)' };
   const monthsLabel = months.length === 0 ? 'full year' : months.length === 1 ? pLabel(months[0]) : `${months.length} months`;
+  const filterNote = [cats.length && `${cats.length} cat`, subs.length && `${subs.length} team`, vendors.length && `${vendors.length} vendor`].filter(Boolean).join(' · ');
 
   const budget = cur.reduce((s, r) => s + (Number(r.planned) || 0), 0);
   // Group current rows by a key → [{ k, budget, count }] desc by budget.
@@ -1790,12 +1813,13 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const trend = useMP(() => {
     const m = new Map();
     for (const r of rows) {
-      if (cat && r.category !== cat) continue;
-      if (sub && (r.sub || '—') !== sub) continue;
+      if (cats.length && !cats.includes(r.category)) continue;
+      if (subs.length && !subs.includes(r.sub || '—')) continue;
+      if (vendors.length && !vendors.includes(r.tool)) continue;
       m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
     }
     return [...m.entries()].map(([p, v]) => ({ period: p, budget: v })).sort((a, b) => a.period.localeCompare(b.period));
-  }, [rows, cat, sub]);
+  }, [rows, cats, subs, vendors]);
 
   // One budget breakdown row: label, bar (share of the largest), amount + share.
   const BudgetRow = ({ label, value, max }) => (
@@ -1839,14 +1863,9 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
               <button data-active={months.length === 0} onClick={() => setMonths([])}>All</button>
               {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
             </div>
-            <select value={cat} onChange={(e) => setCat(e.target.value)} style={selStyle}>
-              <option value="">All categories</option>
-              {allCats.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select value={sub} onChange={(e) => setSub(e.target.value)} style={selStyle}>
-              <option value="">All teams</option>
-              {allSubs.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <MultiSelect label="Category" options={allCats} selected={cats} onChange={setCats} />
+            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={setSubs} />
+            <MultiSelect label="Vendor" options={allVendors} selected={vendors} onChange={setVendors} />
           </div>
         }
       />
@@ -1856,7 +1875,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         <div className="kpi-tile">
           <div className="kpi-name">Budget</div>
           <div className="kpi-value">{inr(budget)}</div>
-          <div className="kpi-meta"><span>{monthsLabel}{cat ? ` · ${cat}` : ''}{sub ? ` · ${sub}` : ''}</span></div>
+          <div className="kpi-meta"><span>{monthsLabel}{filterNote ? ` · ${filterNote}` : ''}</span></div>
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Line items</div>
