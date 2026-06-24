@@ -473,7 +473,16 @@ function buildSystemPrompt(corpus, user) {
     ? `Non-payroll budget: ${npe.length} rows, total ₹${npeTotal.toLocaleString('en-IN')}. Sample rows: ${npe.slice(0, 12).map((r) => `[${r.id}] ${r.tool}/${r.category}/${r.period} ₹${r.planned}`).join(' ; ')}`
     : 'No non-payroll budget rows in scope.';
   const wls = (CDC.filterWorklogs ? CDC.filterWorklogs(user.id) : []) || [];
-  const wlLine = `Worklogs in scope: ${wls.length} entries.`;
+  const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+  const wlName = (w) => (CDC.lookup.user(w.userId || w.empId) || {}).name || w.userName || w.userId || '—';
+  const wlToday = wls.filter((w) => w.date === todayStr);
+  const todayBy = {};
+  wlToday.forEach((w) => { const n = wlName(w); todayBy[n] = (todayBy[n] || 0) + (Number(w.hours) || 0); });
+  const todayRoll = Object.keys(todayBy).length
+    ? Object.entries(todayBy).map(([n, h]) => `${n} (${h}h)`).join(', ')
+    : 'nobody has logged today yet';
+  const wlRecent = wls.slice(0, 40).map((w) => `${w.date} · ${wlName(w)} · ${w.hours || 0}h · ${w.outputCategory || w.taskCategory || '—'} · ${w.status || ''}`).join('\n');
+  const wlBlock = `Worklogs in scope: ${wls.length} total. Logged TODAY (${todayStr}): ${todayRoll}.\nRecent entries (date · person · hours · category · status):\n${wlRecent}`;
 
   return `You are Relay, an internal AI assistant for a department operating copilot.
 The current user is ${user.name} (role=${user.role}). Their RBAC scope is: ${scopeLabelFor(user)}.
@@ -495,7 +504,8 @@ ${flagLines}
 PEOPLE (use the [emp-id] when an action needs an owner/employee):
 ${peopleLines}
 
-WORKLOGS: ${wlLine}
+WORKLOGS (answer "who logged / what was logged / who logged today" from these):
+${wlBlock}
 
 NON-PAYROLL BUDGET:
 ${budgetLine}
