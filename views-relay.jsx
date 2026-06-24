@@ -1743,23 +1743,30 @@ function ExpenseView({ tweaks, currentUser, nav }) {
 }
 window.ExpenseView = ExpenseView;
 
-// Compact multi-select dropdown (checkbox list in a <details> popover). [] = all.
-function MultiSelect({ label, options, selected, onChange }) {
+// Compact multi-select dropdown (checkbox list). Controlled open state so only
+// one filter is open at a time. [] selected = all.
+function MultiSelect({ label, options, selected, open, onToggleOpen, onChange }) {
   const sel = selected || [];
   const toggle = (o) => onChange(sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o]);
-  const btn = { fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: sel.length ? 'var(--accent-soft)' : 'var(--panel)', color: sel.length ? 'var(--accent)' : 'var(--text)', cursor: 'pointer', listStyle: 'none', whiteSpace: 'nowrap' };
+  const btn = { fontSize: 12, padding: '5px 9px', borderRadius: 6, border: '1px solid ' + (sel.length ? 'var(--accent-border)' : 'var(--border)'), background: sel.length ? 'var(--accent-soft)' : 'var(--panel)', color: sel.length ? 'var(--accent)' : 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 500 };
   return (
-    <details style={{ position: 'relative' }}>
-      <summary style={btn}>{sel.length ? `${label}: ${sel.length}` : `All ${label.toLowerCase()}`} ▾</summary>
-      <div style={{ position: 'absolute', zIndex: 30, marginTop: 4, right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-md)', padding: 6, maxHeight: 300, overflowY: 'auto', minWidth: 200 }}>
-        {sel.length > 0 && <div onClick={() => onChange([])} style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer', padding: '4px 6px', fontWeight: 500 }}>Clear all</div>}
-        {options.map((o) => (
-          <label key={o} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 6px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} /> {o}
-          </label>
-        ))}
-      </div>
-    </details>
+    <div style={{ position: 'relative' }}>
+      <button type="button" style={btn} onClick={onToggleOpen}>{sel.length ? `${label}: ${sel.length}` : `All ${label.toLowerCase()}`} ▾</button>
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 40, marginTop: 4, right: 0, width: 240, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow-lg)', padding: 6, maxHeight: 320, overflowY: 'auto' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '2px 6px 6px', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+            <span className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.05 }}>{label}</span>
+            {sel.length > 0 && <span onClick={() => onChange([])} style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}>Clear ({sel.length})</span>}
+          </div>
+          {options.map((o) => (
+            <label key={o} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 6px', fontSize: 12, cursor: 'pointer', lineHeight: 1.3, borderRadius: 4 }}>
+              <input type="checkbox" checked={sel.includes(o)} onChange={() => toggle(o)} style={{ marginTop: 1, flexShrink: 0 }} />
+              <span>{o}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1780,6 +1787,8 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const [cats, setCats] = useStP([]);
   const [subs, setSubs] = useStP([]);
   const [vendors, setVendors] = useStP([]);
+  const [openFilter, setOpenFilter] = useStP(null);   // which dropdown is open ('cat'|'team'|'vendor'|null)
+  const openProps = (id) => ({ open: openFilter === id, onToggleOpen: () => setOpenFilter((o) => o === id ? null : id) });
   const toggleMonth = (p) => setMonths((s) => s.includes(p) ? s.filter((x) => x !== p) : [...s, p]);
   const cur = rows.filter((r) =>
     (months.length === 0 || months.includes(r.period)) &&
@@ -1854,18 +1863,19 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
 
   return (
     <div className="fadein">
+      {openFilter && <div onClick={() => setOpenFilter(null)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />}
       <SectionHeader
         title="Non-Payroll Budget"
         subtitle={seesAll ? "Budgeted non-payroll spend across all teams (Apr'26–Mar'27, INR excl GST). Actuals to follow." : "Your team's budgeted non-payroll spend (INR excl GST). Actuals to follow."}
         actions={
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', zIndex: 50 }}>
             <div className="seg">
               <button data-active={months.length === 0} onClick={() => setMonths([])}>All</button>
               {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
             </div>
-            <MultiSelect label="Category" options={allCats} selected={cats} onChange={setCats} />
-            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={setSubs} />
-            <MultiSelect label="Vendor" options={allVendors} selected={vendors} onChange={setVendors} />
+            <MultiSelect label="Category" options={allCats} selected={cats} onChange={setCats} {...openProps('cat')} />
+            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={setSubs} {...openProps('team')} />
+            <MultiSelect label="Vendor" options={allVendors} selected={vendors} onChange={setVendors} {...openProps('vendor')} />
           </div>
         }
       />
