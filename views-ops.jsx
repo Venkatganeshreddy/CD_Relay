@@ -408,8 +408,9 @@ function TasksView({ tweaks, currentUser }) {
   }
 
   const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
-  // Escalation queue = anything escalated, blocked, or overdue (what L3 reviews "separately").
-  const isEscalated = (t) => t.status === 'ESCALATED' || t.status === 'BLOCKED' || isOverdue(t);
+  // Escalated = ONLY tasks at ESCALATED status. Blocked and Overdue have their
+  // own tabs, so they are no longer folded into the Escalated count.
+  const isEscalated = (t) => t.status === 'ESCALATED';
 
   // ── Time-based escalation rules (Sentry scan). Climbs L1 → L2 → L3. ─────────
   const DAY_MS = 864e5;
@@ -698,7 +699,7 @@ function TasksView({ tweaks, currentUser }) {
             <tr>
               <th>Task</th>
               <th>Owner</th>
-              <th>Due</th>
+              <th>Dates</th>
               <th>Status</th>
               <th style={{ width: 210 }}>Action</th>
             </tr>
@@ -741,7 +742,8 @@ function TasksView({ tweaks, currentUser }) {
                   </td>
                   <td className="muted">{ownerName}</td>
                   <td className="muted mono" style={{ fontSize: 12 }}>
-                    {t.due || '—'}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>overdue</span>}
+                    <div>due {t.due || '—'}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>{daysOverdue(t)}d overdue</span>}</div>
+                    {t.created && <div className="muted" style={{ fontSize: 10, marginTop: 1 }}>created {t.created}</div>}
                   </td>
                   <td>
                     {/* Read-only on the board — status is changed only on the
