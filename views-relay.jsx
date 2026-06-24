@@ -358,6 +358,7 @@ const KN_BUCKETS = [
   { id: 'emp', label: 'Emp data' },
   { id: 'taskflow', label: 'Task flow' },
   { id: 'momflow', label: 'MOM flow' },
+  { id: 'finance', label: 'Finance' },
   { id: 'arch', label: 'Architecture' },
   { id: 'hierarchy', label: 'Hierarchy' },
 ];
@@ -365,6 +366,7 @@ function kn_bucket(doc) {
   const p = (doc.path || doc.id || '').toLowerCase();
   const t = doc.title || '';
   if (doc.type === 'person' || p.startsWith('people/')) return 'emp';
+  if (doc.type === 'finance' || p.startsWith('finance/') || /expense|budget|non-payroll/i.test(p)) return 'finance';
   if (p === 'org.md' || /\borg\b|hierarch/i.test(p)) return 'hierarchy';
   if (/mom|meeting/i.test(p) || /mom|meeting/i.test(t)) return 'momflow';
   if (p.startsWith('guidelines/') || p.startsWith('workflows/')) return 'taskflow';
@@ -469,6 +471,14 @@ function KnowledgeView({ tweaks, currentUser, nav }) {
           <h2 className="h-section" style={{ margin: 0 }}>MOM flow</h2>
           <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>Meeting transcript → Scribe extracts action items → Dispatcher routes each to an owner → tasks &amp; meeting memory land in the Second Brain.</div>
           <DocList items={docsIn('momflow')} />
+        </div>
+      )}
+
+      {bucket === 'finance' && (
+        <div className="col" style={{ gap: 14 }}>
+          <h2 className="h-section" style={{ margin: 0 }}>Non-payroll expense</h2>
+          <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>The maintained Non-Payroll Expense sheet, ingested as the single source of truth — planned vs actual by tool, category and team. The structured dashboard lives under <span className="mono">Non-Payroll Expense</span>; the Concierge grounds budget questions against the doc below.</div>
+          <DocList items={docsIn('finance')} />
         </div>
       )}
 
@@ -1732,3 +1742,187 @@ function ExpenseView({ tweaks, currentUser, nav }) {
   );
 }
 window.ExpenseView = ExpenseView;
+
+// ── Non-Payroll Expense — planned vs actual, by tool & category, per team ──
+// Scoped per role: L3/Admin see every team (+ cross-team table); an L2 sees only
+// their own team's budget (window.CDC.filterNonpayroll handles the scoping).
+function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
+  const CDC = window.CDC;
+  const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
+  const rows = CDC.filterNonpayroll(currentUser.id) || [];
+  const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort().reverse(), [rows]);
+  const [period, setPeriod] = useStP(periods[0] || '');
+  const cur = rows.filter((r) => r.period === (period || periods[0]));
+
+  const usd = (n) => `$${Math.round(n).toLocaleString()}`;
+  const sum = (arr, k) => arr.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  const planned = sum(cur, 'planned'), actual = sum(cur, 'actual');
+  const variance = actual - planned;                       // + = over budget
+  const pct = planned ? (actual / planned) * 100 : 0;
+  const overTone = variance > 0 ? 'red' : 'green';
+
+  // Group current-period rows by an arbitrary key into {planned, actual}.
+  const groupBy = (key) => {
+    const m = new Map();
+    for (const r of cur) {
+      const k = typeof key === 'function' ? key(r) : r[key];
+      const v = m.get(k) || { planned: 0, actual: 0 };
+      v.planned += Number(r.planned) || 0; v.actual += Number(r.actual) || 0;
+      m.set(k, v);
+    }
+    return [...m.entries()].map(([k, v]) => ({ k, ...v, variance: v.actual - v.planned }))
+      .sort((a, b) => b.actual - a.actual);
+  };
+  const byTool = useMP(() => groupBy('tool'), [cur]);
+  const byCategory = useMP(() => groupBy('category'), [cur]);
+  const byTeam = useMP(() => groupBy((r) => r.dept), [cur]);
+  // Planned-vs-actual trend across every scoped period (oldest → newest).
+  const trend = useMP(() => {
+    const m = new Map();
+    for (const r of rows) {
+      const v = m.get(r.period) || { planned: 0, actual: 0 };
+      v.planned += Number(r.planned) || 0; v.actual += Number(r.actual) || 0;
+      m.set(r.period, v);
+    }
+    return [...m.entries()].map(([p, v]) => ({ period: p, ...v })).sort((a, b) => a.period.localeCompare(b.period));
+  }, [rows]);
+
+  const varPill = (v) => <Pill tone={v > 0 ? 'red' : v < 0 ? 'green' : 'muted'}>{v > 0 ? '+' : ''}{usd(v)}</Pill>;
+
+  // One breakdown row: label, planned vs actual bars, variance.
+  const BreakdownRow = ({ label, planned: p, actual: a, variance: v, max }) => (
+    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+        <span style={{ fontWeight: 500 }}>{label}</span>
+        <span className="mono">{usd(a)} <span className="muted">/ {usd(p)}</span></span>
+      </div>
+      <div style={{ position: 'relative', height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${max ? (p / max) * 100 : 0}%`, background: 'var(--accent-soft)' }} />
+        <div style={{ position: 'absolute', inset: 0, width: `${max ? (a / max) * 100 : 0}%`, background: v > 0 ? 'var(--red)' : 'var(--accent)' }} />
+      </div>
+      <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>
+        {v > 0 ? 'over' : v < 0 ? 'under' : 'on'} budget by {usd(Math.abs(v))} · {p ? Math.round((a / p) * 100) : 0}% of plan
+      </div>
+    </div>
+  );
+
+  if (rows.length === 0) {
+    return (
+      <div className="fadein">
+        <SectionHeader title="Non-Payroll Expense" subtitle="Planned vs actual non-payroll spend by tool, category and team." />
+        <div className="empty" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📊</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>No expense data in your scope yet</div>
+          <div className="muted" style={{ fontSize: 13 }}>Ingest the Non-Payroll Expense sheet with <span className="mono">scripts/import_nonpayroll.cjs</span>.</div>
+        </div>
+      </div>
+    );
+  }
+
+  const maxTool = Math.max(1, ...byTool.map((t) => Math.max(t.planned, t.actual)));
+  const maxCat = Math.max(1, ...byCategory.map((t) => Math.max(t.planned, t.actual)));
+
+  return (
+    <div className="fadein">
+      <SectionHeader
+        title="Non-Payroll Expense"
+        subtitle={seesAll ? 'Planned vs actual across all teams — single source of truth from the budget sheet.' : 'Planned vs actual for your team — tools, categories and budget variance.'}
+        actions={
+          <div className="seg">
+            {periods.map((p) => <button key={p} data-active={(period || periods[0]) === p} onClick={() => setPeriod(p)}>{p}</button>)}
+          </div>
+        }
+      />
+
+      {/* KPI tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+        <div className="kpi-tile">
+          <div className="kpi-name">Planned</div>
+          <div className="kpi-value">{usd(planned)}</div>
+          <div className="kpi-meta"><span>budget for {period || periods[0]}</span></div>
+        </div>
+        <div className="kpi-tile" data-tone={pct > 100 ? 'red' : pct > 90 ? 'amber' : 'green'}>
+          <div className="kpi-name">Actual</div>
+          <div className="kpi-value">{usd(actual)}</div>
+          <div className="kpi-meta"><span>{pct.toFixed(0)}% of plan</span></div>
+        </div>
+        <div className="kpi-tile" data-tone={overTone}>
+          <div className="kpi-name">Variance</div>
+          <div className="kpi-value">{variance > 0 ? '+' : ''}{usd(variance)}</div>
+          <div className="kpi-meta"><span>{variance > 0 ? 'over' : 'under'} budget</span></div>
+        </div>
+        <div className="kpi-tile">
+          <div className="kpi-name">Line items</div>
+          <div className="kpi-value">{cur.length}</div>
+          <div className="kpi-meta"><span>{new Set(cur.map((r) => r.tool)).size} tools · {new Set(cur.map((r) => r.category)).size} categories</span></div>
+        </div>
+      </div>
+
+      {/* Planned vs actual + gap, with trend */}
+      <Card title={`Planned vs actual · ${period || periods[0]}`} meta={`${pct.toFixed(0)}% of plan`}>
+        <div style={{ height: 14, background: 'var(--panel-2)', borderRadius: 7, overflow: 'hidden', position: 'relative', marginBottom: 8 }}>
+          <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: pct > 100 ? 'var(--red)' : pct > 90 ? 'var(--amber)' : 'var(--green)', borderRadius: 7, transition: 'width 0.5s' }} />
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
+          <span className="mono"><strong>{usd(actual)}</strong> actual</span>
+          <span className="muted">{variance > 0 ? `${usd(variance)} over` : `${usd(-variance)} under`} the {usd(planned)} plan</span>
+        </div>
+        {trend.length > 1 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 8 }}>Planned vs actual trend</div>
+            <div className="row" style={{ alignItems: 'flex-end', gap: 12, height: 90 }}>
+              {trend.map((m, i) => {
+                const max = Math.max(...trend.map((x) => Math.max(x.planned, x.actual)));
+                return (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div className="row" style={{ alignItems: 'flex-end', gap: 3, height: 64, width: '100%', justifyContent: 'center' }}>
+                      <div title={`Planned ${usd(m.planned)}`} style={{ width: '38%', height: `${(m.planned / max) * 100}%`, background: 'var(--accent-soft)', borderRadius: 3, minHeight: 4 }} />
+                      <div title={`Actual ${usd(m.actual)}`} style={{ width: '38%', height: `${(m.actual / max) * 100}%`, background: m.actual > m.planned ? 'var(--red)' : 'var(--accent)', borderRadius: 3, minHeight: 4 }} />
+                    </div>
+                    <span className="muted" style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{m.period}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>Light bar = planned · solid = actual (red when over).</div>
+          </div>
+        )}
+      </Card>
+
+      {/* By tool / by category */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 12 }}>
+        <Card title="By tool" pad={false}>
+          {byTool.map((t) => <BreakdownRow key={t.k} label={t.k} planned={t.planned} actual={t.actual} variance={t.variance} max={maxTool} />)}
+        </Card>
+        <Card title="By category" pad={false}>
+          {byCategory.map((c) => <BreakdownRow key={c.k} label={c.k} planned={c.planned} actual={c.actual} variance={c.variance} max={maxCat} />)}
+        </Card>
+      </div>
+
+      {/* Per-team utilization — cross-team for L3/Admin, single row for an L2 */}
+      <div style={{ marginTop: 12 }}>
+      <Card title={seesAll ? 'Cross-team spend' : 'Team spend'} pad={false}>
+        <table className="tbl">
+          <thead><tr><th>Team</th><th>L2 owner</th><th style={{ textAlign: 'right' }}>Planned</th><th style={{ textAlign: 'right' }}>Actual</th><th style={{ textAlign: 'right' }}>Variance</th></tr></thead>
+          <tbody>
+            {byTeam.map((row) => {
+              const teamRows = cur.filter((r) => r.dept === row.k);
+              const owner = CDC.lookup.user(teamRows.find((r) => r.ownerL2)?.ownerL2);
+              return (
+                <tr key={row.k}>
+                  <td style={{ fontWeight: 500 }}>{CDC.lookup.dept(row.k)?.short || 'Cross-team'}</td>
+                  <td className="muted">{owner?.name || '—'}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{usd(row.planned)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{usd(row.actual)}</td>
+                  <td style={{ textAlign: 'right' }}>{varPill(row.variance)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+      </div>
+    </div>
+  );
+}
+window.NonPayrollExpenseView = NonPayrollExpenseView;

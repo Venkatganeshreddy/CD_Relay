@@ -200,6 +200,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     { id: 'missing', label: 'Missing reports', icon: 'tasks', badge: window.CDC.dailyStatus(currentUser.id).filter((s) => !s.submitted).length || null, badgeTone: 'amber' },
     { id: 'weekly', label: 'Weekly drafts', icon: 'weekly', badge: window.CDC.filterWeekly(currentUser.id).filter((w) => w.status === 'DRAFT').length, badgeTone: 'amber' },
     { id: 'monthly', label: 'Monthly worklogs', icon: 'weekly' },
+    { id: 'nonpayroll', label: 'Non-Payroll Expense', icon: 'runs' },
     { id: 'second-brain', label: 'Second Brain', icon: 'sparkles' },
   ] : [];
   const groupIntel = [
@@ -283,6 +284,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'knowledge': return <KnowledgeView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'codex': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'expense': return <ExpenseView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'nonpayroll': return <NonPayrollExpenseView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'engram': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'farm': return <FarmView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'guideline': return <GuidelineView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -471,6 +473,7 @@ function buildCrumbs(route, currentUser) {
     case 'knowledge': return ['System', 'Admin', 'Knowledge'];
     case 'architecture': return ['System', 'Codex', 'Architecture'];
     case 'expense': return ['System', 'Tool Expense Tracker'];
+    case 'nonpayroll': return ['Department', 'Non-Payroll Expense'];
     case 'engram': return ['System', 'Engram'];
     case 'guideline': return ['System', 'Guideline'];
     case 'team': return ['Department', 'Sub Department'];

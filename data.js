@@ -1159,6 +1159,29 @@
     ],
   };
 
+  // ── Non-payroll expense (planned vs actual, by tool & category, per team) ──
+  // Structured ledger ingested from the maintained Non-Payroll Expense sheets
+  // (scripts/import_nonpayroll.cjs → nonpayroll_expense table → here at runtime).
+  // One row per (period × team × category × tool). `planned` = budget, `actual`
+  // = spend; variance/gap are derived in the view. Seed rows below are demo data
+  // shown until the real sheet is ingested. ownerL2 = the L2 who owns the budget.
+  const NONPAYROLL_EXPENSE = [
+    { id: 'npe-1',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'AI Tooling',          tool: 'OpenAI Team',    planned: 4200, actual: 4810, currency: 'USD', notes: 'Question-gen usage up' },
+    { id: 'npe-2',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — English',  ownerL2: 'NW0006195', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 3600, actual: 3120, currency: 'USD', notes: '' },
+    { id: 'npe-3',  period: '2026-Q2', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'SaaS Subscriptions',   tool: 'Grammarly',      planned: 900,  actual: 900,  currency: 'USD', notes: '' },
+    { id: 'npe-4',  period: '2026-Q2', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'Compute',             tool: 'AWS GPU',        planned: 7800, actual: 9240, currency: 'USD', notes: 'Training runs overran' },
+    { id: 'npe-5',  period: '2026-Q2', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'AI Tooling',          tool: 'OpenRouter API', planned: 2600, actual: 2410, currency: 'USD', notes: '' },
+    { id: 'npe-6',  period: '2026-Q2', dept: 'd-dsalgo',     sub: null,                 ownerL2: 'NW0002023', category: 'Infrastructure',      tool: 'Pinecone',       planned: 1800, actual: 1980, currency: 'USD', notes: '' },
+    { id: 'npe-7',  period: '2026-Q2', dept: 'd-dsalgo',     sub: null,                 ownerL2: 'NW0002023', category: 'Content Production',   tool: 'Whisper API',    planned: 800,  actual: 640,  currency: 'USD', notes: '' },
+    { id: 'npe-8',  period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — Fullstack',ownerL2: 'NW0001771', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 5200, actual: 6010, currency: 'USD', notes: 'Agentic workflow expansion' },
+    { id: 'npe-9',  period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — GenAI',    ownerL2: 'NW0001778', category: 'AI Tooling',          tool: 'Perplexity Pro', planned: 1500, actual: 1620, currency: 'USD', notes: '' },
+    { id: 'npe-10', period: '2026-Q2', dept: 'd-fsgci',      sub: 'Content — GenAI',    ownerL2: 'NW0001778', category: 'SaaS Subscriptions',   tool: 'Figma',          planned: 600,  actual: 600,  currency: 'USD', notes: '' },
+    // Prior period for trend.
+    { id: 'npe-11', period: '2026-Q1', dept: 'd-aptenglish', sub: 'Content — Aptitude', ownerL2: 'NW0002849', category: 'AI Tooling',          tool: 'OpenAI Team',    planned: 4000, actual: 3880, currency: 'USD', notes: '' },
+    { id: 'npe-12', period: '2026-Q1', dept: 'd-dsml',       sub: null,                 ownerL2: 'NW0005433', category: 'Compute',             tool: 'AWS GPU',        planned: 7200, actual: 7010, currency: 'USD', notes: '' },
+    { id: 'npe-13', period: '2026-Q1', dept: 'd-fsgci',      sub: 'Content — Fullstack',ownerL2: 'NW0001771', category: 'AI Tooling',          tool: 'Anthropic Team', planned: 4800, actual: 5120, currency: 'USD', notes: '' },
+  ];
+
   // ── Codex content: Workflows + Guidelines ─────────────────────────────
   const CODEX_WORKFLOWS = [
     { id: 'wf-daily',   name: 'Daily report flow',     trigger: '17:00 IST + 22:00 nudge', agents: ['Nudge', 'Concierge', 'Scribe (form)'], outputs: ['daily_reports'], version: 'v4' },
@@ -1303,6 +1326,21 @@
     const s = scopeForUser(userId);
     if (s.kind === 'all') return WEEKLY;
     if (s.kind === 'dept' || s.kind === 'sub') return WEEKLY.filter((w) => w.dept === s.dept);
+    return [];
+  }
+  // Non-payroll expense scope: L3/Admin see every row (+ cross-team analytics);
+  // an L2 sees only their own team's budget — their dept+sub, anything they own
+  // (ownerL2), or anyone in their management subtree.
+  function filterNonpayroll(userId) {
+    const s = scopeForUser(userId);
+    if (s.kind === 'all') return NONPAYROLL_EXPENSE;
+    if (s.kind === 'dept') return NONPAYROLL_EXPENSE.filter((e) => e.dept === s.dept);
+    if (s.kind === 'sub') {
+      return NONPAYROLL_EXPENSE.filter((e) =>
+        e.ownerL2 === userId ||
+        (e.dept === s.dept && e.sub === s.sub) ||
+        inMgmtSubtree(userId, e.ownerL2));
+    }
     return [];
   }
 
@@ -1581,8 +1619,8 @@
     KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
     WORKLOGS, empIdForUser, WEEKLY_DIGESTS, RECOMMENDATIONS,
     ENGRAM, EVAL_SETS, PROPOSALS, FARM_AGENTS,
-    RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,
-    scopeForUser, filterDepartments, filterReports, filterKpis, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterEngram,
+    RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, NONPAYROLL_EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,
+    scopeForUser, filterDepartments, filterReports, filterKpis, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterNonpayroll, filterEngram,
     stackForUser, reportersInScope, dailyStatus, consolidateByCategory, worklogsWithin,
     lookup,
   };

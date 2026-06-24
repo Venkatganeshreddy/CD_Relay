@@ -39,8 +39,9 @@
     farm_agents: 'FARM_AGENTS', relay_agents: 'RELAY_AGENTS', codex_workflows: 'CODEX_WORKFLOWS',
     codex_guidelines: 'CODEX_GUIDELINES', ai_runs: 'AI_RUNS', activity: 'ACTIVITY',
     knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
-    recommendations: 'RECOMMENDATIONS',
+    recommendations: 'RECOMMENDATIONS', nonpayroll_expense: 'NONPAYROLL_EXPENSE',
   };
+  if (!Array.isArray(window.CDC.NONPAYROLL_EXPENSE)) window.CDC.NONPAYROLL_EXPENSE = [];
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
   if (!Array.isArray(window.CDC.WEEKLY_DIGESTS)) window.CDC.WEEKLY_DIGESTS = [];
   if (!Array.isArray(window.CDC.RECOMMENDATIONS)) window.CDC.RECOMMENDATIONS = [];
