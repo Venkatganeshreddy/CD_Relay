@@ -8,6 +8,14 @@ const { useState: useStR, useMemo: useMR, useRef: useRR, useEffect: useER } = Re
 // ════════════════════════════════════════════════════════════════════════
 function ManagerView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
+  // Day-wise metrics must track the REAL date. Worklogs/reports freeze daysAgo at
+  // creation time, so recompute it from each row's date on every render — this
+  // keeps "today" / "this week" accurate and rolling, live, without a reload.
+  (() => {
+    const t0 = new Date(CDC.fmt(CDC.today)).getTime();
+    const fix = (rows) => { if (Array.isArray(rows)) for (const r of rows) { const d = r.date || r.work_date; if (d) r.daysAgo = Math.round((t0 - new Date(d).getTime()) / 86400000); } };
+    fix(CDC.WORKLOGS); fix(CDC.REPORTS);
+  })();
   // Pavan G (L3) can use this too, picking from their direct reports.
   // For an L2, their reportees = users where managerId === currentUser.id.
   // Also for an L2 with a sub-team but no listed reportees, synthesize from worklogs.
