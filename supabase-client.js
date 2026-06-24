@@ -370,6 +370,13 @@
         await remote(() => sb.from('worklogs').update({ data: wl }).eq('id', wl.id));
       }
     },
+    // Update a non-payroll budget row (e.g. Concierge edits planned amount).
+    async updateNonpayroll(id, patch) {
+      const r = (window.CDC.NONPAYROLL_EXPENSE || []).find((x) => x.id === id);
+      if (r) Object.assign(r, patch);
+      const remoteOk = await remote(() => sb.from('nonpayroll_expense').update({ dept: (r || patch).dept || null, data: r || { id, ...patch } }).eq('id', id));
+      return { item: r, remoteOk };
+    },
     async addTask(task) {
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
