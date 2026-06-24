@@ -47,6 +47,17 @@
   if (!Array.isArray(window.CDC.RECOMMENDATIONS)) window.CDC.RECOMMENDATIONS = [];
   function fillArray(cdcKey, items) { const a = window.CDC[cdcKey]; if (!Array.isArray(a)) return; a.length = 0; for (const it of items) a.push(it); }
   function fillObject(obj, next) { if (!obj) return; for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, next); }
+  // Recompute each row's `daysAgo` from its real date relative to today, so the
+  // stored (creation-time) value can't keep an old entry looking like "today".
+  function reAge(rows) {
+    if (!Array.isArray(rows)) return;
+    const todayStr = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+    const t0 = new Date(todayStr).getTime();
+    for (const r of rows) {
+      const d = r.date || r.work_date;
+      if (d) r.daysAgo = Math.round((t0 - new Date(d).getTime()) / 86400000);
+    }
+  }
 
   async function loadFromSupabase() {
     if (!sb || !window.CDC) return false;
@@ -65,6 +76,12 @@
       if (res.error) { console.warn('[Relay]', t, '—', res.error.message); continue; }
       if (res.data && res.data.length) { fillArray(ARRAY_MAP[t], res.data.map((r) => r.data)); loadedAny = true; }
     }
+    // Worklogs/reports persist a STATIC daysAgo (0 at creation), but the
+    // dashboard's today/7-day windows filter on daysAgo — so without this an
+    // old entry keeps counting as "today". Recompute daysAgo from the real date
+    // so day-wise metrics only show what was actually logged that day.
+    reAge(window.CDC.WORKLOGS);
+    reAge(window.CDC.REPORTS);
     const dh = await sb.from('dept_health').select('id,data');
     if (dh.data && dh.data.length) { const o = {}; dh.data.forEach((r) => { o[r.id] = r.data; }); fillObject(window.CDC.DEPT_HEALTH, o); loadedAny = true; }
     const ex = await sb.from('expense_doc').select('data').eq('id', 'current').maybeSingle();
