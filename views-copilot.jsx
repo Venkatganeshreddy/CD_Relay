@@ -59,6 +59,15 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
     "What does the Rollup agent do?",
     "Walk me through the weekly rollup process",
   ];
+  // Example write-commands — prefill the composer so the user edits the names /
+  // numbers, then sends. Every change is still Confirm-gated before it runs.
+  const actionExamples = [
+    "Mark <task> as Done",
+    "Create a task for <person>: <what>, due 2026-07-10",
+    "Set <task> numbers: iterations 5, accuracy 92, output 120",
+    "Set the OpenRouter budget for CSI&CO to ₹40000",
+    "Mark <task> as Blocked — waiting on review",
+  ];
 
   async function ask(q) {
     if (!q.trim() || pending) return;
@@ -151,7 +160,24 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
               ))}
             </div>
 
-            <div style={{ marginTop: 32 }} className="card card-pad">
+            <div style={{ marginTop: 22 }}>
+              <div className="row" style={{ gap: 7, alignItems: 'center', marginBottom: 8 }}>
+                <Icon name="sparkles" size={13} />
+                <strong style={{ fontSize: 12.5 }}>…or tell me to make a change</strong>
+                <span className="muted" style={{ fontSize: 11.5 }}>— I’ll show a Confirm button before anything is saved</span>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
+                Update task status (the Day-end glance), create &amp; assign tasks, fill in glance numbers, edit budget or roster. Click an example to edit it, then send.
+              </div>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {actionExamples.map((q) => (
+                  <span key={q} className="suggested-q" style={{ borderColor: 'var(--accent-border)', color: 'var(--accent)' }}
+                    onClick={() => { setInput(q); if (composerRef.current) composerRef.current.focus(); }}>{q}</span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 28 }} className="card card-pad">
               <div className="row" style={{ gap: 8, marginBottom: 8 }}>
                 <Icon name="plug" size={14} />
                 <strong style={{ fontSize: 13 }}>Use from Claude Desktop, Code, or Cursor</strong>
