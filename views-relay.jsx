@@ -1820,9 +1820,26 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
 
   const sorted = useMP(() => [...rows].sort((a, b) => (a.period || '').localeCompare(b.period || '') || (a.sub || '').localeCompare(b.sub || '')), [rows]);
 
+  // Download the rows currently in view (respects filters) as a CSV.
+  const exportCsv = () => {
+    const cols = [['Month', (r) => pLabel(r.period)], ['Team', (r) => r.sub || '—'], ['Category', (r) => r.category], ['Vendor', (r) => r.tool], ['Planned', (r) => r.planned], ['GST %', (r) => r.gst], ['Notes', (r) => r.notes]];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.map(([h]) => esc(h)).join(',')].concat(sorted.map((r) => cols.map(([, f]) => esc(f(r))).join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));  // BOM so Excel reads ₹/UTF-8
+    a.download = 'non-payroll-budget.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   return (
     <Card title="Budget sheet" meta={`${rows.length} rows`} pad={false}
-      actions={canEdit && !adding ? <button className="btn" data-size="sm" data-variant="primary" onClick={() => { setAdding(true); setNewRow(blank); }}>+ Add row</button> : null}>
+      actions={
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn" data-size="sm" data-variant="ghost" onClick={exportCsv}>Export CSV</button>
+          {canEdit && !adding && <button className="btn" data-size="sm" data-variant="primary" onClick={() => { setAdding(true); setNewRow(blank); }}>+ Add row</button>}
+        </div>
+      }>
       <div style={{ overflowX: 'auto' }}>
         <table className="tbl" style={{ minWidth: 880 }}>
           <thead><tr>
