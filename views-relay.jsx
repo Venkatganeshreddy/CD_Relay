@@ -1770,6 +1770,108 @@ function MultiSelect({ label, options, selected, open, onToggleOpen, onChange })
   );
 }
 
+// ── Non-Payroll — Sheet mode ───────────────────────────────────────────────
+// The budget rows as a flat, filterable grid (the maintained sheet, in-app).
+// L3/Admin (canEdit) get inline edit + an add-row form; everyone else reads.
+// Edits/inserts persist via CDC.db and mutate the shared NONPAYROLL_EXPENSE
+// array, so the dashboard reflects them live (parent calls refresh()).
+function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh }) {
+  const CDC = window.CDC;
+  const [editId, setEditId] = useStP(null);
+  const [draft, setDraft] = useStP({});
+  const [adding, setAdding] = useStP(false);
+  const [busy, setBusy] = useStP(false);
+  const blank = { period: periods[0] || '', sub: '', category: '', tool: '', planned: '', gst: '', notes: '' };
+  const [newRow, setNewRow] = useStP(blank);
+
+  // Pick-or-type option lists, drawn from every row in scope.
+  const cats = useMP(() => [...new Set(allRows.map((r) => r.category).filter(Boolean))].sort(), [allRows]);
+  const vendors = useMP(() => [...new Set(allRows.map((r) => r.tool).filter(Boolean))].sort(), [allRows]);
+  const subs = useMP(() => [...new Set(allRows.map((r) => r.sub || '—'))].sort(), [allRows]);
+
+  const inp = { width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 5, background: 'var(--panel)', color: 'var(--text)', boxSizing: 'border-box' };
+  const num = (v) => (v === '' || v == null ? null : Number(v));
+
+  const startEdit = (r) => { setEditId(r.id); setDraft({ category: r.category, tool: r.tool, planned: r.planned, gst: r.gst ?? '', notes: r.notes || '' }); };
+  const saveEdit = async (r) => {
+    setBusy(true);
+    await CDC.db.updateNonpayroll(r.id, { category: draft.category, tool: draft.tool, planned: Number(draft.planned) || 0, gst: num(draft.gst), notes: draft.notes });
+    setBusy(false); setEditId(null); refresh();
+  };
+  const saveNew = async () => {
+    if (!newRow.period || !newRow.sub || !newRow.category) return;  // minimal required fields
+    setBusy(true);
+    // Derive dept + L2 owner from an existing row of the same team, so scope/ownership stays consistent.
+    const ref = allRows.find((r) => (r.sub || '—') === newRow.sub) || {};
+    const dept = ref.dept || null;
+    const row = {
+      id: `npe-${dept || 'x'}-${newRow.period}-${Date.now()}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
+      period: newRow.period, dept, sub: newRow.sub === '—' ? null : newRow.sub, ownerL2: ref.ownerL2 || null,
+      category: newRow.category, tool: newRow.tool, planned: Number(newRow.planned) || 0, actual: null,
+      gst: num(newRow.gst), currency: 'INR', notes: newRow.notes || '',
+    };
+    await CDC.db.addNonpayroll(row);
+    setBusy(false); setAdding(false); setNewRow(blank); refresh();
+  };
+
+  const sorted = useMP(() => [...rows].sort((a, b) => (a.period || '').localeCompare(b.period || '') || (a.sub || '').localeCompare(b.sub || '')), [rows]);
+
+  return (
+    <Card title="Budget sheet" meta={`${rows.length} rows`} pad={false}
+      actions={canEdit && !adding ? <button className="btn" data-size="sm" data-variant="primary" onClick={() => { setAdding(true); setNewRow(blank); }}>+ Add row</button> : null}>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="tbl" style={{ minWidth: 880 }}>
+          <thead><tr>
+            <th>Month</th><th>Team</th><th>Category</th><th>Vendor</th>
+            <th style={{ textAlign: 'right' }}>Planned (₹)</th><th style={{ textAlign: 'right' }}>GST %</th><th>Notes</th>
+            {canEdit && <th style={{ textAlign: 'right' }}></th>}
+          </tr></thead>
+          <tbody>
+            {canEdit && adding && (
+              <tr style={{ background: 'var(--accent-soft)' }}>
+                <td><select style={inp} value={newRow.period} onChange={(e) => setNewRow({ ...newRow, period: e.target.value })}>{periods.map((p) => <option key={p} value={p}>{pLabel(p)}</option>)}</select></td>
+                <td><select style={inp} value={newRow.sub} onChange={(e) => setNewRow({ ...newRow, sub: e.target.value })}><option value="">Team…</option>{subs.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
+                <td><input style={inp} list="npe-cats" placeholder="Category" value={newRow.category} onChange={(e) => setNewRow({ ...newRow, category: e.target.value })} /></td>
+                <td><input style={inp} list="npe-vendors" placeholder="Vendor" value={newRow.tool} onChange={(e) => setNewRow({ ...newRow, tool: e.target.value })} /></td>
+                <td><input style={{ ...inp, textAlign: 'right' }} type="number" placeholder="0" value={newRow.planned} onChange={(e) => setNewRow({ ...newRow, planned: e.target.value })} /></td>
+                <td><input style={{ ...inp, textAlign: 'right' }} type="number" placeholder="—" value={newRow.gst} onChange={(e) => setNewRow({ ...newRow, gst: e.target.value })} /></td>
+                <td><input style={inp} placeholder="Notes" value={newRow.notes} onChange={(e) => setNewRow({ ...newRow, notes: e.target.value })} /></td>
+                <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  <button className="btn" data-size="sm" data-variant="primary" disabled={busy || !newRow.period || !newRow.sub || !newRow.category} onClick={saveNew}>Save</button>{' '}
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setAdding(false)}>Cancel</button>
+                </td>
+              </tr>
+            )}
+            {sorted.map((r) => {
+              const ed = editId === r.id;
+              return (
+                <tr key={r.id}>
+                  <td>{pLabel(r.period)}</td>
+                  <td className="muted">{r.sub || '—'}</td>
+                  <td>{ed ? <input style={inp} list="npe-cats" value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} /> : (r.category || '—')}</td>
+                  <td>{ed ? <input style={inp} list="npe-vendors" value={draft.tool} onChange={(e) => setDraft({ ...draft, tool: e.target.value })} /> : (r.tool || '—')}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{ed ? <input style={{ ...inp, textAlign: 'right' }} type="number" value={draft.planned} onChange={(e) => setDraft({ ...draft, planned: e.target.value })} /> : inr(r.planned)}</td>
+                  <td className="mono muted" style={{ textAlign: 'right' }}>{ed ? <input style={{ ...inp, textAlign: 'right' }} type="number" value={draft.gst} onChange={(e) => setDraft({ ...draft, gst: e.target.value })} /> : (r.gst != null ? r.gst : '—')}</td>
+                  <td className="muted" style={{ maxWidth: 220 }}>{ed ? <input style={inp} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /> : (r.notes || '—')}</td>
+                  {canEdit && (
+                    <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      {ed
+                        ? <><button className="btn" data-size="sm" data-variant="primary" disabled={busy} onClick={() => saveEdit(r)}>Save</button>{' '}<button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditId(null)}>Cancel</button></>
+                        : <button className="btn" data-size="sm" data-variant="ghost" onClick={() => startEdit(r)}>Edit</button>}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <datalist id="npe-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
+        <datalist id="npe-vendors">{vendors.map((v) => <option key={v} value={v} />)}</datalist>
+      </div>
+    </Card>
+  );
+}
+
 // ── Non-Payroll Expense — budget (planned) by vendor, category & team ──────
 // The maintained sheet carries budgeted amounts only (INR, excl GST); actuals
 // are not yet wired, so this is a budget dashboard. Scoped per role: L3/Admin
@@ -1788,6 +1890,9 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const [subs, setSubs] = useStP([]);
   const [vendors, setVendors] = useStP([]);
   const [openFilter, setOpenFilter] = useStP(null);   // which dropdown is open ('cat'|'team'|'vendor'|null)
+  const [mode, setMode] = useStP('dashboard');        // 'dashboard' | 'sheet'
+  const [, force] = useStP(0);                         // bump to re-render after a sheet edit/add
+  const refresh = () => force((n) => n + 1);
   const openProps = (id) => ({ open: openFilter === id, onToggleOpen: () => setOpenFilter((o) => o === id ? null : id) });
   const toggleMonth = (p) => setMonths((s) => s.includes(p) ? s.filter((x) => x !== p) : [...s, p]);
   const cur = rows.filter((r) =>
@@ -1870,6 +1975,10 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         actions={
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', zIndex: 50 }}>
             <div className="seg">
+              <button data-active={mode === 'dashboard'} onClick={() => setMode('dashboard')}>Dashboard</button>
+              <button data-active={mode === 'sheet'} onClick={() => setMode('sheet')}>Sheet</button>
+            </div>
+            <div className="seg">
               <button data-active={months.length === 0} onClick={() => setMonths([])}>All</button>
               {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
             </div>
@@ -1904,6 +2013,9 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         </div>
       </div>
 
+      {mode === 'sheet' ? (
+        <NonPayrollSheet rows={cur} allRows={rows} canEdit={seesAll} inr={inr} pLabel={pLabel} periods={periods} refresh={refresh} />
+      ) : (<React.Fragment>
       {/* Monthly budget trend */}
       {trend.length > 1 && (
         <Card title="Monthly budget" meta={`${trend.length} months`}>
@@ -1955,6 +2067,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
         </table>
       </Card>
       </div>
+      </React.Fragment>)}
     </div>
   );
 }

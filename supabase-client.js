@@ -394,6 +394,13 @@
       const remoteOk = await remote(() => sb.from('nonpayroll_expense').update({ dept: (r || patch).dept || null, data: r || { id, ...patch } }).eq('id', id));
       return { item: r, remoteOk };
     },
+    // Add a new non-payroll budget row (Sheet view, L3/Admin only — RLS rejects others).
+    async addNonpayroll(row) {
+      const arr = window.CDC.NONPAYROLL_EXPENSE || (window.CDC.NONPAYROLL_EXPENSE = []);
+      arr.unshift(row);
+      const remoteOk = await remote(() => sb.from('nonpayroll_expense').insert({ id: row.id, dept: row.dept || null, data: row }));
+      return { item: row, remoteOk };
+    },
     async addTask(task) {
       if (Array.isArray(window.CDC.TASKS)) window.CDC.TASKS.unshift(task);
       await remote(() => sb.from('tasks').insert({ id: task.id, owner_id: task.owner, dept: task.dept, status: task.status, data: task }));
