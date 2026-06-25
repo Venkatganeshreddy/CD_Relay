@@ -1832,11 +1832,70 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
     URL.revokeObjectURL(a.href);
   };
 
+  // Upload CSV (L3/Admin) — APPENDS rows. Accepts the columns Export produces
+  // (Month, Team, Category, Vendor, Planned, GST %, Notes), matched by header so
+  // column order is flexible. Team must already exist (to derive dept + L2 owner);
+  // rows missing Month/Team/Category are skipped. Note: re-uploading an exported
+  // file duplicates rows — it never updates in place (no row id in the CSV).
+  const fileRef = React.useRef(null);
+  const MONIDX = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+  const toPeriod = (s) => {
+    s = String(s || '').trim();
+    if (/^\d{4}-\d{2}$/.test(s)) return s;                                   // already "2026-07"
+    const m = /^([A-Za-z]{3})[a-z]*\s*'?\s*(\d{2,4})$/.exec(s);             // "Jul '26" / "Jul 2026"
+    if (m && MONIDX[m[1].toLowerCase()]) return `${m[2].length === 2 ? '20' + m[2] : m[2]}-${MONIDX[m[1].toLowerCase()]}`;
+    return '';
+  };
+  const parseCsv = (text) => {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"' && text[i + 1] === '"') { f += '"'; i++; } else if (c === '"') q = false; else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f.length || row.length) { row.push(f); rows.push(row); }
+    return rows.filter((r) => r.some((x) => x.trim() !== ''));
+  };
+  const toNum = (s) => Number(String(s || '').replace(/[^0-9.\-]/g, ''));
+  const importCsv = async (file) => {
+    setBusy(true);
+    const grid = parseCsv((await file.text()).replace(/^﻿/, ''));
+    if (grid.length < 2) { setBusy(false); window.alert('CSV has no data rows.'); return; }
+    const head = grid[0].map((h) => h.trim().toLowerCase());
+    const col = (...names) => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+    const ci = { period: col('month', 'period'), sub: col('team', 'sub'), category: col('category'), tool: col('vendor', 'tool'), planned: col('planned'), gst: col('gst %', 'gst'), notes: col('notes') };
+    let added = 0, skipped = 0;
+    for (const r of grid.slice(1)) {
+      const g = (k) => (ci[k] >= 0 ? (r[ci[k]] || '').trim() : '');
+      const period = toPeriod(g('period')), subLabel = g('sub'), category = g('category');
+      if (!period || !subLabel || !category) { skipped++; continue; }
+      const ref = allRows.find((x) => (x.sub || '—') === subLabel) || {};
+      const dept = ref.dept || null;
+      await CDC.db.addNonpayroll({
+        id: `npe-${dept || 'x'}-${period}-${Date.now()}-${added}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
+        period, dept, sub: subLabel === '—' ? null : subLabel, ownerL2: ref.ownerL2 || null,
+        category, tool: g('tool'), planned: toNum(g('planned')) || 0, actual: null,
+        gst: g('gst') === '' ? null : (toNum(g('gst')) || null), currency: 'INR', notes: g('notes'),
+      });
+      added++;
+    }
+    setBusy(false); refresh();
+    window.alert(`Imported ${added} row${added === 1 ? '' : 's'}${skipped ? `, skipped ${skipped} (missing Month/Team/Category)` : ''}.`);
+  };
+
   return (
     <Card title="Budget sheet" meta={`${rows.length} rows`} pad={false}
       actions={
         <div className="row" style={{ gap: 6 }}>
           <button className="btn" data-size="sm" data-variant="ghost" onClick={exportCsv}>Export CSV</button>
+          {canEdit && <>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files[0]; if (f) importCsv(f); e.target.value = ''; }} />
+            <button className="btn" data-size="sm" data-variant="ghost" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>Upload CSV</button>
+          </>}
           {canEdit && !adding && <button className="btn" data-size="sm" data-variant="primary" onClick={() => { setAdding(true); setNewRow(blank); }}>+ Add row</button>}
         </div>
       }>
