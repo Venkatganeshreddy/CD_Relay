@@ -1881,14 +1881,17 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
   const rows = CDC.filterNonpayroll(currentUser.id) || [];
   const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
-  const allCats = useMP(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort(), [rows]);
   const allSubs = useMP(() => [...new Set(rows.map((r) => r.sub || '—'))].sort(), [rows]);
-  const allVendors = useMP(() => [...new Set(rows.map((r) => r.tool).filter(Boolean))].sort(), [rows]);
   // Every filter is multi-select; an empty array means "all".
   const [months, setMonths] = useStP([]);
   const [cats, setCats] = useStP([]);
   const [subs, setSubs] = useStP([]);
   const [vendors, setVendors] = useStP([]);
+  // Cascade: category options narrow to the picked team(s); vendor options
+  // narrow to the picked team(s) + category, so you only see what's relevant.
+  const inSubs = (r) => subs.length === 0 || subs.includes(r.sub || '—');
+  const allCats = useMP(() => [...new Set(rows.filter(inSubs).map((r) => r.category).filter(Boolean))].sort(), [rows, subs]);
+  const allVendors = useMP(() => [...new Set(rows.filter((r) => inSubs(r) && (cats.length === 0 || cats.includes(r.category))).map((r) => r.tool).filter(Boolean))].sort(), [rows, subs, cats]);
   const [openFilter, setOpenFilter] = useStP(null);   // which dropdown is open ('cat'|'team'|'vendor'|null)
   const [mode, setMode] = useStP('dashboard');        // 'dashboard' | 'sheet'
   const [, force] = useStP(0);                         // bump to re-render after a sheet edit/add
@@ -1982,8 +1985,8 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
               <button data-active={months.length === 0} onClick={() => setMonths([])}>All</button>
               {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
             </div>
-            <MultiSelect label="Category" options={allCats} selected={cats} onChange={setCats} {...openProps('cat')} />
-            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={setSubs} {...openProps('team')} />
+            <MultiSelect label="Category" options={allCats} selected={cats} onChange={(next) => { setCats(next); const ven = new Set(rows.filter((r) => inSubs(r) && (!next.length || next.includes(r.category))).map((r) => r.tool)); setVendors((v) => v.filter((x) => ven.has(x))); }} {...openProps('cat')} />
+            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={(next) => { setSubs(next); const ok = (r) => !next.length || next.includes(r.sub || '—'); const cat = new Set(rows.filter(ok).map((r) => r.category)); const ven = new Set(rows.filter(ok).map((r) => r.tool)); setCats((c) => c.filter((x) => cat.has(x))); setVendors((v) => v.filter((x) => ven.has(x))); }} {...openProps('team')} />
             <MultiSelect label="Vendor" options={allVendors} selected={vendors} onChange={setVendors} {...openProps('vendor')} />
           </div>
         }
