@@ -1784,10 +1784,14 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
   const blank = { period: periods[0] || '', sub: '', category: '', tool: '', planned: '', gst: '', notes: '' };
   const [newRow, setNewRow] = useStP(blank);
 
-  // Pick-or-type option lists, drawn from every row in scope.
+  // Pick-or-type option lists, drawn from every row in scope (edit mode).
   const cats = useMP(() => [...new Set(allRows.map((r) => r.category).filter(Boolean))].sort(), [allRows]);
   const vendors = useMP(() => [...new Set(allRows.map((r) => r.tool).filter(Boolean))].sort(), [allRows]);
   const subs = useMP(() => [...new Set(allRows.map((r) => r.sub || '—'))].sort(), [allRows]);
+  // Add-row suggestions narrow to the team picked in the form (category), then
+  // team + category (vendor). You can still type a brand-new value.
+  const addCats = useMP(() => [...new Set(allRows.filter((r) => !newRow.sub || (r.sub || '—') === newRow.sub).map((r) => r.category).filter(Boolean))].sort(), [allRows, newRow.sub]);
+  const addVendors = useMP(() => [...new Set(allRows.filter((r) => (!newRow.sub || (r.sub || '—') === newRow.sub) && (!newRow.category || r.category === newRow.category)).map((r) => r.tool).filter(Boolean))].sort(), [allRows, newRow.sub, newRow.category]);
 
   const inp = { width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 5, background: 'var(--panel)', color: 'var(--text)', boxSizing: 'border-box' };
   const num = (v) => (v === '' || v == null ? null : Number(v));
@@ -1831,8 +1835,8 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
               <tr style={{ background: 'var(--accent-soft)' }}>
                 <td><select style={inp} value={newRow.period} onChange={(e) => setNewRow({ ...newRow, period: e.target.value })}>{periods.map((p) => <option key={p} value={p}>{pLabel(p)}</option>)}</select></td>
                 <td><select style={inp} value={newRow.sub} onChange={(e) => setNewRow({ ...newRow, sub: e.target.value })}><option value="">Team…</option>{subs.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
-                <td><input style={inp} list="npe-cats" placeholder="Category" value={newRow.category} onChange={(e) => setNewRow({ ...newRow, category: e.target.value })} /></td>
-                <td><input style={inp} list="npe-vendors" placeholder="Vendor" value={newRow.tool} onChange={(e) => setNewRow({ ...newRow, tool: e.target.value })} /></td>
+                <td><input style={inp} list="npe-cats-add" placeholder="Category" value={newRow.category} onChange={(e) => setNewRow({ ...newRow, category: e.target.value })} /></td>
+                <td><input style={inp} list="npe-vendors-add" placeholder="Vendor" value={newRow.tool} onChange={(e) => setNewRow({ ...newRow, tool: e.target.value })} /></td>
                 <td><input style={{ ...inp, textAlign: 'right' }} type="number" placeholder="0" value={newRow.planned} onChange={(e) => setNewRow({ ...newRow, planned: e.target.value })} /></td>
                 <td><input style={{ ...inp, textAlign: 'right' }} type="number" placeholder="—" value={newRow.gst} onChange={(e) => setNewRow({ ...newRow, gst: e.target.value })} /></td>
                 <td><input style={inp} placeholder="Notes" value={newRow.notes} onChange={(e) => setNewRow({ ...newRow, notes: e.target.value })} /></td>
@@ -1867,6 +1871,8 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
         </table>
         <datalist id="npe-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
         <datalist id="npe-vendors">{vendors.map((v) => <option key={v} value={v} />)}</datalist>
+        <datalist id="npe-cats-add">{addCats.map((c) => <option key={c} value={c} />)}</datalist>
+        <datalist id="npe-vendors-add">{addVendors.map((v) => <option key={v} value={v} />)}</datalist>
       </div>
     </Card>
   );
