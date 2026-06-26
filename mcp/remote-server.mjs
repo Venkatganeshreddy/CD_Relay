@@ -51,10 +51,16 @@ app.use(express.json({ limit: '4mb' }));
 
 app.get('/', (_req, res) => res.send('cd-relay MCP server. POST /mcp'));
 
-// Bearer guard — without this the service-role key is exposed to anyone with the URL.
+// Guard — accept the secret either as `Authorization: Bearer <token>` (clients
+// that can set headers) OR as a `?k=<token>` query param (claude.ai custom
+// connector, which can't set a custom header). Without this the service-role
+// key is exposed to anyone with the URL.
+// ponytail: token-in-URL is obscurity, not real auth — fine for a read-only
+// internal tool; swap to OAuth if this ever holds write tools or leaves the org.
 app.use('/mcp', (req, res, next) => {
-  const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${TOKEN}`) return res.status(401).json({ error: 'unauthorized' });
+  const bearer = (req.headers.authorization || '') === `Bearer ${TOKEN}`;
+  const query = req.query.k === TOKEN;
+  if (!bearer && !query) return res.status(401).json({ error: 'unauthorized' });
   next();
 });
 
