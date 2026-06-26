@@ -1962,8 +1962,10 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
   const rows = CDC.filterNonpayroll(currentUser.id) || [];
+  // Dept-level budgets (DS&ML / DS&Algo) come in with sub:null — show them under the dept name, not the '—' bucket.
+  const teamOf = (r) => r.sub || CDC.lookup.dept(r.dept)?.name || '—';
   const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
-  const allSubs = useMP(() => [...new Set(rows.map((r) => r.sub || '—'))].sort(), [rows]);
+  const allSubs = useMP(() => [...new Set(rows.map(teamOf))].sort(), [rows]);
   // Every filter is multi-select; an empty array means "all".
   const [months, setMonths] = useStP([]);
   const [cats, setCats] = useStP([]);
@@ -1971,7 +1973,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const [vendors, setVendors] = useStP([]);
   // Cascade: category options narrow to the picked team(s); vendor options
   // narrow to the picked team(s) + category, so you only see what's relevant.
-  const inSubs = (r) => subs.length === 0 || subs.includes(r.sub || '—');
+  const inSubs = (r) => subs.length === 0 || subs.includes(teamOf(r));
   const allCats = useMP(() => [...new Set(rows.filter(inSubs).map((r) => r.category).filter(Boolean))].sort(), [rows, subs]);
   const allVendors = useMP(() => [...new Set(rows.filter((r) => inSubs(r) && (cats.length === 0 || cats.includes(r.category))).map((r) => r.tool).filter(Boolean))].sort(), [rows, subs, cats]);
   const [openFilter, setOpenFilter] = useStP(null);   // which dropdown is open ('cat'|'team'|'vendor'|null)
@@ -1983,7 +1985,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const cur = rows.filter((r) =>
     (months.length === 0 || months.includes(r.period)) &&
     (cats.length === 0 || cats.includes(r.category)) &&
-    (subs.length === 0 || subs.includes(r.sub || '—')) &&
+    (subs.length === 0 || subs.includes(teamOf(r))) &&
     (vendors.length === 0 || vendors.includes(r.tool)));
 
   // INR, Indian grouping (lakh/crore). '2026-08' → "Aug '26".
@@ -2006,14 +2008,14 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   };
   const byCategory = useMP(() => groupBy('category'), [cur]);
   const byTool = useMP(() => groupBy('tool'), [cur]);
-  const bySub = useMP(() => groupBy('sub'), [cur]);
+  const bySub = useMP(() => groupBy(teamOf), [cur]);
   // Monthly budget across the full timeline (respects category/team filters, but
   // not the month filter — so the trend shows every month while you select some).
   const trend = useMP(() => {
     const m = new Map();
     for (const r of rows) {
       if (cats.length && !cats.includes(r.category)) continue;
-      if (subs.length && !subs.includes(r.sub || '—')) continue;
+      if (subs.length && !subs.includes(teamOf(r))) continue;
       if (vendors.length && !vendors.includes(r.tool)) continue;
       m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
     }
@@ -2068,7 +2070,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
               {periods.map((p) => <button key={p} data-active={months.includes(p)} onClick={() => toggleMonth(p)}>{pLabel(p)}</button>)}
             </div>
             <MultiSelect label="Category" options={allCats} selected={cats} onChange={(next) => { setCats(next); const ven = new Set(rows.filter((r) => inSubs(r) && (!next.length || next.includes(r.category))).map((r) => r.tool)); setVendors((v) => v.filter((x) => ven.has(x))); }} {...openProps('cat')} />
-            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={(next) => { setSubs(next); const ok = (r) => !next.length || next.includes(r.sub || '—'); const cat = new Set(rows.filter(ok).map((r) => r.category)); const ven = new Set(rows.filter(ok).map((r) => r.tool)); setCats((c) => c.filter((x) => cat.has(x))); setVendors((v) => v.filter((x) => ven.has(x))); }} {...openProps('team')} />
+            <MultiSelect label="Team" options={allSubs} selected={subs} onChange={(next) => { setSubs(next); const ok = (r) => !next.length || next.includes(teamOf(r)); const cat = new Set(rows.filter(ok).map((r) => r.category)); const ven = new Set(rows.filter(ok).map((r) => r.tool)); setCats((c) => c.filter((x) => cat.has(x))); setVendors((v) => v.filter((x) => ven.has(x))); }} {...openProps('team')} />
             <MultiSelect label="Vendor" options={allVendors} selected={vendors} onChange={setVendors} {...openProps('vendor')} />
           </div>
         }
@@ -2137,7 +2139,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
           <thead><tr><th>Sub-team</th><th>L2 owner</th><th style={{ textAlign: 'right' }}>Line items</th><th style={{ textAlign: 'right' }}>Budget</th><th style={{ textAlign: 'right' }}>Share</th></tr></thead>
           <tbody>
             {bySub.map((row) => {
-              const owner = CDC.lookup.user(cur.find((r) => r.sub === row.k && r.ownerL2)?.ownerL2);
+              const owner = CDC.lookup.user(cur.find((r) => teamOf(r) === row.k && r.ownerL2)?.ownerL2);
               return (
                 <tr key={row.k}>
                   <td style={{ fontWeight: 500 }}>{row.k}</td>
