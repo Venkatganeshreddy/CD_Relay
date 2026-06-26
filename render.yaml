@@ -1,0 +1,16 @@
+# Render blueprint for the CD_Relay MCP server.
+# Render auto-detects this file; click "Apply" then set the two secret env vars.
+services:
+  - type: web
+    name: cd-relay-mcp
+    runtime: node
+    rootDir: mcp
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: SUPABASE_SERVICE_KEY
+        sync: false        # set manually in the dashboard (secret)
+      - key: CONNECTOR_TOKEN
+        sync: false        # set manually in the dashboard (secret)
