@@ -18,7 +18,9 @@ import { z } from 'zod';
 
 const URL = process.env.SUPABASE_URL || 'https://fzwgdiphjehecsizvwyl.supabase.co';
 const KEY = process.env.SUPABASE_SERVICE_KEY;
-const TOKEN = process.env.CONNECTOR_TOKEN;
+// Trim — Render env values often pick up a trailing newline/space on paste,
+// which would break an exact-match guard.
+const TOKEN = (process.env.CONNECTOR_TOKEN || '').trim();
 if (!KEY) { console.error('Set SUPABASE_SERVICE_KEY'); process.exit(1); }
 if (!TOKEN) { console.error('Set CONNECTOR_TOKEN (the shared secret callers must send)'); process.exit(1); }
 const sb = createClient(URL, KEY, { auth: { persistSession: false } });
@@ -58,9 +60,11 @@ app.get('/', (_req, res) => res.send('cd-relay MCP server. POST /mcp'));
 // ponytail: token-in-URL is obscurity, not real auth — fine for a read-only
 // internal tool; swap to OAuth if this ever holds write tools or leaves the org.
 app.use('/mcp', (req, res, next) => {
-  const bearer = (req.headers.authorization || '') === `Bearer ${TOKEN}`;
-  const query = req.query.k === TOKEN;
-  if (!bearer && !query) return res.status(401).json({ error: 'unauthorized' });
+  const given = (req.query.k || (req.headers.authorization || '').replace(/^Bearer /, '')).trim();
+  if (given !== TOKEN) {
+    // Safe diagnostic: lengths only, never the secret itself.
+    return res.status(401).json({ error: 'unauthorized', expectedLen: TOKEN.length, gotLen: given.length });
+  }
   next();
 });
 
