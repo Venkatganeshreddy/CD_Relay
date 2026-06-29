@@ -71,7 +71,7 @@ app.use('/mcp', (req, res, next) => {
 // ── Voice check-in ingestion ──────────────────────────────────────────────
 // Make.com POSTs a clean JSON here after each call; we write a daily_report so
 // the voice update shows up in the app (not just a Google Sheet).
-// Body: { emp_id, name?, tasks_done, blockers?, status?, summary?, outcome?, date? }
+// Body: { emp_id, name?, tasks_done, hours_per_task?, total_hours?, blockers?, status?, summary?, outcome?, date? }
 // Auth: same ?k= token as /mcp.
 app.post('/ingest', async (req, res) => {
   if ((req.query.k || '').trim() !== TOKEN) return res.status(401).json({ error: 'unauthorized' });
@@ -88,17 +88,23 @@ app.post('/ingest', async (req, res) => {
     .forEach((t) => items.push({ kind: 'done', text: t }));
   if (b.blockers && String(b.blockers).trim()) items.push({ kind: 'blocker', text: String(b.blockers).trim() });
 
+  // Hours: keep the spoken breakdown as text; coerce total to a number (first number found).
+  const hoursPerTask = String(b.hours_per_task || '').trim();
+  const totalHours = b.total_hours != null && String(b.total_hours).trim()
+    ? Number(String(b.total_hours).match(/[\d.]+/)?.[0] || 0) : null;
+
   const id = `r-voice-${emp.id}-${date}`;
   const report = {
     id, author: emp.id, date, submittedAt: 'voice call', sub: emp.sub || null, dept: emp.dept || null,
     source: 'voice-call', outcome: b.outcome || null, status: b.status || null,
     summary: b.summary || '', items, missing: items.length === 0,
+    hoursPerTask: hoursPerTask || null, totalHours,
   };
   // Upsert so a re-run of the same day overwrites rather than duplicates.
   const { error } = await sb.from('daily_reports').upsert(
     { id, author_id: emp.id, dept: emp.dept || null, sub: emp.sub || null, report_date: date, data: report }, { onConflict: 'id' });
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true, id, author: emp.name, items: items.length });
+  res.json({ ok: true, id, author: emp.name, items: items.length, totalHours });
 });
 
 app.post('/mcp', async (req, res) => {
