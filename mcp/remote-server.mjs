@@ -68,6 +68,39 @@ app.use('/mcp', (req, res, next) => {
   next();
 });
 
+// ── Voice check-in ingestion ──────────────────────────────────────────────
+// Make.com POSTs a clean JSON here after each call; we write a daily_report so
+// the voice update shows up in the app (not just a Google Sheet).
+// Body: { emp_id, name?, tasks_done, blockers?, status?, summary?, outcome?, date? }
+// Auth: same ?k= token as /mcp.
+app.post('/ingest', async (req, res) => {
+  if ((req.query.k || '').trim() !== TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  const b = req.body || {};
+  // Resolve the employee (exact by emp_id, else first name match) to get dept/sub.
+  let emp = null;
+  if (b.emp_id) { const r = await sb.from('employees').select('data').eq('id', b.emp_id).maybeSingle(); emp = r.data?.data || null; }
+  if (!emp && b.name) { const r = await sb.from('employees').select('data').ilike('name', b.name); emp = r.data?.[0]?.data || null; }
+  if (!emp) return res.status(422).json({ error: 'employee not found', got: { emp_id: b.emp_id, name: b.name } });
+
+  const date = (b.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const items = [];
+  String(b.tasks_done || '').split(/\r?\n|;|·/).map((s) => s.trim()).filter(Boolean)
+    .forEach((t) => items.push({ kind: 'done', text: t }));
+  if (b.blockers && String(b.blockers).trim()) items.push({ kind: 'blocker', text: String(b.blockers).trim() });
+
+  const id = `r-voice-${emp.id}-${date}`;
+  const report = {
+    id, author: emp.id, date, submittedAt: 'voice call', sub: emp.sub || null, dept: emp.dept || null,
+    source: 'voice-call', outcome: b.outcome || null, status: b.status || null,
+    summary: b.summary || '', items, missing: items.length === 0,
+  };
+  // Upsert so a re-run of the same day overwrites rather than duplicates.
+  const { error } = await sb.from('daily_reports').upsert(
+    { id, author_id: emp.id, dept: emp.dept || null, sub: emp.sub || null, report_date: date, data: report }, { onConflict: 'id' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true, id, author: emp.name, items: items.length });
+});
+
 app.post('/mcp', async (req, res) => {
   const server = makeServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
