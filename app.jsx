@@ -1327,6 +1327,8 @@ function relayPickUser(setTweak, id) {
     const impersonating = !!(me && real && me.id !== real.id);
     root.render(<ErrorBoundary><App authMode="authed" me={me} realUser={real} impersonating={impersonating} /></ErrorBoundary>);
   } else {
-    root.render(<ErrorBoundary><LoginScreen onAuthed={() => location.reload()} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
+    // Clear any stale route hash on login so everyone lands on the dashboard.
+    const landOnDashboard = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {} location.reload(); };
+    root.render(<ErrorBoundary><LoginScreen onAuthed={landOnDashboard} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
   }
 })();

@@ -153,6 +153,7 @@ input, select, textarea, .tbl tr td {
   display: flex; align-items: center; gap: 10px;
   padding: 14px 16px; height: 52px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 6%, transparent), transparent);
 }
 .sb-logo {
   width: 24px; height: 24px; border-radius: 7px;
@@ -167,17 +168,18 @@ input, select, textarea, .tbl tr td {
 .sb-name small { display:block; font-weight: 400; color: var(--text-faint); font-size: 10.5px; letter-spacing: 0.02em; }
 
 .sb-nav { padding: 8px 8px; flex: 1; overflow-y: auto; }
-.sb-group-title { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); padding: 14px 10px 6px; }
+.sb-group-title { font-size: 9.5px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--text-faint); padding: 16px 10px 6px; }
 .sb-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 6px 10px; min-height: 30px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; min-height: 32px;
   border-radius: var(--radius);
   font-size: 13px; color: var(--text-muted);
-  cursor: default; user-select: none;
+  cursor: pointer; user-select: none;
   position: relative;
 }
 .sb-item > span:not(.ico):not(.badge):not(.dot) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sb-item:hover { background: var(--panel-2); color: var(--text); }
+.sb-item:hover { background: color-mix(in oklch, var(--panel-2) 70%, var(--accent) 6%); color: var(--text); }
+.sb-item:hover .ico { color: var(--accent); }
 .sb-item[data-active="true"] {
   background: color-mix(in oklch, var(--accent-soft) 60%, var(--surface));
   color: var(--text);
@@ -208,11 +210,11 @@ input, select, textarea, .tbl tr td {
 
 .sb-foot {
   border-top: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: 11px; color: var(--text-faint);
   display: flex; align-items: center; gap: 8px;
 }
-.sb-foot .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.sb-foot .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px color-mix(in oklch, var(--green) 22%, transparent); }
 
 /* Topbar */
 .main { display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
