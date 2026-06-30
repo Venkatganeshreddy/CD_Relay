@@ -919,8 +919,8 @@ function TasksView({ tweaks, currentUser }) {
                     onPatch={(patch) => patchSubtask(t, s.id, patch)} onRemove={() => removeSubtask(t, s.id)} />
                 ))}
                 {isOpen && isOwner && (
-                  <tr style={{ background: 'var(--panel-2, #fafafa)' }}>
-                    <td colSpan={5} style={{ paddingLeft: 30 }}>
+                  <tr>
+                    <td colSpan={5} style={{ background: 'var(--panel-2, #fafafa)', paddingLeft: 30, borderLeft: '2px solid var(--accent-border, #c7d0f5)', borderBottom: '1px solid var(--border)' }}>
                       <SubtaskAdder onAdd={(title) => addSubtask(t, title)} />
                     </td>
                   </tr>
@@ -961,35 +961,65 @@ function TasksView({ tweaks, currentUser }) {
 }
 window.TasksView = TasksView;
 
-// One nested subtask row (lightweight: title · status · due date). Editable
-// inline by the parent task's owner; read-only for everyone else.
+// One nested subtask row (lightweight: title · status · due date). Read-only by
+// default with Edit + Delete actions (mirrors the parent row); the parent task's
+// owner can toggle inline editing. Non-owners always see it read-only.
 const SUBTASK_TONE = { 'Done': 'green', 'In-progress': 'blue', 'Blocked': 'red', 'Overdue': 'amber', 'Backlog': 'amber' };
+const SUB_INP = { fontSize: 12, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)' };
 function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
   const STATUSES = (window.CDC.TASK_CATALOG || {}).STATUSES || ['In-progress', 'Done', 'Blocked'];
-  const inp = { fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' };
+  const [editing, setEditing] = useState_o(false);
+  const [draft, setDraft] = useState_o(sub);
+  const open = () => { setDraft(sub); setEditing(true); };
+  const save = () => { onPatch({ title: (draft.title || '').trim() || sub.title, status: draft.status, due: draft.due || '' }); setEditing(false); };
+  // Subtle tree connector + tinted band so nested rows read as children.
+  const cell = { background: 'var(--panel-2, #fafafa)', borderBottom: '1px solid var(--border)' };
+  const firstCell = { ...cell, paddingLeft: 30, borderLeft: '2px solid var(--accent-border, #c7d0f5)' };
+  if (editing) {
+    return (
+      <tr>
+        <td style={firstCell}>
+          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+            <span className="muted">↳</span>
+            <input autoFocus value={draft.title || ''} placeholder="Subtask name"
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+              style={{ ...SUB_INP, width: '88%', fontWeight: 500 }} />
+          </div>
+        </td>
+        <td style={cell} className="muted">—</td>
+        <td style={cell}>
+          <input type="date" value={draft.due || ''} onChange={(e) => setDraft((d) => ({ ...d, due: e.target.value }))} style={SUB_INP} />
+        </td>
+        <td style={cell}>
+          <select value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))} style={SUB_INP}>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </td>
+        <td style={cell}>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn" data-size="sm" data-variant="primary" onClick={save}>Save</button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
   return (
-    <tr style={{ background: 'var(--panel-2, #fafafa)' }}>
-      <td style={{ paddingLeft: 30 }}>
-        {canEdit
-          ? <input value={sub.title} placeholder="Subtask" onChange={(e) => onPatch({ title: e.target.value })}
-              style={{ ...inp, width: '90%', fontWeight: 500 }} />
-          : <span style={{ fontSize: 12.5, fontWeight: 500 }}>↳ {sub.title}</span>}
+    <tr>
+      <td style={firstCell}>
+        <span style={{ fontSize: 12.5, fontWeight: 500 }}><span className="muted" style={{ marginRight: 6 }}>↳</span>{sub.title}</span>
       </td>
-      <td className="muted" style={{ fontSize: 11 }}>—</td>
-      <td className="muted mono" style={{ fontSize: 12 }}>
-        {canEdit
-          ? <input type="date" value={sub.due || ''} onChange={(e) => onPatch({ due: e.target.value })} style={inp} />
-          : <span>due {sub.due || '—'}</span>}
-      </td>
-      <td>
-        {canEdit
-          ? <select value={sub.status} onChange={(e) => onPatch({ status: e.target.value })} style={inp}>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          : <Pill tone={SUBTASK_TONE[sub.status] || 'outline'} dot>{sub.status}</Pill>}
-      </td>
-      <td>
-        {canEdit && <button className="btn" data-size="sm" data-variant="ghost" title="Remove subtask" onClick={onRemove}>✕</button>}
+      <td style={cell} className="muted">—</td>
+      <td className="muted mono" style={{ ...cell, fontSize: 12 }}>due {sub.due || '—'}</td>
+      <td style={cell}><Pill tone={SUBTASK_TONE[sub.status] || 'outline'} dot>{sub.status}</Pill></td>
+      <td style={cell}>
+        {canEdit && (
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn" data-size="sm" data-variant="ghost" title="Edit subtask" onClick={open}><Icon name="edit" size={11} /> Edit</button>
+            <button className="btn" data-size="sm" data-variant="danger" title="Delete subtask" onClick={onRemove}>Delete</button>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -1000,12 +1030,12 @@ function SubtaskAdder({ onAdd }) {
   const [title, setTitle] = useState_o('');
   const add = () => { const t = title.trim(); if (!t) return; onAdd(t); setTitle(''); };
   return (
-    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-      <span className="muted" style={{ fontSize: 12 }}>↳</span>
+    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+      <span className="muted">↳</span>
       <input value={title} placeholder="Add a subtask…" onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', width: 260 }} />
-      <button className="btn" data-size="sm" data-variant="ghost" disabled={!title.trim()} onClick={add}>
+        style={{ ...SUB_INP, width: 280 }} />
+      <button className="btn" data-size="sm" data-variant="primary" disabled={!title.trim()} onClick={add}>
         <Icon name="check" size={11} /> Add subtask
       </button>
     </div>
