@@ -316,6 +316,8 @@ input, select, textarea, .tbl tr td {
 .card-h {
   padding: 13px 16px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--panel) 50%, transparent), transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px;
 }
@@ -451,11 +453,18 @@ input, select, textarea, .tbl tr td {
 
 /* Table */
 .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
-.tbl th, .tbl td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
-.tbl th { font-weight: 500; color: var(--text-muted); font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; background: var(--panel); position: sticky; top: 0; z-index: 1; }
+.tbl th, .tbl td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border); }
+.tbl th {
+  font-weight: 600; color: var(--text-faint); font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase;
+  background: linear-gradient(180deg, var(--panel), color-mix(in oklch, var(--panel) 88%, var(--bg)));
+  position: sticky; top: 0; z-index: 1;
+  border-bottom: 1px solid var(--border-strong);
+}
 .tbl tr { height: var(--row-h); }
-.tbl tr:hover td { background: color-mix(in oklch, var(--accent-soft) 35%, var(--panel)); }
-.tbl tr[data-active="true"] td { background: var(--accent-soft); }
+/* Clean edges inside a card: no trailing hairline on the last row. */
+.tbl tbody tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: color-mix(in oklch, var(--accent-soft) 40%, var(--panel)); }
+.tbl tr[data-active="true"] td { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .tbl tr[data-rag-bg="amber"] td { background: color-mix(in oklch, var(--amber-soft) 50%, transparent); }
 .tbl tr[data-rag-bg="red"] td { background: color-mix(in oklch, var(--red-soft) 50%, transparent); }
 .tbl tr[data-rag-bg="green"] td { background: color-mix(in oklch, var(--green-soft) 30%, transparent); }
@@ -468,8 +477,8 @@ input, select, textarea, .tbl tr td {
 /* KPI tiles */
 .kpi-tile { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm); }
 .kpi-tile:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.kpi-tile .kpi-name { font-size: 11.5px; color: var(--text-muted); }
-.kpi-tile .kpi-value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.kpi-tile .kpi-name { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.kpi-tile .kpi-value { font-size: 25px; font-weight: 680; letter-spacing: -0.03em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .kpi-tile .kpi-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); }
 .kpi-tile[data-tone="green"] { border-color: color-mix(in oklch, var(--green) 30%, var(--border)); }
 .kpi-tile[data-tone="green"] .kpi-value { color: var(--green); }
