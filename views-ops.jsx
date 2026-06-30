@@ -738,8 +738,17 @@ function TasksView({ tweaks, currentUser }) {
     if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(parentId, { subtasks });
     setTick((n) => n + 1);
   }
-  const addSubtask = (parent, title) => saveSubtasks(parent.id,
-    [...(parent.subtasks || []), { id: `sub-${Date.now()}`, title: title.trim(), status: 'In-progress', due: '' }]);
+  // Who a subtask can be assigned to: yourself + your management subtree (full
+  // roster for Admin/L3). Mirrors the parent CreateTaskModal owner choices.
+  const subOwnerChoices = (() => {
+    if (CDC.scopeForUser(me.id).kind === 'all') return CDC.USERS || [];
+    const byMgr = {}; (CDC.USERS || []).forEach((u) => { (byMgr[u.managerId] = byMgr[u.managerId] || []).push(u); });
+    const out = [me]; const stk = [me.id];
+    while (stk.length) { for (const c of (byMgr[stk.pop()] || [])) { out.push(c); stk.push(c.id); } }
+    return out;
+  })();
+  const addSubtask = (parent, sub) => saveSubtasks(parent.id,
+    [...(parent.subtasks || []), { id: `sub-${Date.now()}`, title: (sub.title || '').trim(), status: 'In-progress', due: sub.due || '', owner: sub.owner || parent.owner }]);
   const patchSubtask = (parent, sid, patch) => saveSubtasks(parent.id,
     (parent.subtasks || []).map((s) => (s.id === sid ? { ...s, ...patch } : s)));
   const removeSubtask = (parent, sid) => saveSubtasks(parent.id,
@@ -915,13 +924,13 @@ function TasksView({ tweaks, currentUser }) {
                   </td>
                 </tr>
                 {isOpen && subs.map((s) => (
-                  <SubtaskRow key={s.id} sub={s} canEdit={isOwner}
+                  <SubtaskRow key={s.id} sub={s} canEdit={isOwner} people={subOwnerChoices} defaultOwner={t.owner}
                     onPatch={(patch) => patchSubtask(t, s.id, patch)} onRemove={() => removeSubtask(t, s.id)} />
                 ))}
                 {isOpen && isOwner && (
                   <tr>
                     <td colSpan={5} style={{ background: 'var(--panel-2, #fafafa)', paddingLeft: 30, borderLeft: '2px solid var(--accent-border, #c7d0f5)', borderBottom: '1px solid var(--border)' }}>
-                      <SubtaskAdder onAdd={(title) => addSubtask(t, title)} />
+                      <SubtaskAdder onAdd={(sub) => addSubtask(t, sub)} people={subOwnerChoices} defaultOwner={t.owner} />
                     </td>
                   </tr>
                 )}
@@ -966,12 +975,22 @@ window.TasksView = TasksView;
 // owner can toggle inline editing. Non-owners always see it read-only.
 const SUBTASK_TONE = { 'Done': 'green', 'In-progress': 'blue', 'Blocked': 'red', 'Overdue': 'amber', 'Backlog': 'amber' };
 const SUB_INP = { fontSize: 12, padding: '4px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)' };
-function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
+const subOwnerName = (id) => (window.CDC.lookup.user(id) || {}).name || '—';
+function OwnerSelect({ value, people, onChange }) {
+  return (
+    <select value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ ...SUB_INP, maxWidth: 150 }}>
+      {!value && <option value="">Assign…</option>}
+      {(people || []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+    </select>
+  );
+}
+function SubtaskRow({ sub, canEdit, people, defaultOwner, onPatch, onRemove }) {
   const STATUSES = (window.CDC.TASK_CATALOG || {}).STATUSES || ['In-progress', 'Done', 'Blocked'];
   const [editing, setEditing] = useState_o(false);
   const [draft, setDraft] = useState_o(sub);
-  const open = () => { setDraft(sub); setEditing(true); };
-  const save = () => { onPatch({ title: (draft.title || '').trim() || sub.title, status: draft.status, due: draft.due || '' }); setEditing(false); };
+  const open = () => { setDraft({ ...sub, owner: sub.owner || defaultOwner }); setEditing(true); };
+  const canSave = (draft.title || '').trim() && draft.due;   // due date is mandatory
+  const save = () => { if (!canSave) return; onPatch({ title: draft.title.trim(), status: draft.status, due: draft.due, owner: draft.owner || defaultOwner }); setEditing(false); };
   // Subtle tree connector + tinted band so nested rows read as children.
   const cell = { background: 'var(--panel-2, #fafafa)', borderBottom: '1px solid var(--border)' };
   const firstCell = { ...cell, paddingLeft: 30, borderLeft: '2px solid var(--accent-border, #c7d0f5)' };
@@ -987,9 +1006,10 @@ function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
               style={{ ...SUB_INP, width: '88%', fontWeight: 500 }} />
           </div>
         </td>
-        <td style={cell} className="muted">—</td>
+        <td style={cell}><OwnerSelect value={draft.owner || defaultOwner} people={people} onChange={(v) => setDraft((d) => ({ ...d, owner: v }))} /></td>
         <td style={cell}>
-          <input type="date" value={draft.due || ''} onChange={(e) => setDraft((d) => ({ ...d, due: e.target.value }))} style={SUB_INP} />
+          <input type="date" required value={draft.due || ''} onChange={(e) => setDraft((d) => ({ ...d, due: e.target.value }))}
+            style={{ ...SUB_INP, borderColor: draft.due ? 'var(--border)' : 'var(--red, #e5484d)' }} />
         </td>
         <td style={cell}>
           <select value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))} style={SUB_INP}>
@@ -999,7 +1019,7 @@ function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
         <td style={cell}>
           <div className="row" style={{ gap: 6 }}>
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditing(false)}>Cancel</button>
-            <button className="btn" data-size="sm" data-variant="primary" onClick={save}>Save</button>
+            <button className="btn" data-size="sm" data-variant="primary" disabled={!canSave} title={!draft.due ? 'Due date is required' : 'Save'} onClick={save}>Save</button>
           </div>
         </td>
       </tr>
@@ -1010,7 +1030,7 @@ function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
       <td style={firstCell}>
         <span style={{ fontSize: 12.5, fontWeight: 500 }}><span className="muted" style={{ marginRight: 6 }}>↳</span>{sub.title}</span>
       </td>
-      <td style={cell} className="muted">—</td>
+      <td style={cell} className="muted">{subOwnerName(sub.owner || defaultOwner)}</td>
       <td className="muted mono" style={{ ...cell, fontSize: 12 }}>due {sub.due || '—'}</td>
       <td style={cell}><Pill tone={SUBTASK_TONE[sub.status] || 'outline'} dot>{sub.status}</Pill></td>
       <td style={cell}>
@@ -1025,17 +1045,22 @@ function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
   );
 }
 
-// Inline "add subtask" input — owner types a name, Enter or Add appends it.
-function SubtaskAdder({ onAdd }) {
+// Inline "add subtask" — name + assignee + (mandatory) due date, then Add.
+function SubtaskAdder({ onAdd, people, defaultOwner }) {
   const [title, setTitle] = useState_o('');
-  const add = () => { const t = title.trim(); if (!t) return; onAdd(t); setTitle(''); };
+  const [due, setDue] = useState_o('');
+  const [owner, setOwner] = useState_o(defaultOwner || '');
+  const ready = title.trim() && due;
+  const add = () => { if (!ready) return; onAdd({ title, due, owner: owner || defaultOwner }); setTitle(''); setDue(''); setOwner(defaultOwner || ''); };
   return (
-    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <span className="muted">↳</span>
       <input value={title} placeholder="Add a subtask…" onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-        style={{ ...SUB_INP, width: 280 }} />
-      <button className="btn" data-size="sm" data-variant="primary" disabled={!title.trim()} onClick={add}>
+        onKeyDown={(e) => { if (e.key === 'Enter') add(); }} style={{ ...SUB_INP, width: 220 }} />
+      <OwnerSelect value={owner} people={people} onChange={setOwner} />
+      <input type="date" required value={due} onChange={(e) => setDue(e.target.value)} title="Due date (required)"
+        style={{ ...SUB_INP, borderColor: due ? 'var(--border)' : 'var(--red, #e5484d)' }} />
+      <button className="btn" data-size="sm" data-variant="primary" disabled={!ready} title={!due ? 'Due date is required' : 'Add subtask'} onClick={add}>
         <Icon name="check" size={11} /> Add subtask
       </button>
     </div>
