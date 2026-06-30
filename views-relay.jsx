@@ -1958,13 +1958,30 @@ function NonPayrollSheet({ rows, allRows, canEdit, inr, pLabel, periods, refresh
 // The maintained sheet carries budgeted amounts only (INR, excl GST); actuals
 // are not yet wired, so this is a budget dashboard. Scoped per role: L3/Admin
 // see all teams; an L2 sees only their own (window.CDC.filterNonpayroll).
+// Normalize any period string to canonical "YYYY-MM" so malformed values from
+// import/manual entry (e.g. "july-26", "Jul '26") merge with the proper month
+// and sort chronologically instead of landing last as a duplicate tab.
+const NP_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+function normPeriod(p) {
+  if (!p) return p;
+  const s = String(p).trim();
+  let m = /^(\d{4})-(\d{1,2})$/.exec(s);
+  if (m) return `${m[1]}-${String(+m[2]).padStart(2, '0')}`;
+  m = /^([A-Za-z]+)[\s'._-]*(\d{2,4})$/.exec(s);   // "july-26" · "Jul '26" · "july 2026"
+  if (m) {
+    const mon = NP_MON[m[1].slice(0, 3).toLowerCase()];
+    if (mon) { let y = +m[2]; if (y < 100) y += 2000; return `${y}-${String(mon).padStart(2, '0')}`; }
+  }
+  return s;
+}
+
 function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
   const rows = CDC.filterNonpayroll(currentUser.id) || [];
   // Dept-level budgets (DS&ML / DS&Algo) come in with sub:null — show them under the dept name, not the '—' bucket.
   const teamOf = (r) => r.sub || CDC.lookup.dept(r.dept)?.name || '—';
-  const periods = useMP(() => [...new Set(rows.map((r) => r.period))].sort(), [rows]);
+  const periods = useMP(() => [...new Set(rows.map((r) => normPeriod(r.period)))].sort(), [rows]);
   const allSubs = useMP(() => [...new Set(rows.map(teamOf))].sort(), [rows]);
   // Every filter is multi-select; an empty array means "all".
   const [months, setMonths] = useStP([]);
@@ -1983,7 +2000,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const openProps = (id) => ({ open: openFilter === id, onToggleOpen: () => setOpenFilter((o) => o === id ? null : id) });
   const toggleMonth = (p) => setMonths((s) => s.includes(p) ? s.filter((x) => x !== p) : [...s, p]);
   const cur = rows.filter((r) =>
-    (months.length === 0 || months.includes(r.period)) &&
+    (months.length === 0 || months.includes(normPeriod(r.period))) &&
     (cats.length === 0 || cats.includes(r.category)) &&
     (subs.length === 0 || subs.includes(teamOf(r))) &&
     (vendors.length === 0 || vendors.includes(r.tool)));
@@ -1991,7 +2008,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   // INR, Indian grouping (lakh/crore). '2026-08' → "Aug '26".
   const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const pLabel = (p) => { const m = /^(\d{4})-(\d{2})$/.exec(p || ''); return m ? `${MON[+m[2] - 1]} '${m[1].slice(2)}` : p; };
+  const pLabel = (p) => { const m = /^(\d{4})-(\d{2})$/.exec(normPeriod(p) || ''); return m ? `${MON[+m[2] - 1]} '${m[1].slice(2)}` : p; };
   const monthsLabel = months.length === 0 ? 'full year' : months.length === 1 ? pLabel(months[0]) : `${months.length} months`;
   const filterNote = [cats.length && `${cats.length} cat`, subs.length && `${subs.length} team`, vendors.length && `${vendors.length} vendor`].filter(Boolean).join(' · ');
 
@@ -2017,7 +2034,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       if (cats.length && !cats.includes(r.category)) continue;
       if (subs.length && !subs.includes(teamOf(r))) continue;
       if (vendors.length && !vendors.includes(r.tool)) continue;
-      m.set(r.period, (m.get(r.period) || 0) + (Number(r.planned) || 0));
+      m.set(normPeriod(r.period), (m.get(normPeriod(r.period)) || 0) + (Number(r.planned) || 0));
     }
     return [...m.entries()].map(([p, v]) => ({ period: p, budget: v })).sort((a, b) => a.period.localeCompare(b.period));
   }, [rows, cats, subs, vendors]);
