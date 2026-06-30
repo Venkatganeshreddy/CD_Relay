@@ -453,6 +453,7 @@ function TasksView({ tweaks, currentUser }) {
   const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
   const [editTask, setEditTask] = useState_o(null);   // owner full-edit of their own task
+  const [expanded, setExpanded] = useState_o({});     // taskId -> subtasks expanded?
   const [creating, setCreating] = useState_o(false);
   const [, setTick] = useState_o(0);   // force re-render after a delete
   const [dateSel, setDateSel] = useState_o(null);       // 'YYYY-MM-DD' or null (calendar pick)
@@ -727,6 +728,23 @@ function TasksView({ tweaks, currentUser }) {
     setTick((n) => n + 1);
   }
 
+  // ── Subtasks ──────────────────────────────────────────────────────────
+  // Lightweight checklist items embedded in the parent task's `data` JSON:
+  // { id, title, status, due }. They never enter the flat TASKS list, so they
+  // don't inflate any board/glance/badge counts. Persisted via updateTaskFields
+  // (subtasks isn't a mirrored worklog field, so the worklog is untouched).
+  const toggleExpand = (id) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
+  async function saveSubtasks(parentId, subtasks) {
+    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(parentId, { subtasks });
+    setTick((n) => n + 1);
+  }
+  const addSubtask = (parent, title) => saveSubtasks(parent.id,
+    [...(parent.subtasks || []), { id: `sub-${Date.now()}`, title: title.trim(), status: 'In-progress', due: '' }]);
+  const patchSubtask = (parent, sid, patch) => saveSubtasks(parent.id,
+    (parent.subtasks || []).map((s) => (s.id === sid ? { ...s, ...patch } : s)));
+  const removeSubtask = (parent, sid) => saveSubtasks(parent.id,
+    (parent.subtasks || []).filter((s) => s.id !== sid));
+
   const suggested = allTasks.filter((t) => t.status === 'SUGGESTED');
   const reviewed = Object.keys(decisions).length;
   const tabCount = (f) =>
@@ -815,10 +833,27 @@ function TasksView({ tweaks, currentUser }) {
               // status-editable here (they go through approve/reject).
               const isOwner = t.owner === me.id;
               const canSetStatus = status !== 'SUGGESTED' && isOwner;
+              const subs = t.subtasks || [];
+              const hasSubUI = status !== 'SUGGESTED' && (subs.length > 0 || isOwner);
+              const isOpen = !!expanded[t.id];
               return (
-                <tr key={t.id} style={decided === 'rejected' ? { opacity: 0.45 } : decided === 'approved' ? { background: 'color-mix(in oklch, var(--green-soft) 40%, transparent)' } : {}}>
+                <React.Fragment key={t.id}>
+                <tr style={decided === 'rejected' ? { opacity: 0.45 } : decided === 'approved' ? { background: 'color-mix(in oklch, var(--green-soft) 40%, transparent)' } : {}}>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{t.title}</div>
+                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                      {hasSubUI ? (
+                        <button className="btn" data-size="sm" data-variant="ghost" title={isOpen ? 'Hide subtasks' : 'Show subtasks'}
+                          style={{ padding: '0 4px' }} onClick={() => toggleExpand(t.id)}>
+                          <Icon name={isOpen ? 'chev-down' : 'chev-right'} size={12} />
+                        </button>
+                      ) : <span style={{ display: 'inline-block', width: 18 }} />}
+                      <span style={{ fontWeight: 500 }}>{t.title}</span>
+                      {subs.length > 0 && (
+                        <Pill tone="outline" title={`${subs.filter((s) => s.status === 'Done').length}/${subs.length} subtasks done`}>
+                          {subs.filter((s) => s.status === 'Done').length}/{subs.length}
+                        </Pill>
+                      )}
+                    </div>
                     {(t.metricCategory || t.taskCategory) && (
                       <div className="row" style={{ gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
                         {t.metricCategory && <Pill tone="accent">{t.metricCategory}</Pill>}
@@ -879,6 +914,18 @@ function TasksView({ tweaks, currentUser }) {
                     </div>
                   </td>
                 </tr>
+                {isOpen && subs.map((s) => (
+                  <SubtaskRow key={s.id} sub={s} canEdit={isOwner}
+                    onPatch={(patch) => patchSubtask(t, s.id, patch)} onRemove={() => removeSubtask(t, s.id)} />
+                ))}
+                {isOpen && isOwner && (
+                  <tr style={{ background: 'var(--panel-2, #fafafa)' }}>
+                    <td colSpan={5} style={{ paddingLeft: 30 }}>
+                      <SubtaskAdder onAdd={(title) => addSubtask(t, title)} />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
             {list.length === 0 && <tr><td colSpan={5}><div className="empty">No {filter.toLowerCase()} tasks.</div></td></tr>}
@@ -913,6 +960,57 @@ function TasksView({ tweaks, currentUser }) {
   );
 }
 window.TasksView = TasksView;
+
+// One nested subtask row (lightweight: title · status · due date). Editable
+// inline by the parent task's owner; read-only for everyone else.
+const SUBTASK_TONE = { 'Done': 'green', 'In-progress': 'blue', 'Blocked': 'red', 'Overdue': 'amber', 'Backlog': 'amber' };
+function SubtaskRow({ sub, canEdit, onPatch, onRemove }) {
+  const STATUSES = (window.CDC.TASK_CATALOG || {}).STATUSES || ['In-progress', 'Done', 'Blocked'];
+  const inp = { fontSize: 12, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' };
+  return (
+    <tr style={{ background: 'var(--panel-2, #fafafa)' }}>
+      <td style={{ paddingLeft: 30 }}>
+        {canEdit
+          ? <input value={sub.title} placeholder="Subtask" onChange={(e) => onPatch({ title: e.target.value })}
+              style={{ ...inp, width: '90%', fontWeight: 500 }} />
+          : <span style={{ fontSize: 12.5, fontWeight: 500 }}>↳ {sub.title}</span>}
+      </td>
+      <td className="muted" style={{ fontSize: 11 }}>—</td>
+      <td className="muted mono" style={{ fontSize: 12 }}>
+        {canEdit
+          ? <input type="date" value={sub.due || ''} onChange={(e) => onPatch({ due: e.target.value })} style={inp} />
+          : <span>due {sub.due || '—'}</span>}
+      </td>
+      <td>
+        {canEdit
+          ? <select value={sub.status} onChange={(e) => onPatch({ status: e.target.value })} style={inp}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          : <Pill tone={SUBTASK_TONE[sub.status] || 'outline'} dot>{sub.status}</Pill>}
+      </td>
+      <td>
+        {canEdit && <button className="btn" data-size="sm" data-variant="ghost" title="Remove subtask" onClick={onRemove}>✕</button>}
+      </td>
+    </tr>
+  );
+}
+
+// Inline "add subtask" input — owner types a name, Enter or Add appends it.
+function SubtaskAdder({ onAdd }) {
+  const [title, setTitle] = useState_o('');
+  const add = () => { const t = title.trim(); if (!t) return; onAdd(t); setTitle(''); };
+  return (
+    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+      <span className="muted" style={{ fontSize: 12 }}>↳</span>
+      <input value={title} placeholder="Add a subtask…" onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', width: 260 }} />
+      <button className="btn" data-size="sm" data-variant="ghost" disabled={!title.trim()} onClick={add}>
+        <Icon name="check" size={11} /> Add subtask
+      </button>
+    </div>
+  );
+}
 
 // Internal task status → form label, for seeding the modal in edit mode.
 const TASK_STATUS_LABEL = { ACTIVE: 'In-progress', DONE: 'Done', BLOCKED: 'Blocked', ESCALATED: 'Blocked', BACKLOG: 'Backlog' };
