@@ -80,57 +80,19 @@ function Dashboard({ tweaks, currentUser, nav }) {
     }),
   ];
 
+  const adoptionAvg = Math.round(adoption.reduce((s, a) => s + a.pct, 0) / Math.max(1, adoption.length));
+  const flaggedTotal = vagueFlags.length + overdueTasks.length;
+
   return (
     <div className="fadein">
-      {/* Context strip */}
-      <GreetingHeader
-        currentUser={currentUser}
-        actions={
-          <>
-            <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
-            <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('copilot')}><Icon name="sparkles" size={12} /> Ask Concierge</button>
-          </>
-        }
+      {/* Signature hero — the team's live daily pulse. */}
+      <PulseHero
+        currentUser={currentUser} nav={nav}
+        reportPct={reportPct} reportTone={reportTone}
+        totalReports={totalReports} totalExpected={totalExpected} missingCount={missingCount}
+        flagged={flaggedTotal} vague={vagueFlags.length} overdue={overdueTasks.length}
+        escalations={escalations.length} adoptionAvg={adoptionAvg} adoptionN={adoption.length}
       />
-
-      {/* Section 1: Reports today */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        <div className="kpi-tile" data-tone={reportTone}>
-          <div className="kpi-name">Logged today</div>
-          <div className="kpi-value">{totalReports}<span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>/{totalExpected}</span></div>
-          <div className="kpi-meta">
-            <span>{missingCount} not logged</span>
-            <Pill tone={reportTone} dot>{reportPct}%</Pill>
-          </div>
-        </div>
-
-        {/* Section 2: Flagged reports — combined card */}
-        <div className="kpi-tile" data-tone={vagueFlags.length + overdueTasks.length > 0 ? 'amber' : undefined}>
-          <div className="kpi-name">Flagged reports</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <div className="kpi-value">{vagueFlags.length + overdueTasks.length}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              <div><span className="mono">{vagueFlags.length}</span> vague</div>
-              <div><span className="mono">{overdueTasks.length}</span> overdue</div>
-            </div>
-          </div>
-          <div className="kpi-meta"><span>flag → task pipeline</span><button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('engram')}>Triage →</button></div>
-        </div>
-
-        {/* Section 3: Escalations (team-level rollup) */}
-        <div className="kpi-tile" data-tone={escalations.length > 0 ? 'red' : undefined}>
-          <div className="kpi-name">Escalations</div>
-          <div className="kpi-value">{escalations.length}</div>
-          <div className="kpi-meta"><span>team-level</span><button className="btn" data-size="sm" data-variant="ghost" onClick={() => nav.go('tasks')}>Open →</button></div>
-        </div>
-
-        {/* Section 4: Agentic workflow adoption (summary tile, full grid below) */}
-        <div className="kpi-tile">
-          <div className="kpi-name">Agentic adoption</div>
-          <div className="kpi-value">{Math.round(adoption.reduce((s, a) => s + a.pct, 0) / Math.max(1, adoption.length))}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 400 }}>%</span></div>
-          <div className="kpi-meta"><span>avg across {adoption.length} sub-teams</span></div>
-        </div>
-      </div>
 
       {/* Section 3 expanded — escalations list */}
       {escalations.length > 0 && (
@@ -343,6 +305,60 @@ function Dashboard({ tweaks, currentUser, nav }) {
   );
 }
 window.Dashboard = Dashboard;
+
+// ── Signature hero: live "team pulse" command center ───────────────────
+function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, totalExpected, missingCount, flagged, vague, overdue, escalations, adoptionAvg, adoptionN }) {
+  const [now, setNow] = useState_d(new Date());
+  useEffect_d(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
+  const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
+  const hour = Number(ist({ hour: '2-digit', hour12: false }));
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Working late';
+  const first = (currentUser && currentUser.name ? currentUser.name.split(' ')[0] : 'there');
+  const dateline = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
+  const ringColor = reportTone === 'green' ? 'var(--green)' : reportTone === 'amber' ? 'var(--amber)' : reportTone === 'red' ? 'var(--red)' : 'var(--accent)';
+  return (
+    <div className="pulse-hero">
+      <div className="pulse-main">
+        <div className="pulse-eyebrow"><span className="dot" data-tone="green" data-pulse="true" /> Team pulse · live</div>
+        <h1 className="pulse-title">{greet}, {first}.</h1>
+        <div className="pulse-dateline">{dateline}</div>
+        <div className="row" style={{ gap: 8, marginTop: 16 }}>
+          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('copilot')}><Icon name="sparkles" size={12} /> Ask Concierge</button>
+          <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
+        </div>
+      </div>
+
+      <div className="pulse-ring-wrap">
+        <div className="ring" style={{ '--pct': reportPct, '--ring-color': ringColor }}>
+          <div className="ring-center">
+            <div className="ring-pct">{reportPct}<span>%</span></div>
+            <div className="ring-lbl">logged today</div>
+          </div>
+        </div>
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 10, textAlign: 'center' }}>
+          <span className="mono" style={{ fontWeight: 600, color: 'var(--text)' }}>{totalReports}/{totalExpected}</span> people · {missingCount} pending
+        </div>
+      </div>
+
+      <div className="pulse-stats">
+        <PulseStat label="Flagged" value={flagged} tone={flagged > 0 ? 'amber' : 'green'} hint={`${vague} vague · ${overdue} overdue`} onClick={() => nav.go('engram')} />
+        <PulseStat label="Escalations" value={escalations} tone={escalations > 0 ? 'red' : 'green'} hint="team-level" onClick={() => nav.go('tasks')} />
+        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`} />
+      </div>
+    </div>
+  );
+}
+
+function PulseStat({ label, value, tone, hint, onClick }) {
+  return (
+    <div className="pulse-stat" onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      <div className="pulse-stat-top"><span className="dot" data-tone={tone} /><span className="pulse-stat-label">{label}</span></div>
+      <div className="pulse-stat-value">{value}</div>
+      <div className="pulse-stat-hint">{hint}</div>
+    </div>
+  );
+}
+window.PulseHero = PulseHero;
 
 // ── Helpers for the new dashboard ──────────────────────────────────────
 function computeEscalations(CDC, depts, tasks) {
