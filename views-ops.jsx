@@ -1149,7 +1149,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
           onClick={() => onCreate({ owner, products, stacks, outputCategory, details,
-            outputCount: countNA ? null : Number(outputCount), template, estHours, status, due: due || null, reason })}>
+            outputCount: null, template: {}, estHours, status, due: due || null, reason })}>
           {editing ? 'Save changes' : 'Create task'}
         </button>
       </>}
@@ -1220,53 +1220,11 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
             <div className="row" style={{ gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pill tone="accent" dot>{map.metric}</Pill>
               <span className="muted" style={{ fontSize: 11.5 }}>{map.activity} → {map.task}</span>
-              {!countNA && (
-                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={label()}>Count</span>
-                  <input type="number" min="0" step="1" value={outputCount} placeholder="0"
-                    onChange={(e) => setOutputCount(e.target.value.replace(/[^\d]/g, ''))}
-                    style={{ ...inp, width: 80, padding: '5px 8px' }} />
-                </span>
-              )}
-              {countNA && <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>count N/A</span>}
             </div>
           )}
         </div>
 
-        {map && fields.length > 0 && (
-          <div>
-            <div style={label()}>Task — {taskCategory} <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· optional</span></div>
-            <div className="template-form">
-              {fields.map((f) => (
-                <React.Fragment key={f.id}>
-                  <label>{f.label}</label>
-                  {f.type === 'text' && (
-                    <input className="field-input" placeholder={f.ph} value={template[f.id] || ''}
-                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
-                  )}
-                  {f.type === 'number' && (
-                    <input className="field-input" type="number" min={f.min != null ? f.min : 0} max={f.max} step="1" placeholder={f.ph} value={template[f.id] || ''}
-                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
-                  )}
-                  {f.type === 'textarea' && (
-                    <textarea className="field-input" style={{ height: 56, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={template[f.id] || ''}
-                      onChange={(e) => setTemplate((v) => ({ ...v, [f.id]: e.target.value }))} />
-                  )}
-                  {f.type === 'choice' && (
-                    <div className="seg" style={{ justifySelf: 'start' }}>
-                      {f.options.map((o) => (
-                        <button key={o} type="button" data-active={template[f.id] === o}
-                          onClick={() => setTemplate((v) => ({ ...v, [f.id]: o }))}>{o}</button>
-                      ))}
-                    </div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Task details — optional free-text, sits below the tailored template. */}
+        {/* Task details — the single required description of the work. */}
         {map && (
           <div>
             <div style={label()}>Task details <span style={{ color: 'var(--rose, #c0392b)' }}>*</span> <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· describe what this task is</span></div>

@@ -480,14 +480,6 @@ const SNAPSHOT_STATUSES = ['In-progress', 'Done', 'Blocked', 'Overdue', 'Backlog
 const INTERNAL_TO_LABEL = { ACTIVE: 'In-progress', DONE: 'Done', BLOCKED: 'Blocked', ESCALATED: 'Blocked', BACKLOG: 'Backlog' };
 const NOTE_STATUSES = new Set(['Blocked', 'Overdue', 'Backlog']);
 
-// One template/detail field input — mirrors the create-task form's field types.
-function TaskFieldInput({ f, value, onChange }) {
-  if (f.type === 'textarea') return <textarea className="field-input" style={{ height: 56, padding: 8, resize: 'vertical' }} placeholder={f.ph} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-  if (f.type === 'number') return <input className="field-input" type="number" min={f.min != null ? f.min : 0} max={f.max} step="1" placeholder={f.ph} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-  if (f.type === 'choice') return <div className="seg" style={{ justifySelf: 'start' }}>{f.options.map((o) => <button key={o} type="button" data-active={value === o} onClick={() => onChange(o)}>{o}</button>)}</div>;
-  return <input className="field-input" placeholder={f.ph} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-}
-
 function AckPanel({ currentUser }) {
   const CDC = window.CDC;
   const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
@@ -497,21 +489,9 @@ function AckPanel({ currentUser }) {
     ['ACTIVE', 'BLOCKED', 'ESCALATED', 'BACKLOG'].includes(t.status));
   const [, force] = useS(0);
   const [draft, setDraft] = useS({});   // taskId -> { status, note }
-  const [editId, setEditId] = useS(null);     // task being detail-edited
-  const [edit, setEdit] = useS({});           // { template: {...}, desc }
 
-  // Open the number editor for a task you own. Owners edit only the template
-  // numbers (iterations, accuracy, output) — not the task name, details, etc.
-  function openEdit(t) {
-    setEditId(t.id);
-    setEdit({ template: { ...(t.template || {}) } });
-  }
-  async function saveEdit(t) {
-    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(t.id, { template: edit.template || {} });
-    setEditId(null);
-    force((n) => n + 1);
-  }
-  const fieldsFor = (t) => TASK_TEMPLATES[t.taskCategory] || (CDC.TASK_CATALOG && CDC.TASK_CATALOG.DEFAULT_TEMPLATE) || [];
+  // The glance is status-only: owners change task status (and subtask status)
+  // here — all other edits live on the Tasks board.
 
   // Change one subtask's status from the glance (status-only; name/due stay on
   // the Tasks board). Saves straight into the parent's embedded subtasks array.
@@ -585,9 +565,6 @@ function AckPanel({ currentUser }) {
                 </div>
                 {isOwn ? (
                   <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                    <button className="btn" data-size="sm" data-variant="ghost" onClick={() => editId === t.id ? setEditId(null) : openEdit(t)}>
-                      <Icon name="edit" size={11} /> {editId === t.id ? 'Close' : 'Edit details'}
-                    </button>
                     <select value={d.status} onChange={(e) => setField(t, { status: e.target.value })}
                       style={{ fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
                       {SNAPSHOT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -622,24 +599,6 @@ function AckPanel({ currentUser }) {
                         )}
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-              {isOwn && editId === t.id && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                  <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>Fill in your numbers{t.taskCategory ? ` — ${t.taskCategory}` : ''}.</div>
-                  <div className="template-form">
-                    {fieldsFor(t).map((f) => (
-                      <React.Fragment key={f.id}>
-                        <label>{f.label}</label>
-                        <TaskFieldInput f={f} value={(edit.template || {})[f.id]}
-                          onChange={(v) => setEdit((e) => ({ ...e, template: { ...(e.template || {}), [f.id]: v } }))} />
-                      </React.Fragment>
-                    ))}
-                  </div>
-                  <div className="row" style={{ gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-                    <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setEditId(null)}>Cancel</button>
-                    <button className="btn" data-size="sm" data-variant="primary" onClick={() => saveEdit(t)}>Save details</button>
                   </div>
                 </div>
               )}
