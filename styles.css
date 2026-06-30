@@ -184,14 +184,16 @@ input, select, textarea, .tbl tr td {
 .sb-item:hover { background: color-mix(in oklch, var(--surface) 55%, var(--accent) 10%); color: var(--text); }
 .sb-item:hover .ico { color: var(--accent); }
 .sb-item[data-active="true"] {
-  background: var(--accent-grad);
-  color: var(--accent-fg);
-  font-weight: 700;
-  box-shadow: var(--shadow-accent);
+  background: color-mix(in oklch, var(--accent-soft) 70%, var(--surface));
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent-border);
 }
-.sb-item[data-active="true"] .ico,
-.sb-item[data-active="true"] .badge { color: var(--accent-fg); }
-.sb-item[data-active="true"] .badge { background: rgba(255,255,255,0.22); box-shadow: none; }
+.sb-item[data-active="true"] .ico { color: var(--accent); }
+.sb-item[data-active="true"]::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 16px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
 .sb-item .ico {
   width: 14px; height: 14px; flex-shrink: 0;
   color: currentColor;
