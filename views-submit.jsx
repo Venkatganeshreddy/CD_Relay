@@ -513,6 +513,14 @@ function AckPanel({ currentUser }) {
   }
   const fieldsFor = (t) => TASK_TEMPLATES[t.taskCategory] || (CDC.TASK_CATALOG && CDC.TASK_CATALOG.DEFAULT_TEMPLATE) || [];
 
+  // Change one subtask's status from the glance (status-only; name/due stay on
+  // the Tasks board). Saves straight into the parent's embedded subtasks array.
+  async function setSubStatus(t, sid, status) {
+    const subs = (t.subtasks || []).map((s) => (s.id === sid ? { ...s, status } : s));
+    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(t.id, { subtasks: subs });
+    force((n) => n + 1);
+  }
+
   const tasks = visible();
   if (tasks.length === 0) return null;
 
@@ -594,6 +602,28 @@ function AckPanel({ currentUser }) {
                 <input className="field-input" style={{ marginTop: 8, width: '100%' }}
                   placeholder={d.status === 'Backlog' ? 'What is the backlog? (stored, visible later)' : `Reason it's ${d.status.toLowerCase()}…`}
                   value={d.note} onChange={(e) => setField(t, { note: e.target.value })} />
+              )}
+              {(t.subtasks || []).length > 0 && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                  <div className="muted" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>
+                    Subtasks · {(t.subtasks).filter((s) => s.status === 'Done').length}/{(t.subtasks).length} done
+                  </div>
+                  <div className="col" style={{ gap: 5 }}>
+                    {(t.subtasks).map((s) => (
+                      <div key={s.id} className="row" style={{ justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12 }}><span className="muted" style={{ marginRight: 5 }}>↳</span>{s.title}{s.due ? <span className="muted" style={{ fontSize: 10.5, marginLeft: 6 }}>· due {s.due}</span> : null}</span>
+                        {isOwn ? (
+                          <select value={s.status} onChange={(e) => setSubStatus(t, s.id, e.target.value)}
+                            style={{ fontSize: 11.5, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            {SNAPSHOT_STATUSES.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <Pill tone="outline" dot>{s.status}</Pill>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
               {isOwn && editId === t.id && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
