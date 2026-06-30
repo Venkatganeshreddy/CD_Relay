@@ -328,7 +328,7 @@ function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, tota
         </div>
       </div>
 
-      <div className="pulse-ring-wrap">
+      <div className="pulse-ring-wrap" onClick={() => nav.go('missing')} style={{ cursor: 'pointer' }} title="See who hasn't logged today">
         <div className="ring" style={{ '--pct': reportPct, '--ring-color': ringColor }}>
           <div className="ring-center">
             <div className="ring-pct">{reportPct}<span>%</span></div>
@@ -343,7 +343,7 @@ function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, tota
       <div className="pulse-stats">
         <PulseStat label="Flagged" value={flagged} tone={flagged > 0 ? 'amber' : 'green'} hint={`${vague} vague · ${overdue} overdue`} onClick={() => nav.go('engram')} />
         <PulseStat label="Escalations" value={escalations} tone={escalations > 0 ? 'red' : 'green'} hint="team-level" onClick={() => nav.go('tasks')} />
-        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`} />
+        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`} onClick={() => nav.go('farm')} />
       </div>
     </div>
   );
