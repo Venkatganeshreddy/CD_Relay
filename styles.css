@@ -195,10 +195,11 @@ input, select, textarea, .tbl tr td {
 }
 .sb-item .badge {
   margin-left: auto;
-  min-width: 18px; height: 16px; padding: 0 5px;
-  border-radius: 8px;
+  min-width: 18px; height: 16px; padding: 0 6px;
+  border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
-  font-size: 10.5px; font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 24%, transparent);
+  font-size: 10.5px; font-weight: 700;
   display: grid; place-items: center;
   font-family: var(--font-mono);
 }
@@ -257,18 +258,19 @@ input, select, textarea, .tbl tr td {
 /* Role chip — keep contents on one logical row, no wrap */
 .role-chip {
   display: flex; align-items: center; gap: 8px;
-  height: 30px; padding: 0 10px 0 6px;
+  height: 32px; padding: 0 10px 0 6px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
   font-size: 12.5px;
-  cursor: default;
+  cursor: pointer;
   max-width: 240px;
   white-space: nowrap;
 }
 .role-chip > div { min-width: 0; overflow: hidden; }
 .role-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.role-chip:hover { background: var(--panel); }
+.role-chip:hover { background: var(--panel); border-color: var(--accent-border); }
 .avatar {
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--accent-grad); color: var(--accent-fg);
@@ -500,8 +502,8 @@ input, select, textarea, .tbl tr td {
   background: var(--panel-2);
   color: var(--text-muted);
 }
-.conf .conf-bar { width: 18px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.conf .conf-fill { height: 100%; background: var(--accent); }
+.conf .conf-bar { width: 18px; height: 3px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+.conf .conf-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
 .conf[data-low="true"] .conf-fill { background: var(--amber); }
 .conf[data-vlow="true"] .conf-fill { background: var(--red); }
 
@@ -566,7 +568,7 @@ input, select, textarea, .tbl tr td {
 .modal-f { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Misc */
-.divider { height: 1px; background: var(--border); margin: 12px 0; }
+.divider { height: 1px; border: 0; background: linear-gradient(90deg, transparent, var(--border) 12%, var(--border) 88%, transparent); margin: 12px 0; }
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 12.5px; }
 .kv dt { color: var(--text-muted); }
 .kv dd { margin: 0; }
@@ -576,7 +578,7 @@ input, select, textarea, .tbl tr td {
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 .tnum { font-variant-numeric: tabular-nums; }
-.code { font-family: var(--font-mono); font-size: 12px; background: var(--panel); padding: 2px 5px; border-radius: 3px; }
+.code { font-family: var(--font-mono); font-size: 12px; background: var(--panel-2); padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--border); }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1473,8 +1475,9 @@ input, select, textarea, .tbl tr td {
 }
 .submit-banner .banner-icon {
   width: 28px; height: 28px; border-radius: 50%;
-  background: var(--accent); color: var(--accent-fg);
+  background: var(--accent-grad); color: var(--accent-fg);
   display: grid; place-items: center; flex-shrink: 0;
+  box-shadow: var(--shadow-accent), inset 0 0 0 1px rgba(255,255,255,0.14);
 }
 .submit-banner .banner-title { font-weight: 600; font-size: 13px; }
 .submit-banner .banner-sub { color: var(--text-muted); font-size: 11.5px; }
@@ -1643,13 +1646,14 @@ input, select, textarea, .tbl tr td {
 }
 .dual-cta .cta-card {
   padding: 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface);
-  cursor: default;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
   display: flex; flex-direction: column; gap: 6px;
 }
-.dual-cta .cta-card:hover { border-color: var(--accent-border); background: var(--panel); }
+.dual-cta .cta-card:hover { border-color: var(--accent-border); background: var(--panel); transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .dual-cta .cta-card[data-primary="true"] {
   background: var(--text); color: var(--bg); border-color: var(--text);
 }
@@ -1679,10 +1683,12 @@ input, select, textarea, .tbl tr td {
 .task-card {
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
   display: flex; flex-direction: column; gap: 4px;
 }
+.task-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
 .task-card .task-title {
   font-size: 12.5px; font-weight: 500;
   line-height: 1.35;
