@@ -268,11 +268,12 @@ input, select, textarea, .tbl tr td {
 .role-chip:hover { background: var(--panel); }
 .avatar {
   width: 22px; height: 22px; border-radius: 50%;
-  background: var(--accent); color: var(--accent-fg);
+  background: var(--accent-grad); color: var(--accent-fg);
   display: grid; place-items: center;
   font-size: 10.5px; font-weight: 600;
   letter-spacing: 0.01em;
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), var(--shadow-sm);
 }
 .role-chip .role-lbl { color: var(--text-muted); }
 .role-chip .chev { color: var(--text-faint); margin-left: 2px; }
@@ -454,11 +455,12 @@ input, select, textarea, .tbl tr td {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius);
-  cursor: default;
+  cursor: pointer;
   display: flex; flex-direction: column; gap: 4px;
+  box-shadow: var(--shadow-sm);
 }
-.list-row:hover { background: var(--panel); }
-.list-row[data-active="true"] { background: var(--accent-soft); border-color: var(--accent-border); }
+.list-row:hover { background: var(--panel); border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.list-row[data-active="true"] { background: var(--accent-soft); border-color: var(--accent-border); box-shadow: var(--shadow-sm), inset 2px 0 0 var(--accent); }
 
 /* Modal */
 .modal-scrim {
@@ -577,10 +579,13 @@ input, select, textarea, .tbl tr td {
 
 /* Empty state */
 .empty {
-  padding: 40px 20px;
+  padding: 36px 20px;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--panel) 50%, transparent);
 }
 
 /* Approve/reject zone */
@@ -1418,20 +1423,23 @@ input, select, textarea, .tbl tr td {
   max-width: 100%;
 }
 .bot-bubble .bot-avatar {
-  width: 28px; height: 28px; border-radius: 6px;
-  background: var(--text); color: var(--bg);
+  width: 28px; height: 28px; border-radius: var(--radius);
+  background: var(--accent-grad); color: var(--accent-fg);
   display: grid; place-items: center;
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
   flex-shrink: 0; margin-top: 2px;
+  box-shadow: var(--shadow-accent);
 }
 .bot-bubble .bot-content {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  border-top-left-radius: var(--radius-sm);
   padding: 12px 14px;
   font-size: 14px;
   line-height: 1.5;
   max-width: 620px;
+  box-shadow: var(--shadow-sm);
 }
 .bot-bubble .bot-name {
   font-size: 11px; font-weight: 600;
@@ -1444,9 +1452,11 @@ input, select, textarea, .tbl tr td {
   align-self: flex-end;
   background: var(--text); color: var(--bg);
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-sm);
   font-size: 13.5px;
   max-width: 460px;
+  box-shadow: var(--shadow-sm);
 }
 .user-bubble.user-chips {
   background: var(--accent-soft);
@@ -1470,15 +1480,18 @@ input, select, textarea, .tbl tr td {
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 12.5px; color: var(--text);
-  cursor: default;
+  cursor: pointer;
   user-select: none;
 }
-.chip:hover { background: var(--panel); }
+.chip:hover { background: var(--panel); border-color: var(--border-strong); transform: translateY(-1px); }
+.chip:active { transform: translateY(0); }
 .chip[data-selected="true"] {
-  background: var(--accent);
+  background: var(--accent-grad);
   color: var(--accent-fg);
-  border-color: var(--accent);
+  border-color: transparent;
+  box-shadow: var(--shadow-accent);
 }
+.chip[data-selected="true"]:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .chip[data-selected="true"] .chip-check {
   display: inline-flex;
 }
@@ -1490,7 +1503,7 @@ input, select, textarea, .tbl tr td {
 }
 .input-text {
   height: 32px; padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -1499,6 +1512,7 @@ input, select, textarea, .tbl tr td {
   width: 100%;
 }
 .input-text:focus { border-color: var(--accent-border); }
+.input-text::placeholder, .field-input::placeholder { color: var(--text-faint); }
 .input-text[data-size="lg"] { height: 38px; font-size: 14px; }
 
 .template-form {
@@ -1515,7 +1529,7 @@ input, select, textarea, .tbl tr td {
 }
 .template-form .field-input {
   height: 30px; padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -1537,14 +1551,15 @@ input, select, textarea, .tbl tr td {
   background: transparent;
   padding: 4px 14px;
   border-radius: 999px;
-  font: inherit; font-size: 12.5px;
+  font: inherit; font-size: 12.5px; font-weight: 500;
   color: var(--text-muted);
-  cursor: default;
+  cursor: pointer;
 }
+.seg button:hover { color: var(--text); }
 .seg button[data-active="true"] {
   background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--border);
 }
 
 .dual-cta {
@@ -1611,9 +1626,9 @@ input, select, textarea, .tbl tr td {
 }
 .progress-track .progress-fill {
   height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.4s var(--ease);
+  border-radius: 999px;
 }
 
 .typing {
@@ -1643,9 +1658,10 @@ input, select, textarea, .tbl tr td {
   width: 56px; height: 56px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-grad);
   color: var(--accent-fg);
   display: grid; place-items: center;
+  box-shadow: var(--shadow-accent), inset 0 0 0 1px rgba(255,255,255,0.15);
 }
 .celebrate h2 {
   margin: 0 0 4px;
