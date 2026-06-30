@@ -341,9 +341,13 @@ function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, tota
       </div>
 
       <div className="pulse-stats">
-        <PulseStat label="Flagged" value={flagged} tone={flagged > 0 ? 'amber' : 'green'} hint={`${vague} vague · ${overdue} overdue`} onClick={() => nav.go('engram')} />
-        <PulseStat label="Escalations" value={escalations} tone={escalations > 0 ? 'red' : 'green'} hint="team-level" onClick={() => nav.go('tasks')} />
-        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`} onClick={() => nav.go('farm')} />
+        {/* Flagged = vague (Engram) + overdue (Tasks): land on whichever dominates. */}
+        <PulseStat label="Flagged" value={flagged} tone={flagged > 0 ? 'amber' : 'green'} hint={`${vague} vague · ${overdue} overdue`}
+          onClick={() => (vague >= overdue ? nav.go('engram') : nav.go('tasks', { filter: 'OVERDUE' }))} />
+        <PulseStat label="Escalations" value={escalations} tone={escalations > 0 ? 'red' : 'green'} hint="team-level"
+          onClick={() => nav.go('tasks', { filter: 'ESCALATED' })} />
+        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`}
+          onClick={() => nav.go('farm')} />
       </div>
     </div>
   );

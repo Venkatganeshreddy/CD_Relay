@@ -272,8 +272,8 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'weekly': return <WeeklyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'missing': return <MissingReportsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'monthly': return <MonthlyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'my-tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} myOnly />;
+    case 'tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} initialFilter={route.params.filter} />;
+    case 'my-tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} myOnly initialFilter={route.params.filter} />;
     case 'second-brain': return <SecondBrainView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;

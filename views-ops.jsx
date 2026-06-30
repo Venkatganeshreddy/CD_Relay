@@ -429,7 +429,7 @@ function TaskCalendar({ tasks, dateMode, setDateMode, dateSel, onPick }) {
   );
 }
 
-function TasksView({ tweaks, currentUser }) {
+function TasksView({ tweaks, currentUser, initialFilter }) {
   const CDC = window.CDC;
   const me = currentUser;
   const todayStr = CDC.fmt(CDC.today);
@@ -448,7 +448,8 @@ function TasksView({ tweaks, currentUser }) {
   const [decisions, setDecisions] = useState_o({});   // suggested triage: id -> approved|rejected
   const [statusOv, setStatusOv] = useState_o({});      // id -> status (forces re-render after update)
   // Managers open to their direct reports' tasks (L3 → L2s, L2 → their L1s); ICs open to their own.
-  const [filter, setFilter] = useState_o((seesAll && !reportees.length) ? 'ALL' : 'MINE');
+  // initialFilter (from a dashboard deep-link, e.g. Escalations → ESCALATED tab) wins.
+  const [filter, setFilter] = useState_o(initialFilter || ((seesAll && !reportees.length) ? 'ALL' : 'MINE'));
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
