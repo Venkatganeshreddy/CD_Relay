@@ -383,7 +383,11 @@
       await remote(() => sb.from('tasks').update({ data: t || { id, ...patch } }).eq('id', id));
       const wl = (window.CDC.WORKLOGS || []).find((w) => w.taskId === id);
       if (wl) {
-        if (patch.template) wl.template = patch.template;
+        // Keep the mirrored worklog in sync so rollups/dashboards match the edit.
+        for (const k of ['products', 'stacks', 'outputCategory', 'taskCategory', 'activityCategory', 'metricCategory', 'outputCount', 'template']) {
+          if (patch[k] !== undefined) wl[k] = patch[k];
+        }
+        if (patch.estHours !== undefined) wl.hours = Number(patch.estHours) || 0;
         await remote(() => sb.from('worklogs').update({ data: wl }).eq('id', wl.id));
       }
     },

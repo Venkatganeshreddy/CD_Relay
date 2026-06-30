@@ -452,6 +452,7 @@ function TasksView({ tweaks, currentUser }) {
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
+  const [editTask, setEditTask] = useState_o(null);   // owner full-edit of their own task
   const [creating, setCreating] = useState_o(false);
   const [, setTick] = useState_o(0);   // force re-render after a delete
   const [dateSel, setDateSel] = useState_o(null);       // 'YYYY-MM-DD' or null (calendar pick)
@@ -702,6 +703,30 @@ function TasksView({ tweaks, currentUser }) {
     setCreating(false);
   }
 
+  // Owner edits their own task's fields any time (status stays glance-only).
+  // Reuses the create form; updateTaskFields merges the patch + syncs the worklog.
+  async function saveEdit(form) {
+    if (!editTask) return;
+    const id = editTask.id;
+    const m = (CDC.TASK_CATALOG.OUTPUT_MAP || {})[form.outputCategory] || {};
+    const note = (form.details || '').trim();
+    const tmplSummary = form.template ? Object.values(form.template).filter(Boolean).join(' · ') : '';
+    const title = `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${(tmplSummary || note) ? ` — ${tmplSummary || note}` : ''}`;
+    const patch = {
+      title, products: form.products || [], stacks: form.stacks || [], stack: (form.stacks || [])[0] || null,
+      outputCategory: form.outputCategory || null, taskCategory: m.task || '',
+      activityCategory: m.activity || '', metricCategory: m.metric || '',
+      outputCount: form.outputCount ?? null, template: form.template || {}, desc: note,
+      estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
+      due: form.due || null,
+    };
+    if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(id, patch);
+    CDC.db.logInteraction && CDC.db.logInteraction({ agent: '—', flow: 'task_edit', inputRef: `Task ${id}`,
+      action: 'edit', reason: `Edited "${title}" by ${me.name}`, userId: me.id });
+    setEditTask(null);
+    setTick((n) => n + 1);
+  }
+
   const suggested = allTasks.filter((t) => t.status === 'SUGGESTED');
   const reviewed = Object.keys(decisions).length;
   const tabCount = (f) =>
@@ -843,6 +868,10 @@ function TasksView({ tweaks, currentUser }) {
                           {isManager && <button className="btn" data-size="sm" data-variant="ghost" onClick={() => escalate(t.id)} title="Escalate to next level"><Icon name="arrow-up" size={11} /> Escalate</button>}
                         </div>
                       ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
+                      {isOwner && status !== 'SUGGESTED' && (
+                        <button className="btn" data-size="sm" data-variant="ghost" title="Edit this task"
+                          onClick={() => setEditTask(t)}><Icon name="edit" size={11} /> Edit</button>
+                      )}
                       {isAdmin && status !== 'SUGGESTED' && (
                         <button className="btn" data-size="sm" data-variant="danger" title="Delete task (admin)"
                           style={{ marginLeft: 'auto' }} onClick={() => removeTask(t.id)}>Delete</button>
@@ -858,6 +887,8 @@ function TasksView({ tweaks, currentUser }) {
       </Card>
 
       <CreateTaskModal open={creating} onClose={() => setCreating(false)} onCreate={createTask} me={me} people={CDC.USERS} todayStr={todayStr} />
+
+      <CreateTaskModal open={!!editTask} onClose={() => setEditTask(null)} onCreate={saveEdit} initial={editTask} me={me} people={CDC.USERS} todayStr={todayStr} />
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit suggested task"
         footer={<>
@@ -883,7 +914,11 @@ function TasksView({ tweaks, currentUser }) {
 }
 window.TasksView = TasksView;
 
-function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
+// Internal task status → form label, for seeding the modal in edit mode.
+const TASK_STATUS_LABEL = { ACTIVE: 'In-progress', DONE: 'Done', BLOCKED: 'Blocked', ESCALATED: 'Blocked', BACKLOG: 'Backlog' };
+
+function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initial }) {
+  const editing = !!initial;
   const CAT = window.CDC.TASK_CATALOG;
   const [owner, setOwner] = useState_o(me.id);
   const [products, setProducts] = useState_o([]);
@@ -898,7 +933,16 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const [reason, setReason] = useState_o('');
   const [details, setDetails] = useState_o('');
   useEffect_o(() => {
-    if (open) {
+    if (!open) return;
+    if (initial) {
+      setOwner(initial.owner || me.id); setProducts(initial.products || []); setStacks(initial.stacks || []);
+      setOutputCategory(initial.outputCategory || ''); setCatSearch('');
+      setOutputCount(initial.outputCount == null ? '' : String(initial.outputCount));
+      setTemplate({ ...(initial.template || {}) });
+      setEstHours(initial.estHours == null ? '' : String(initial.estHours));
+      setStatus(TASK_STATUS_LABEL[initial.status] || 'In-progress'); setDue(initial.due || '');
+      setReason(initial.blockReason || ''); setDetails(initial.desc || '');
+    } else {
       setOwner(me.id); setProducts([]); setStacks([]); setOutputCategory(''); setCatSearch('');
       setOutputCount(''); setTemplate({}); setEstHours(''); setStatus('In-progress'); setDue(''); setReason(''); setDetails('');
     }
@@ -908,7 +952,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const taskCategory = map ? map.task : '';
   const countNA = outputCategory ? CAT.COUNT_NA.has(outputCategory) : false;
   const fields = TASK_TEMPLATES_REF(CAT)[taskCategory] || CAT.DEFAULT_TEMPLATE || [];
-  const needsReason = status === 'Blocked' || status === 'Overdue';
+  const needsReason = !editing && (status === 'Blocked' || status === 'Overdue');
   const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
 
   // Stack, Task (template) and Output count are optional — count defaults to 0.
@@ -940,7 +984,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
   const sectionGap = { display: 'flex', flexDirection: 'column', gap: 16 };
   const selCount = (n) => <span className="muted" style={{ textTransform: 'none', fontWeight: 400, fontSize: 11 }}>{n ? `· ${n} selected` : '· multi-select'}</span>;
   return (
-    <Modal open={open} onClose={onClose} title="New task — CD Task flow" width={840}
+    <Modal open={open} onClose={onClose} title={editing ? 'Edit task' : 'New task — CD Task flow'} width={840}
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
           {!outputCategory ? 'Pick a product-audience & output category'
@@ -953,19 +997,21 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
         <button className="btn" data-variant="primary" disabled={!valid}
           onClick={() => onCreate({ owner, products, stacks, outputCategory, details,
             outputCount: countNA ? null : Number(outputCount), template, estHours, status, due: due || null, reason })}>
-          Create task
+          {editing ? 'Save changes' : 'Create task'}
         </button>
       </>}
     >
       <div style={sectionGap}>
-        {/* 1. Owner (EMP ID) */}
-        <div>
-          <div style={label()}>Owner <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· EMP ID auto-filled</span></div>
-          <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
-            <option value={me.id}>{me.name} (me)</option>
-            {myTeam.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
-          </select>
-        </div>
+        {/* 1. Owner (EMP ID) — fixed when editing an existing task. */}
+        {!editing && (
+          <div>
+            <div style={label()}>Owner <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· EMP ID auto-filled</span></div>
+            <select value={owner} onChange={(e) => setOwner(e.target.value)} style={inp}>
+              <option value={me.id}>{me.name} (me)</option>
+              {myTeam.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.level} · {u.sub || u.dept}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* 2. Product-Audience + Stack (stack optional) */}
         <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1079,15 +1125,18 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr }) {
 
         {/* 5. Status · Reason · Estimated time */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 140px' }}>
-            <div style={label()}>Status <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
-              {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          {/* Status is set only on the Day-end glance — hidden when editing. */}
+          {!editing && (
+            <div style={{ flex: '1 1 140px' }}>
+              <div style={label()}>Status <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} style={inp}>
+                {CAT.STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ flex: '1 1 140px' }}>
             <div style={label()}>Due date <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <input type="date" value={due} min={todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
+            <input type="date" value={due} min={editing ? undefined : todayStr} onChange={(e) => setDue(e.target.value)} style={inp} />
           </div>
           <div style={{ flex: '1 1 120px' }}>
             <div style={label()}>Est. time (hrs)</div>
