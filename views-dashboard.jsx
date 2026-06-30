@@ -87,11 +87,25 @@ function Dashboard({ tweaks, currentUser, nav }) {
     <div className="fadein">
       {/* Signature hero — the team's live daily pulse. */}
       <PulseHero
-        currentUser={currentUser} nav={nav}
-        reportPct={reportPct} reportTone={reportTone}
-        totalReports={totalReports} totalExpected={totalExpected} missingCount={missingCount}
-        flagged={flaggedTotal} vague={vagueFlags.length} overdue={overdueTasks.length}
-        escalations={escalations.length} adoptionAvg={adoptionAvg} adoptionN={adoption.length}
+        currentUser={currentUser}
+        eyebrow="Team pulse · live"
+        actions={<>
+          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('copilot')}><Icon name="sparkles" size={12} /> Ask Concierge</button>
+          <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
+        </>}
+        ring={{
+          pct: reportPct, label: 'logged today', tone: reportTone,
+          onClick: () => nav.go('missing'), title: "See who hasn't logged today",
+          sub: <><span className="mono" style={{ fontWeight: 600, color: 'var(--text)' }}>{totalReports}/{totalExpected}</span> people · {missingCount} pending</>,
+        }}
+        stats={[
+          { label: 'Flagged', value: flaggedTotal, tone: flaggedTotal > 0 ? 'amber' : 'green', hint: `${vagueFlags.length} vague · ${overdueTasks.length} overdue`,
+            onClick: () => (vagueFlags.length >= overdueTasks.length ? nav.go('engram') : nav.go('tasks', { filter: 'OVERDUE' })) },
+          { label: 'Escalations', value: escalations.length, tone: escalations.length > 0 ? 'red' : 'green', hint: 'team-level',
+            onClick: () => nav.go('tasks', { filter: 'ESCALATED' }) },
+          { label: 'Agentic adoption', value: `${adoptionAvg}%`, tone: adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red', hint: `avg · ${adoption.length} sub-teams`,
+            onClick: () => nav.go('farm') },
+        ]}
       />
 
       {/* Section 3 expanded — escalations list */}
@@ -306,8 +320,12 @@ function Dashboard({ tweaks, currentUser, nav }) {
 }
 window.Dashboard = Dashboard;
 
-// ── Signature hero: live "team pulse" command center ───────────────────
-function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, totalExpected, missingCount, flagged, vague, overdue, escalations, adoptionAvg, adoptionN }) {
+// ── Signature hero: live "pulse" command center (reused by every dashboard) ──
+// Generic API so L3/L2/L1 each get the same striking banner with role-relevant
+// data: an auto greeting + live IST clock, an optional focal completion ring,
+// up to three vital stat cards, and custom action buttons.
+const PULSE_TONE = { green: 'var(--green)', amber: 'var(--amber)', red: 'var(--red)', accent: 'var(--accent)' };
+function PulseHero({ currentUser, eyebrow = 'Live', context, ring, stats = [], actions }) {
   const [now, setNow] = useState_d(new Date());
   useEffect_d(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
   const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
@@ -315,40 +333,33 @@ function PulseHero({ currentUser, nav, reportPct, reportTone, totalReports, tota
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Working late';
   const first = (currentUser && currentUser.name ? currentUser.name.split(' ')[0] : 'there');
   const dateline = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
-  const ringColor = reportTone === 'green' ? 'var(--green)' : reportTone === 'amber' ? 'var(--amber)' : reportTone === 'red' ? 'var(--red)' : 'var(--accent)';
+  const hasRing = ring && Number.isFinite(ring.pct);
   return (
-    <div className="pulse-hero">
+    <div className="pulse-hero" data-no-ring={!hasRing}>
       <div className="pulse-main">
-        <div className="pulse-eyebrow"><span className="dot" data-tone="green" data-pulse="true" /> Team pulse · live</div>
+        <div className="pulse-eyebrow"><span className="dot" data-tone="green" data-pulse="true" /> {eyebrow}</div>
         <h1 className="pulse-title">{greet}, {first}.</h1>
-        <div className="pulse-dateline">{dateline}</div>
-        <div className="row" style={{ gap: 8, marginTop: 16 }}>
-          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('copilot')}><Icon name="sparkles" size={12} /> Ask Concierge</button>
-          <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
-        </div>
+        <div className="pulse-dateline">{context ? <>{context} · {dateline}</> : dateline}</div>
+        {actions && <div className="row" style={{ gap: 8, marginTop: 16, flexWrap: 'wrap' }}>{actions}</div>}
       </div>
 
-      <div className="pulse-ring-wrap" onClick={() => nav.go('missing')} style={{ cursor: 'pointer' }} title="See who hasn't logged today">
-        <div className="ring" style={{ '--pct': reportPct, '--ring-color': ringColor }}>
-          <div className="ring-center">
-            <div className="ring-pct">{reportPct}<span>%</span></div>
-            <div className="ring-lbl">logged today</div>
+      {hasRing && (
+        <div className="pulse-ring-wrap" onClick={ring.onClick} style={{ cursor: ring.onClick ? 'pointer' : 'default' }} title={ring.title || ''}>
+          <div className="ring" style={{ '--pct': Math.max(0, Math.min(100, ring.pct)), '--ring-color': PULSE_TONE[ring.tone] || 'var(--accent)' }}>
+            <div className="ring-center">
+              <div className="ring-pct">{ring.pct}<span>%</span></div>
+              <div className="ring-lbl">{ring.label}</div>
+            </div>
           </div>
+          {ring.sub && <div className="muted" style={{ fontSize: 11.5, marginTop: 10, textAlign: 'center' }}>{ring.sub}</div>}
         </div>
-        <div className="muted" style={{ fontSize: 11.5, marginTop: 10, textAlign: 'center' }}>
-          <span className="mono" style={{ fontWeight: 600, color: 'var(--text)' }}>{totalReports}/{totalExpected}</span> people · {missingCount} pending
-        </div>
-      </div>
+      )}
 
-      <div className="pulse-stats">
-        {/* Flagged = vague (Engram) + overdue (Tasks): land on whichever dominates. */}
-        <PulseStat label="Flagged" value={flagged} tone={flagged > 0 ? 'amber' : 'green'} hint={`${vague} vague · ${overdue} overdue`}
-          onClick={() => (vague >= overdue ? nav.go('engram') : nav.go('tasks', { filter: 'OVERDUE' }))} />
-        <PulseStat label="Escalations" value={escalations} tone={escalations > 0 ? 'red' : 'green'} hint="team-level"
-          onClick={() => nav.go('tasks', { filter: 'ESCALATED' })} />
-        <PulseStat label="Agentic adoption" value={`${adoptionAvg}%`} tone={adoptionAvg >= 70 ? 'green' : adoptionAvg >= 40 ? 'amber' : 'red'} hint={`avg · ${adoptionN} sub-teams`}
-          onClick={() => nav.go('farm')} />
-      </div>
+      {stats.length > 0 && (
+        <div className="pulse-stats">
+          {stats.map((s, i) => <PulseStat key={i} {...s} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -363,6 +374,7 @@ function PulseStat({ label, value, tone, hint, onClick }) {
   );
 }
 window.PulseHero = PulseHero;
+window.PulseStat = PulseStat;
 
 // ── Helpers for the new dashboard ──────────────────────────────────────
 function computeEscalations(CDC, depts, tasks) {

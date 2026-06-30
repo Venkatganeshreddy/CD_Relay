@@ -61,28 +61,44 @@ function ManagerView({ tweaks, currentUser, nav }) {
   const reportRate = computeReportRate(mgr, recentWorklogs, myReportees, range === 'day' ? 1 : 5);
   const teamHighlights = computeTeamHighlights(recentWorklogs);
 
+  // Hero "team pulse": share of the team that reported in the active range.
+  const teamSize = myReportees.length;
+  const loggedPeople = new Set(recentWorklogs.map((w) => w.userId)).size;
+  const ratePct = teamSize ? Math.round((loggedPeople / teamSize) * 100) : 0;
+  const rateTone = ratePct >= 80 ? 'green' : ratePct >= 50 ? 'amber' : 'red';
+  const heroReady = !(isL3 && !pickedMgrId);
+  const Hero = window.PulseHero;
+
   return (
     <div className="fadein">
-      <GreetingHeader
+      <Hero
         currentUser={currentUser}
-        context={isL3 ? 'Drill into any of your direct L2s' : `Your Sub Department — ${mgr.sub || mgr.title}`}
-        actions={
-          <>
-            {isL3 && (
-              <select className="btn" data-size="sm" value={pickedMgrId || ''} onChange={(e) => setPickedMgrId(e.target.value)}>
-                <option value="">— pick a manager —</option>
-                {CDC.USERS.filter((u) => u.managerId === currentUser.id && u.role === 'L2').map((u) => (
-                  <option key={u.id} value={u.id}>{u.name} · {u.sub || u.title}</option>
-                ))}
-              </select>
-            )}
-            <div className="seg">
-              <button data-active={range === 'day'} onClick={() => setRange('day')}>Day</button>
-              <button data-active={range === 'week'} onClick={() => setRange('week')}>Week</button>
-            </div>
-            <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('weekly')}><Icon name="weekly" size={12} /> Weekly draft</button>
-          </>
-        }
+        eyebrow="Team pulse · live"
+        context={isL3 ? 'Drill into any of your direct L2s' : `Sub Department — ${mgr.sub || mgr.title}`}
+        actions={<>
+          {isL3 && (
+            <select className="btn" data-size="sm" value={pickedMgrId || ''} onChange={(e) => setPickedMgrId(e.target.value)}>
+              <option value="">— pick a manager —</option>
+              {CDC.USERS.filter((u) => u.managerId === currentUser.id && u.role === 'L2').map((u) => (
+                <option key={u.id} value={u.id}>{u.name} · {u.sub || u.title}</option>
+              ))}
+            </select>
+          )}
+          <div className="seg">
+            <button data-active={range === 'day'} onClick={() => setRange('day')}>Day</button>
+            <button data-active={range === 'week'} onClick={() => setRange('week')}>Week</button>
+          </div>
+          <button className="btn" data-size="sm" data-variant="accent" onClick={() => nav.go('weekly')}><Icon name="weekly" size={12} /> Weekly draft</button>
+        </>}
+        ring={heroReady ? {
+          pct: ratePct, label: `reported · ${rangeShort}`, tone: rateTone, onClick: () => nav.go('missing'),
+          sub: <><span className="mono" style={{ fontWeight: 600, color: 'var(--text)' }}>{loggedPeople}/{teamSize}</span> reported · {rangeLong}</>,
+        } : null}
+        stats={heroReady ? [
+          { label: 'Blocked', value: blocked.length, tone: blocked.length > 0 ? 'red' : 'green', hint: rangeLong, onClick: () => nav.go('tasks', { filter: 'BLOCKED' }) },
+          { label: 'Open tasks', value: overdueTasks.length, tone: overdueTasks.length > 0 ? 'amber' : 'green', hint: 'active + suggested', onClick: () => nav.go('tasks') },
+          { label: 'Team size', value: teamSize, tone: 'accent', hint: 'direct reports' },
+        ] : []}
       />
 
       {isL3 && !pickedMgrId ? (
@@ -475,16 +491,35 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
   const totalHrs = recent.reduce((s, w) => s + w.hours, 0);
   const submittedToday = my.some((w) => w.daysAgo === 0);
 
+  // Personal pulse: hours logged this week toward the 5-day target.
+  const weeklyTargetH = (CDC.DAILY_TARGET_HRS || 8) * 5;
+  const hoursPct = Math.min(100, Math.round((totalHrs / weeklyTargetH) * 100));
+  const hoursTone = hoursPct >= 80 ? 'green' : hoursPct >= 50 ? 'amber' : 'red';
+  const blockedCount = recent.filter((w) => w.status === 'Blocked').length;
+  const streak = Math.min(7, new Set(recent.map((w) => w.date)).size);
+  const Hero = window.PulseHero;
+
   return (
     <div className="fadein">
-      <GreetingHeader
+      <Hero
         currentUser={currentUser}
-        context={`${currentUser.title} · ${submittedToday ? "today's report is submitted" : "today's report not submitted yet"}`}
-        actions={
-          <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('my-tasks')}>
+        eyebrow="Your week · live"
+        context={`${currentUser.title} · ${submittedToday ? "today's report is in" : 'today not submitted yet'}`}
+        actions={<>
+          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('submit')}>
             <Icon name="edit" size={12} /> {submittedToday ? 'Edit today' : 'Submit today'}
           </button>
-        }
+          <button className="btn" data-size="sm" onClick={() => nav.go('my-tasks')}><Icon name="tasks" size={12} /> My tasks</button>
+        </>}
+        ring={{
+          pct: hoursPct, label: 'of weekly target', tone: hoursTone, onClick: () => nav.go('worklogs'),
+          sub: <><span className="mono" style={{ fontWeight: 600, color: 'var(--text)' }}>{totalHrs.toFixed(0)}/{weeklyTargetH}h</span> · last 7 days</>,
+        }}
+        stats={[
+          { label: 'Tasks logged', value: recent.length, tone: 'accent', hint: 'last 7 days', onClick: () => nav.go('worklogs') },
+          { label: 'Blocked', value: blockedCount, tone: blockedCount > 0 ? 'red' : 'green', hint: 'needs attention', onClick: () => nav.go('my-tasks', { filter: 'BLOCKED' }) },
+          { label: 'Streak', value: `${streak}d`, tone: streak >= 5 ? 'green' : 'amber', hint: 'of 7 working days' },
+        ]}
       />
 
       {/* Daily workflow banner — only during the 6–8 PM snapshot window. Before
