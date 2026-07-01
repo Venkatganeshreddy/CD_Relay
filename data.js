@@ -208,7 +208,7 @@
     id, sub, dept: 'd-fsgci', title, products,
     deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text, assignees: [] })),
   });
-  const GA_GOAL = (id, title) => GOAL(id, title, [], [], 'Content — GenAI');
+  const GA_GOAL = (id, title, deliverables = []) => GOAL(id, title, deliverables, [], 'Content — GenAI');
   const GOALS = [
     GOAL('goal-fs-1', 'IDE repairs & improvements', ['Fix Monaco autosave race on tab switch', 'Reduce cold-start latency to < 2s']),
     GOAL('goal-fs-2', 'Adaptive Question Picking for Computer Programming Practice', ['Design difficulty-band picker spec']),
@@ -227,14 +227,39 @@
     GOAL('goal-fs-15', 'Launchpad Content Review Support – OS'),
 
     // Gen AI team goals.
-    GA_GOAL('goal-ga-1', 'IDE repairs & improvements'),
-    GA_GOAL('goal-ga-2', 'Practical Software Engineering Content Delivery'),
-    GA_GOAL('goal-ga-3', 'Introduction to Generative AI - Revamp'),
-    GA_GOAL('goal-ga-4', 'Gen AI Role-specific awareness Sessions - Induction'),
-    GA_GOAL('goal-ga-5', 'AI for Finance Content Delivery'),
-    GA_GOAL('goal-ga-6', 'Content Quality Issues & Feedback Resolution'),
-    GA_GOAL('goal-ga-7', 'Observability Systems'),
-    GA_GOAL('goal-ga-8', 'Team Capacity Building'),
+    GA_GOAL('goal-ga-1', 'IDE repairs & improvements', [
+      'n8n IDE issue resolutions',
+      'Reduce IDE loading/opening time (~50s)',
+      'Reduce code submission time (under 1 minute)',
+      'IDE observability dashboard',
+      'Automate workflow testing with a script',
+      'Enhance n8n IDE exam support in LP/Topin',
+      'Simplify n8n submission process (8 steps + two-tab switching → fewer steps)',
+      'LP support for HTML-based Interactive Tutorial Builder',
+    ]),
+    GA_GOAL('goal-ga-2', 'Practical Software Engineering Content Delivery', [
+      'Fullstack AI IDE support in LP (learning, practice, exam)',
+      'Coding Question Generator - L3',
+      'Testcase-based evaluation for n8n (deterministic; replaces LLM eval that gives random scores)',
+      '13 session learning content',
+    ]),
+    GA_GOAL('goal-ga-3', 'Introduction to Generative AI - Revamp', [
+      '22 session learning content (spill-overs, content issues, etc.)',
+      'Convert RMs to Tutorials and add academic exam questions',
+      'Add nxtmock units',
+    ]),
+    GA_GOAL('goal-ga-4', 'Gen AI Role-specific awareness Sessions - Induction', ['2 session learning content']),
+    GA_GOAL('goal-ga-5', 'AI for Finance Content Delivery', ['17 session learning content']),
+    GA_GOAL('goal-ga-6', 'Content Quality Issues & Feedback Resolution', [
+      'Resolve all existing content feedback & quality issues (Zoho and other channels)',
+      'Resolve newer issues arising in July',
+    ]),
+    GA_GOAL('goal-ga-7', 'Observability Systems', ['Session scheduling and delivery observability systems']),
+    GA_GOAL('goal-ga-8', 'Team Capacity Building', ['Hiring SDI - Fullstack AI']),
+    GA_GOAL('goal-ga-9', 'Stack Curriculum Redesign based on market intelligence'),
+    GA_GOAL('goal-ga-10', 'Objective Content Creator - L4'),
+    GA_GOAL('goal-ga-11', 'Interactive Tutorial Builder - L3'),
+    GA_GOAL('goal-ga-12', 'NxtMock Question Mapper'),
   ];
 
   // ── Daily Reports ──────────────────────────────────────────────────────
