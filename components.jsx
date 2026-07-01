@@ -169,10 +169,13 @@ function Modal({ open, onClose, title, children, footer, width = 720 }) {
     if (!open) return;
     const h = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', h);
-    // Always open scrolled to the top (tall forms otherwise mount mid-scroll).
-    if (bodyRef.current) bodyRef.current.scrollTop = 0;
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
+  // Reset scroll ONLY when the modal opens — not on every parent re-render
+  // (a background refresh tick would otherwise jump a half-filled form to the top).
+  useEffect(() => {
+    if (open && bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [open]);
   if (!open) return null;
   // Portal to <body> so the fixed scrim anchors to the viewport, not to any
   // transformed ancestor (e.g. a `.fadein` view wrapper) that would otherwise

@@ -42,6 +42,19 @@ function GoalsView({ tweaks, currentUser, nav }) {
     refresh();
   }
 
+  // Add a new goal to the selected team (leads/admin). Dept inherited from the team.
+  const teamDept = (goals[0] && goals[0].dept) || (CDC.USERS.find((u) => u.sub === team) || {}).dept || me.dept;
+  const [newGoal, setNewGoal] = useState_g('');
+  async function addGoal() {
+    const title = newGoal.trim();
+    if (!title || !team) return;
+    const goal = { id: `goal-${Date.now()}`, sub: team, dept: teamDept, title, deliverables: [] };
+    if (CDC.db && CDC.db.addGoal) await CDC.db.addGoal(goal);
+    else (CDC.GOALS = CDC.GOALS || []).push(goal);
+    setNewGoal('');
+    refresh();
+  }
+
   return (
     <div className="fadein">
       <SectionHeader
@@ -86,10 +99,25 @@ function GoalsView({ tweaks, currentUser, nav }) {
 
       {/* Goals + deliverables board. */}
       <h2 className="h-section">Goals & deliverables <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· {goals.length}</span></h2>
+
+      {canEdit && team && (
+        <Card className="" >
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <Icon name="check" size={14} />
+            <input value={newGoal} placeholder="Add a new goal for this team…"
+              onChange={(e) => setNewGoal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addGoal(); }}
+              style={{ flex: 1, fontSize: 13, padding: '8px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)' }} />
+            <button className="btn" data-variant="primary" data-size="sm" disabled={!newGoal.trim()} onClick={addGoal}>
+              <Icon name="check" size={11} /> Add goal
+            </button>
+          </div>
+        </Card>
+      )}
+
       {goals.length === 0 ? (
-        <div className="empty">No goals for this team yet.</div>
+        <div className="empty" style={{ marginTop: 12 }}>No goals for this team yet.{canEdit ? ' Add one above.' : ''}</div>
       ) : (
-        <div className="col" style={{ gap: 12 }}>
+        <div className="col" style={{ gap: 12, marginTop: 12 }}>
           {goals.map((g) => (
             <GoalCard key={g.id} goal={g} canEdit={canEdit} onSave={(dels) => saveDeliverables(g, dels)} />
           ))}
