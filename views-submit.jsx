@@ -543,7 +543,7 @@ function AckPanel({ currentUser }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{t.title}</div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                    {!isOwn && ownerName ? `${ownerName} · ` : ''}{t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${t.due}` : ''}
+                    {!isOwn && ownerName ? `${ownerName} · ` : ''}{t.status}{t.metricCategory ? ` · ${t.metricCategory}` : ''}{t.due ? ` · due ${window.dmy ? window.dmy(t.due) : t.due}` : ''}
                     {acked && t.lastAckStatus ? ` · acknowledged: ${t.lastAckStatus}` : ''}
                   </div>
                   {/* Full task detail so the whole task is visible at a glance. */}
@@ -590,7 +590,7 @@ function AckPanel({ currentUser }) {
                   <div className="col" style={{ gap: 5 }}>
                     {(t.subtasks).map((s) => (
                       <div key={s.id} className="row" style={{ justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                        <span style={{ fontSize: 12 }}><span className="muted" style={{ marginRight: 5 }}>↳</span>{s.title}<span className="muted" style={{ fontSize: 10.5, marginLeft: 6 }}>{(CDC.lookup.user(s.owner || t.owner) || {}).name ? `· ${(CDC.lookup.user(s.owner || t.owner) || {}).name}` : ''}{s.due ? ` · due ${s.due}` : ''}</span></span>
+                        <span style={{ fontSize: 12 }}><span className="muted" style={{ marginRight: 5 }}>↳</span>{s.title}<span className="muted" style={{ fontSize: 10.5, marginLeft: 6 }}>{(CDC.lookup.user(s.owner || t.owner) || {}).name ? `· ${(CDC.lookup.user(s.owner || t.owner) || {}).name}` : ''}{s.due ? ` · due ${window.dmy ? window.dmy(s.due) : s.due}` : ''}</span></span>
                         {isOwn ? (
                           <select value={s.status} onChange={(e) => setSubStatus(t, s.id, e.target.value)}
                             style={{ fontSize: 11.5, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--border)' }}>

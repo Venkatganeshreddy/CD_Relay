@@ -2,6 +2,13 @@
 
 const { useState: useState_o, useMemo: useMemo_o, useEffect: useEffect_o } = React;
 
+// Display an ISO date (YYYY-MM-DD) as dd/mm/yyyy; pass through anything else.
+function dmy(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (s || '—');
+}
+window.dmy = dmy;
+
 // ════════════════════════════════════════════════════════════════════════
 // WEEKLY VIEW
 // ════════════════════════════════════════════════════════════════════════
@@ -895,8 +902,8 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
                   </td>
                   <td className="muted">{ownerName}</td>
                   <td className="muted mono" style={{ fontSize: 12 }}>
-                    <div>due {t.due || '—'}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>{daysOverdue(t)}d overdue</span>}</div>
-                    {t.created && <div className="muted" style={{ fontSize: 10, marginTop: 1 }}>created {t.created}</div>}
+                    <div>due {dmy(t.due)}{overdue && <span className="pill" data-tone="red" style={{ fontSize: 9, marginLeft: 6 }}>{daysOverdue(t)}d overdue</span>}</div>
+                    {t.created && <div className="muted" style={{ fontSize: 10, marginTop: 1 }}>created {dmy(t.created)}</div>}
                   </td>
                   <td>
                     {/* Read-only on the board — status is changed only on the
@@ -1042,7 +1049,7 @@ function SubtaskRow({ sub, canEdit, people, defaultOwner, onPatch, onRemove }) {
         <span style={{ fontSize: 12.5, fontWeight: 500 }}><span className="muted" style={{ marginRight: 6 }}>↳</span>{sub.title}</span>
       </td>
       <td style={cell} className="muted">{subOwnerName(sub.owner || defaultOwner)}</td>
-      <td className="muted mono" style={{ ...cell, fontSize: 12 }}>due {sub.due || '—'}</td>
+      <td className="muted mono" style={{ ...cell, fontSize: 12 }}>due {dmy(sub.due)}</td>
       <td style={cell}><Pill tone={SUBTASK_TONE[sub.status] || 'outline'} dot>{sub.status}</Pill></td>
       <td style={cell}>
         {canEdit && (
