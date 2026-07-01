@@ -570,7 +570,7 @@ input, select, textarea, .tbl tr td {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
 }
-.modal-b { padding: 16px 18px; overflow-y: auto; flex: 1; min-height: 0; }
+.modal-b { padding: 18px 20px; overflow-y: auto; flex: 1; min-height: 0; font-size: 14px; }
 .modal-f { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Misc */
@@ -1559,11 +1559,11 @@ input, select, textarea, .tbl tr td {
 }
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 11px; height: 28px;
+  padding: 6px 13px; height: 32px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
-  font-size: 12.5px; color: var(--text);
+  font-size: 13.5px; color: var(--text);
   cursor: pointer;
   user-select: none;
 }
@@ -1611,13 +1611,20 @@ input, select, textarea, .tbl tr td {
   color: var(--text-muted);
   font-weight: 500;
 }
+/* Base field input — readable default for any bare .field-input (modals, forms). */
+.field-input {
+  font: inherit; font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); outline: none;
+}
+.field-input:focus { border-color: var(--accent-border); }
 .template-form .field-input {
-  height: 30px; padding: 0 10px;
+  height: 34px; padding: 0 11px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
-  font: inherit; font-size: 12.5px;
+  font: inherit; font-size: 13.5px;
   outline: none;
 }
 .template-form .field-input:focus { border-color: var(--accent-border); background: var(--surface); }

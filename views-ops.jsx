@@ -1139,8 +1139,8 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
     details.trim().length > 0 &&
     (!needsReason || reason.trim().length > 0);
 
-  const label = () => ({ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 });
-  const inp = { width: '100%', fontSize: 13, padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)' };
+  const label = () => ({ fontSize: 12.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.05, fontWeight: 600, marginBottom: 6 });
+  const inp = { width: '100%', fontSize: 14.5, padding: '10px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', minHeight: 40 };
   const toggle = (set, val) => set((s) => s.includes(val) ? s.filter((x) => x !== val) : [...s, val]);
 
   // Owner choices: yourself + everyone who reports up to you (your subtree), so
@@ -1255,7 +1255,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
         {map && (
           <div>
             <div style={label()}>Task details <span style={{ color: 'var(--rose, #c0392b)' }}>*</span> <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· describe what this task is</span></div>
-            <textarea className="field-input" style={{ width: '100%', height: 56, padding: 8, resize: 'vertical' }}
+            <textarea className="field-input" style={{ width: '100%', height: 72, padding: 10, resize: 'vertical', fontSize: 14.5 }}
               placeholder="What needs to be done for this output? Be specific."
               value={details} onChange={(e) => setDetails(e.target.value)} />
           </div>
@@ -1305,7 +1305,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
         {needsReason && (
           <div>
             <div style={label()}>Reason ({status.toLowerCase()})</div>
-            <textarea className="field-input" style={{ width: '100%', height: 50, padding: 8, resize: 'vertical' }}
+            <textarea className="field-input" style={{ width: '100%', height: 60, padding: 10, resize: 'vertical', fontSize: 14.5 }}
               placeholder={`Why is it ${status.toLowerCase()}?`} value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
         )}
