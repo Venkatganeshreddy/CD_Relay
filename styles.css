@@ -548,7 +548,10 @@ input, select, textarea, .tbl tr td {
 /* Modal */
 .modal-scrim {
   position: fixed; inset: 0; background: color-mix(in oklch, var(--bg) 30%, rgba(10, 12, 20, 0.55));
-  display: grid; place-items: center; z-index: 1000;
+  /* Anchor to top (not vertical-center) so a growing form doesn't shift upward
+     mid-fill; the modal keeps its own internal scroll. */
+  display: grid; place-items: start center; z-index: 1000;
+  padding: 5vh 16px; overflow-y: auto;
   backdrop-filter: blur(6px) saturate(1.1);
   animation: scrim-in 0.18s var(--ease);
 }
