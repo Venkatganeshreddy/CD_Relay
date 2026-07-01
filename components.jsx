@@ -165,17 +165,22 @@ window.Sparkline = Sparkline;
 // ── Modal ───────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, footer, width = 720 }) {
   const bodyRef = useRef(null);
+  const scrollY = useRef(0);   // remembers where the user scrolled the form
   useEffect(() => {
     if (!open) return;
     const h = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
-  // Reset scroll ONLY when the modal opens — not on every parent re-render
-  // (a background refresh tick would otherwise jump a half-filled form to the top).
-  useEffect(() => {
-    if (open && bodyRef.current) bodyRef.current.scrollTop = 0;
-  }, [open]);
+  // Reset to the top ONLY when the modal first opens.
+  useEffect(() => { if (open) scrollY.current = 0; }, [open]);
+  // After EVERY render, restore the remembered scroll position. This survives
+  // background re-render ticks and any DOM reconciliation that would otherwise
+  // snap a half-filled form back to the top — the reported bug.
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (open && el && el.scrollTop !== scrollY.current) el.scrollTop = scrollY.current;
+  });
   if (!open) return null;
   // Portal to <body> so the fixed scrim anchors to the viewport, not to any
   // transformed ancestor (e.g. a `.fadein` view wrapper) that would otherwise
@@ -187,7 +192,7 @@ function Modal({ open, onClose, title, children, footer, width = 720 }) {
           <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
           <button className="btn" data-variant="ghost" data-size="sm" onClick={onClose}><Icon name="x" size={12} /></button>
         </div>
-        <div className="modal-b" ref={bodyRef}>{children}</div>
+        <div className="modal-b" ref={bodyRef} onScroll={(e) => { scrollY.current = e.currentTarget.scrollTop; }}>{children}</div>
         {footer && <div className="modal-f">{footer}</div>}
       </div>
     </div>
