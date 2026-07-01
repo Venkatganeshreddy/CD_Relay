@@ -196,7 +196,6 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     ...(isContributor ? [] : [{ id: 'goals', label: 'Goals', icon: 'weekly' }]),
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
-    { id: 'feedback', label: 'Feedback', icon: 'send' },
   ];
   const groupDept = (isL2 || isL3orAdmin) ? [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },

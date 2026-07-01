@@ -663,86 +663,25 @@ function CostBar({ agents, total }) {
 }
 
 // ── Feedback FAB (global) ──────────────────────────────────────────────
+// Floating action button on every page — jumps straight to the Feedback page.
 function FeedbackFab({ currentUser, nav }) {
-  const [open, setOpen] = useStA(false);
-  const [sent, setSent] = useStA(false);
-  const [text, setText] = useStA('');
-  const [kind, setKind] = useStA('idea');
-
-  function submit() {
-    if (!text.trim()) return;
-    const CDC = window.CDC;
-    const fb = {
-      id: `fb-${Date.now()}`, kind, text: text.trim(),
-      page: (typeof location !== 'undefined' && location.hash) || 'main',
-      userId: currentUser ? currentUser.id : null,
-      userName: currentUser ? currentUser.name : 'Someone',
-      status: 'open', at: CDC && CDC.fmtTs ? undefined : new Date().toISOString(),
-      ts: (CDC && CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10)),
-    };
-    if (CDC && CDC.db && CDC.db.addFeedback) CDC.db.addFeedback(fb);
-    else (window.CDC.FEEDBACK = window.CDC.FEEDBACK || []).unshift(fb);
-    setSent(true);
-    setTimeout(() => {
-      setOpen(false);
-      setSent(false);
-      setText('');
-    }, 1400);
-  }
-
   return (
-    <>
-      <button className="fab" data-open={open} title="Send feedback" onClick={() => setOpen((v) => !v)}>
-        <Icon name={open ? 'x' : 'edit'} size={16} />
-      </button>
-      {open && (
-        <div className="feedback-pop fadein">
-          {sent ? (
-            <div className="celebrate" style={{ padding: 20 }}>
-              <div className="check" style={{ width: 36, height: 36 }}><Icon name="check" size={18} stroke={2.5} /></div>
-              <h2 style={{ fontSize: 14 }}>Thanks!</h2>
-              <p style={{ fontSize: 11.5 }}>Sent to the CD-Copilot working group.</p>
-            </div>
-          ) : (
-            <>
-              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                <strong style={{ fontSize: 13 }}>Send feedback</strong>
-                <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setOpen(false)}><Icon name="x" size={10} /></button>
-              </div>
-              <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
-                Quick idea, bug, or annoyance — Pavan G & the working group review weekly.
-              </div>
-              <div className="seg" style={{ marginBottom: 8 }}>
-                {['idea', 'bug', 'praise', 'annoyance'].map((k) => (
-                  <button key={k} data-active={kind === k} onClick={() => setKind(k)} style={{ fontSize: 11 }}>{k}</button>
-                ))}
-              </div>
-              <textarea
-                autoFocus
-                placeholder="What's on your mind?"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                style={{ width: '100%', minHeight: 70, padding: 8, borderRadius: 6, border: '1px solid var(--border)', fontFamily: 'inherit', fontSize: 12.5, background: 'var(--panel)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
-              />
-              <div className="row" style={{ marginTop: 8 }}>
-                <span className="faint" style={{ fontSize: 11 }}>Page: {location.hash || 'main'}</span>
-                <span style={{ flex: 1 }} />
-                <button className="btn" data-variant="primary" data-size="sm" disabled={!text.trim()} onClick={submit}>
-                  <Icon name="send" size={11} /> Send
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
+    <button className="fab" title="Give feedback about the app"
+      onClick={() => (nav && nav.go ? nav.go('feedback') : (location.hash = '#/feedback'))}>
+      <Icon name="send" size={16} />
+    </button>
   );
 }
 window.FeedbackFab = FeedbackFab;
 
 // ── Feedback page (everyone) — all app feedback submitted via the FAB ──────
-const FB_KINDS = ['idea', 'bug', 'praise', 'annoyance'];
-const FB_TONE = { idea: 'accent', bug: 'red', praise: 'green', annoyance: 'amber' };
+const FB_KINDS = ['Performance', 'UI', 'UX', 'Data / DB', 'Feature', 'Bug', 'Other'];
+const FB_TONE = {
+  'Performance': 'amber', 'UI': 'accent', 'UX': 'blue', 'Data / DB': 'red',
+  'Feature': 'green', 'Bug': 'red', 'Other': 'outline',
+  // tones for any legacy entries
+  idea: 'accent', praise: 'green', annoyance: 'amber',
+};
 const FB_STATUSES = ['open', 'reviewed', 'done'];
 // Only Yedam Venkat Ganesh Reddy sees the full feedback dashboard; everyone else
 // gets a submit form + their own submissions.
