@@ -689,6 +689,29 @@ input, select, textarea, .tbl tr td {
   background: color-mix(in oklch, var(--panel) 50%, transparent);
 }
 
+/* Cool empty state for the Tasks board — floating gradient orb over an ambient glow. */
+.tasks-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 56px 20px;
+  background: radial-gradient(420px 220px at 50% 30%, color-mix(in oklch, var(--accent) 10%, transparent), transparent 70%);
+}
+.tasks-empty-orb {
+  width: 76px; height: 76px; border-radius: 22px;
+  display: grid; place-items: center;
+  color: var(--accent-fg); background: var(--accent-grad);
+  box-shadow: var(--shadow-accent), inset 0 0 0 1px rgba(255,255,255,0.16);
+  animation: tasks-orb-float 3.2s var(--ease) infinite;
+  position: relative;
+}
+.tasks-empty-orb::after {
+  content: ""; position: absolute; inset: 0; border-radius: 22px;
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 40%, transparent);
+  animation: tasks-orb-ring 2.6s ease-out infinite;
+}
+@keyframes tasks-orb-float { 50% { transform: translateY(-6px); } }
+@keyframes tasks-orb-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 40%, transparent); } 100% { box-shadow: 0 0 0 22px transparent; } }
+.tasks-empty-title { font-size: 17px; font-weight: 680; letter-spacing: -0.01em; color: var(--text); }
+
 /* Approve/reject zone */
 .action-bar {
   display: flex; align-items: center; gap: 8px;

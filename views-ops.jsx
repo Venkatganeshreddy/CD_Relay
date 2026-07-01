@@ -955,15 +955,19 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
                 </React.Fragment>
               );
             })}
-            {list.length === 0 && <tr><td colSpan={5}><div className="empty" style={{ border: 0, background: 'transparent', padding: '34px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 52, height: 52, borderRadius: 16, display: 'grid', placeItems: 'center', color: 'var(--accent-fg)', background: 'var(--accent-grad)', boxShadow: 'var(--shadow-accent)' }}>
-                <Icon name="tasks" size={22} />
+            {list.length === 0 && <tr><td colSpan={5}><div className="tasks-empty">
+              <div className="tasks-empty-orb"><Icon name="tasks" size={30} /></div>
+              <div className="tasks-empty-title">
+                {filter === 'MINE' ? 'No tasks yet' : filter === 'ALL' ? 'No team-mate tasks' : `No ${(TAB_LABELS[filter] || filter).toLowerCase()} tasks`}
               </div>
-              <div>
-                {filter === 'MINE' ? 'You have no tasks yet — click “New task” to add one.'
-                  : filter === 'ALL' ? 'No team-mate tasks.'
-                  : `No ${(TAB_LABELS[filter] || filter).toLowerCase()} tasks.`}
+              <div className="muted" style={{ fontSize: 13 }}>
+                {filter === 'MINE' ? 'Create your first task and it’ll show up right here.' : 'Nothing to show in this view yet.'}
               </div>
+              {filter === 'MINE' && (
+                <button className="btn" data-variant="accent" onClick={() => setCreating(true)} style={{ marginTop: 4 }}>
+                  <Icon name="check" size={12} /> New task
+                </button>
+              )}
             </div></td></tr>}
           </tbody>
         </table>
