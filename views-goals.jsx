@@ -36,7 +36,9 @@ function GoalsView({ tweaks, currentUser, nav }) {
   // Filters shown in the goal interface.
   const [prodFilter, setProdFilter] = useState_g('');
   const [assigneeFilter, setAssigneeFilter] = useState_g('');
-  const allProducts = [...new Set(goals.flatMap((g) => g.products || []))].sort();
+  // Product filter options = the full catalog + anything already tagged on goals,
+  // so the filter is always available next to the assignee filter.
+  const allProducts = [...new Set([...(CAT.PRODUCTS || []), ...goals.flatMap((g) => g.products || [])])].sort();
   const visibleGoals = goals
     .filter((g) => !prodFilter || (g.products || []).includes(prodFilter))
     .filter((g) => !assigneeFilter || (g.deliverables || []).some((d) => (d.assignees || []).includes(assigneeFilter)));
