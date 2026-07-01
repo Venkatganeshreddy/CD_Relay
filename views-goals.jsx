@@ -24,8 +24,9 @@ function GoalsView({ tweaks, currentUser, nav }) {
   // Teams that have goals; L3/Admin can switch, everyone else is locked to their sub.
   const scoped = (CDC.filterGoals ? CDC.filterGoals(me.id) : []) || [];
   const teams = [...new Set(scoped.map((g) => g.sub))].sort();
-  const [teamSel, setTeamSel] = useState_g(seesAll ? (teams[0] || '') : (me.sub || teams[0] || ''));
-  const team = teamSel || teams[0] || '';
+  // L3/Admin start on the stack picker (teamSel = ''); L2/L1 are locked to their team.
+  const [teamSel, setTeamSel] = useState_g(seesAll ? '' : (me.sub || teams[0] || ''));
+  const team = teamSel || (seesAll ? '' : (teams[0] || ''));
 
   const goals = scoped.filter((g) => g.sub === team);
   const canEdit = seesAll || (isLeadRole(me) && me.sub === team);
@@ -78,15 +79,41 @@ function GoalsView({ tweaks, currentUser, nav }) {
 
   const selStyle = { height: 30, fontSize: 13, padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' };
 
+  // L3/Admin landing: pick a stack (team) first, then open its board (L2 view).
+  if (seesAll && !teamSel) {
+    const allSubs = [...new Set((CDC.USERS || []).map((u) => u.sub).filter(Boolean))].sort();
+    return (
+      <div className="fadein">
+        <SectionHeader title="Goals" subtitle="Pick a stack to open its goals & deliverables — the same board that team's L2 sees." />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {allSubs.map((s) => {
+            const gc = (CDC.GOALS || []).filter((g) => g.sub === s).length;
+            const mc = (CDC.USERS || []).filter((u) => u.sub === s).length;
+            return (
+              <div key={s} className="card card-pad" style={{ cursor: 'pointer' }} onClick={() => { setTeamSel(s); setProdFilter(''); setAssigneeFilter(''); }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{s.replace('Content — ', '')}</div>
+                  <Icon name="chev-right" size={16} />
+                </div>
+                <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                  <Pill tone={gc ? 'accent' : 'outline'} dot>{gc} goal{gc === 1 ? '' : 's'}</Pill>
+                  <span className="muted" style={{ fontSize: 12 }}>{mc} member{mc === 1 ? '' : 's'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fadein">
       <SectionHeader
-        title="Goals"
+        title={seesAll ? `Goals · ${team.replace('Content — ', '')}` : 'Goals'}
         subtitle="Team goals and their deliverables. Leads assign each deliverable to people in their stack; those people see only their own when logging a task."
-        actions={teams.length > 1 && seesAll ? (
-          <select style={selStyle} value={team} onChange={(e) => { setTeamSel(e.target.value); setAssigneeFilter(''); setProdFilter(''); }}>
-            {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
-          </select>
+        actions={seesAll ? (
+          <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setTeamSel('')}>← All stacks</button>
         ) : (
           <Pill tone="accent" dot>{team.replace('Content — ', '') || 'No team'}</Pill>
         )}
