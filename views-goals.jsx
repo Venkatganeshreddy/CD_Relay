@@ -54,6 +54,12 @@ function GoalsView({ tweaks, currentUser, nav }) {
     else Object.assign(goal, patch);   // offline fallback
     refresh();
   }
+  async function deleteGoal(goal) {
+    if (!window.confirm(`Delete goal “${goal.title}” and its deliverables? This cannot be undone.`)) return;
+    if (CDC.db && CDC.db.deleteGoal) await CDC.db.deleteGoal(goal.id);
+    else { const arr = CDC.GOALS || []; const i = arr.findIndex((x) => x.id === goal.id); if (i >= 0) arr.splice(i, 1); }
+    refresh();
+  }
 
   // Add a new goal to the selected team (leads/admin) with a product-audience.
   const teamDept = (goals[0] && goals[0].dept) || (CDC.USERS.find((u) => u.sub === team) || {}).dept || me.dept;
@@ -167,7 +173,7 @@ function GoalsView({ tweaks, currentUser, nav }) {
         <div className="col" style={{ gap: 12, marginTop: 12 }}>
           {visibleGoals.map((g) => (
             <GoalCard key={g.id} goal={g} canEdit={canEdit} people={teamPeople} assigneeFilter={assigneeFilter}
-              onSave={(patch) => saveGoal(g, patch)} />
+              onSave={(patch) => saveGoal(g, patch)} onDelete={() => deleteGoal(g)} />
           ))}
         </div>
       )}
@@ -177,7 +183,7 @@ function GoalsView({ tweaks, currentUser, nav }) {
 window.GoalsView = GoalsView;
 
 // One goal card: title + product-audience + its deliverables, each with assignees.
-function GoalCard({ goal, canEdit, people, assigneeFilter, onSave }) {
+function GoalCard({ goal, canEdit, people, assigneeFilter, onSave, onDelete }) {
   const CDC = window.CDC;
   const [adding, setAdding] = useState_g('');
   const dels = goal.deliverables || [];
@@ -199,7 +205,10 @@ function GoalCard({ goal, canEdit, people, assigneeFilter, onSave }) {
             </div>
           )}
         </div>
-        <Pill tone="outline">{dels.length} deliverable{dels.length === 1 ? '' : 's'}</Pill>
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <Pill tone="outline">{dels.length} deliverable{dels.length === 1 ? '' : 's'}</Pill>
+          {canEdit && onDelete && <button className="btn" data-size="sm" data-variant="danger" title="Delete goal" onClick={onDelete}>Delete</button>}
+        </div>
       </div>
 
       {shown.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>{assigneeFilter ? 'No deliverables for this person.' : 'No deliverables yet.'}</div>}

@@ -517,6 +517,12 @@
       const remoteOk = await remote(() => sb.from('goals').update({ dept: (g || patch).dept || null, sub: (g || patch).sub || null, data: g || { id, ...patch } }).eq('id', id));
       return { item: g, remoteOk };
     },
+    async deleteGoal(id) {
+      const arr = window.CDC.GOALS; const i = arr ? arr.findIndex((x) => x.id === id) : -1;
+      if (i >= 0) arr.splice(i, 1);
+      const remoteOk = await remote(() => sb.from('goals').delete().eq('id', id));
+      return { remoteOk };
+    },
     // Master data: persist a department's edited fields into BOTH the
     // departments table (drives lookup.dept) and the nested business_directions
     // jsonb (drives the Master-data tree), and mirror both in-memory arrays.
