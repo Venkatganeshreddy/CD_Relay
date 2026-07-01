@@ -955,10 +955,15 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
                 </React.Fragment>
               );
             })}
-            {list.length === 0 && <tr><td colSpan={5}><div className="empty" style={{ border: 0, background: 'transparent', padding: '30px 20px' }}>
-              {filter === 'MINE' ? 'You have no tasks yet — click “New task” to add one.'
-                : filter === 'ALL' ? 'No team-mate tasks.'
-                : `No ${(TAB_LABELS[filter] || filter).toLowerCase()} tasks.`}
+            {list.length === 0 && <tr><td colSpan={5}><div className="empty" style={{ border: 0, background: 'transparent', padding: '34px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 52, height: 52, borderRadius: 16, display: 'grid', placeItems: 'center', color: 'var(--accent-fg)', background: 'var(--accent-grad)', boxShadow: 'var(--shadow-accent)' }}>
+                <Icon name="tasks" size={22} />
+              </div>
+              <div>
+                {filter === 'MINE' ? 'You have no tasks yet — click “New task” to add one.'
+                  : filter === 'ALL' ? 'No team-mate tasks.'
+                  : `No ${(TAB_LABELS[filter] || filter).toLowerCase()} tasks.`}
+              </div>
             </div></td></tr>}
           </tbody>
         </table>
@@ -1153,7 +1158,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
     details.trim().length > 0 &&
     (!needsReason || reason.trim().length > 0);
 
-  const label = () => ({ fontSize: 12.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.05, fontWeight: 600, marginBottom: 6 });
+  const label = () => ({ fontSize: 12.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.05, fontWeight: 700, marginBottom: 8, borderLeft: '3px solid var(--accent)', paddingLeft: 9, lineHeight: 1.1 });
   const inp = { width: '100%', fontSize: 14.5, padding: '10px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', minHeight: 40 };
   const toggle = (set, val) => set((s) => s.includes(val) ? s.filter((x) => x !== val) : [...s, val]);
 
@@ -1195,7 +1200,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
         </button>
       </>}
     >
-      <div style={sectionGap}>
+      <div className="taskform" style={sectionGap}>
         {/* 1. Owner (EMP ID) — fixed when editing an existing task. */}
         {!editing && (
           <div>

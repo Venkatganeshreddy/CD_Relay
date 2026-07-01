@@ -573,10 +573,22 @@ input, select, textarea, .tbl tr td {
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
 .modal-h {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 18px;
+  padding: 15px 18px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 8%, var(--surface)), var(--surface));
 }
 .modal-b { padding: 18px 20px; overflow-y: auto; flex: 1; min-height: 0; font-size: 14px; }
+
+/* Task-creation form: group each section into a soft tinted card so the modal
+   reads structured and lively instead of a flat white sheet. */
+.taskform > div {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 4%, var(--surface)), var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.taskform > div:hover { border-color: var(--border-strong); }
 .modal-f { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Misc */
