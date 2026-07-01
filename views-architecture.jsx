@@ -744,9 +744,69 @@ window.FeedbackFab = FeedbackFab;
 const FB_KINDS = ['idea', 'bug', 'praise', 'annoyance'];
 const FB_TONE = { idea: 'accent', bug: 'red', praise: 'green', annoyance: 'amber' };
 const FB_STATUSES = ['open', 'reviewed', 'done'];
+// Only Yedam Venkat Ganesh Reddy sees the full feedback dashboard; everyone else
+// gets a submit form + their own submissions.
+const FEEDBACK_OWNER_ID = 'NW0006717';
 function FeedbackView({ currentUser, nav }) {
+  if (currentUser.id !== FEEDBACK_OWNER_ID) return <FeedbackSubmit currentUser={currentUser} />;
+  return <FeedbackDashboard currentUser={currentUser} nav={nav} />;
+}
+window.FeedbackView = FeedbackView;
+
+// Regular-user view: give feedback + see your own.
+function FeedbackSubmit({ currentUser }) {
   const CDC = window.CDC;
-  const isAdmin = ['L3', 'ADMIN', 'Admin', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  const [kind, setKind] = useStA('idea');
+  const [text, setText] = useStA('');
+  const [, force] = useStA(0);
+  const mine = (CDC.FEEDBACK || []).filter((f) => f.userId === currentUser.id);
+  function submit() {
+    const t = text.trim(); if (!t) return;
+    const fb = { id: `fb-${Date.now()}`, kind, text: t, page: 'feedback', userId: currentUser.id, userName: currentUser.name, status: 'open', ts: CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10) };
+    if (CDC.db && CDC.db.addFeedback) CDC.db.addFeedback(fb); else (CDC.FEEDBACK = CDC.FEEDBACK || []).unshift(fb);
+    setText(''); force((n) => n + 1);
+    if (CDC.toast) CDC.toast('Thanks — your feedback was sent!', 'green');
+  }
+  return (
+    <div className="fadein">
+      <SectionHeader title="Feedback" subtitle="Tell us what would make Relay better — an idea, a bug, praise, or an annoyance. It goes to the working group." />
+      <Card>
+        <div className="col" style={{ gap: 12 }}>
+          <div className="seg">{FB_KINDS.map((k) => <button key={k} data-active={kind === k} onClick={() => setKind(k)}>{k}</button>)}</div>
+          <textarea className="field-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="What's on your mind?"
+            style={{ minHeight: 110, padding: 12, fontSize: 14, resize: 'vertical', width: '100%' }} />
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn" data-variant="accent" disabled={!text.trim()} onClick={submit}><Icon name="send" size={13} /> Send feedback</button>
+          </div>
+        </div>
+      </Card>
+
+      <h2 className="h-section">Your feedback <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· {mine.length}</span></h2>
+      {mine.length === 0 ? (
+        <div className="empty">You haven't submitted any feedback yet — share the first one above.</div>
+      ) : (
+        <div className="col" style={{ gap: 10 }}>
+          {mine.map((f) => (
+            <Card key={f.id}>
+              <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+                <Pill tone={FB_TONE[f.kind] || 'outline'} dot>{f.kind}</Pill>
+                <Pill tone={(f.status || 'open') === 'done' ? 'green' : (f.status || 'open') === 'reviewed' ? 'blue' : 'outline'}>{f.status || 'open'}</Pill>
+                <span className="muted" style={{ fontSize: 11.5 }}>{f.ts || ''}</span>
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{f.text}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+window.FeedbackSubmit = FeedbackSubmit;
+
+// Owner-only dashboard: all feedback + triage.
+function FeedbackDashboard({ currentUser, nav }) {
+  const CDC = window.CDC;
+  const isAdmin = true;   // this view only renders for the feedback owner
   const [, force] = useStA(0);
   const [kindF, setKindF] = useStA('all');
   const [statusF, setStatusF] = useStA('all');
@@ -812,4 +872,4 @@ function FeedbackView({ currentUser, nav }) {
     </div>
   );
 }
-window.FeedbackView = FeedbackView;
+window.FeedbackDashboard = FeedbackDashboard;
