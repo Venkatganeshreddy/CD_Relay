@@ -290,13 +290,17 @@
       setTimeout(() => el.remove(), 5000);
     } catch (_) { /* headless/test contexts have no DOM body yet */ }
   }
+  // A missing table (a migration not yet applied, e.g. `goals`) shouldn't alarm
+  // the user — the change is kept in memory and the seed still shows. Real write
+  // failures (RLS, network, constraint) still surface the toast.
+  const isMissingTable = (msg) => /relation .* does not exist|does not exist|schema cache|could not find the table|42p01|pgrst205/i.test(msg || '');
   async function remote(fn) {
     if (sb && authed()) {
       try {
         const { error } = await fn();
-        if (error) { console.warn('[Relay] write:', error.message); writeFailToast(); }
+        if (error) { console.warn('[Relay] write:', error.message); if (!isMissingTable(error.message)) writeFailToast(); }
         return !error;
-      } catch (e) { console.warn('[Relay] write threw:', e.message); writeFailToast(); }
+      } catch (e) { console.warn('[Relay] write threw:', e.message); if (!isMissingTable(e.message)) writeFailToast(); }
     }
     return false;
   }
