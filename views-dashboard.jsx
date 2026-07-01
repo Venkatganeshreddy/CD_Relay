@@ -221,11 +221,11 @@ function Dashboard({ tweaks, currentUser, nav }) {
           <thead>
             <tr>
               <th style={{ width: '30%' }}>Department</th>
-              <th>Reports today</th>
-              <th>Blockers</th>
-              <th>Overdue</th>
-              <th>Backlog</th>
-              <th>Task completion %</th>
+              <th className="num">Reports today</th>
+              <th className="num">Blockers</th>
+              <th className="num">Overdue</th>
+              <th className="num">Backlog</th>
+              <th className="num">Task completion %</th>
               <th></th>
             </tr>
           </thead>

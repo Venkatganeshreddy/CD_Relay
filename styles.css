@@ -480,6 +480,7 @@ input, select, textarea, .tbl tr td {
 .tbl tr[data-rag-border="amber"] td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .tbl tr[data-rag-border="red"] td:first-child { box-shadow: inset 3px 0 0 var(--red); }
 .tbl td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.tbl th.num { text-align: right; }   /* numeric headers line up over their right-aligned cells */
 .tbl td.muted { color: var(--text-muted); }
 
 /* KPI tiles */
