@@ -1138,10 +1138,16 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
     const goals = (window.CDC.filterGoals ? window.CDC.filterGoals(owner) : []) || [];
     const out = [];
     for (const g of goals) for (const d of (g.deliverables || [])) {
-      if ((d.assignees || []).includes(owner)) out.push({ id: d.id, text: d.text, goal: g.title });
+      if ((d.assignees || []).includes(owner)) out.push({ id: d.id, text: d.text, goal: g.title, products: g.products || [] });
     }
     return out;
   })();
+  // Picking a deliverable auto-fills the task's Product-Audience from its goal.
+  const onPickDeliverable = (id) => {
+    setDeliverableId(id);
+    const opt = deliverableOpts.find((d) => d.id === id);
+    if (opt && (opt.products || []).length) setProducts([...opt.products]);
+  };
   const AGENTIC_SCOPES = CAT.AGENTIC_SCOPES || [];
 
   const map = outputCategory ? CAT.OUTPUT_MAP[outputCategory] : null;
@@ -1212,6 +1218,26 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
           </div>
         )}
 
+        {/* Deliverable first — picking it maps the Product-Audience below.
+            Agentic execution scope (required) sits alongside. */}
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <div style={label()}>Deliverable <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· from your team's goals · sets Product-Audience</span></div>
+            <select value={deliverableId} onChange={(e) => onPickDeliverable(e.target.value)} style={inp}>
+              <option value="">— none —</option>
+              {deliverableOpts.map((d) => <option key={d.id} value={d.id}>{d.text} · {d.goal}</option>)}
+            </select>
+            {deliverableOpts.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No deliverables assigned to this owner yet — your L2 assigns them on the Goals page.</div>}
+          </div>
+          <div style={{ flex: '1 1 320px' }}>
+            <div style={label()}>Agentic execution scope <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <select value={agenticScope} onChange={(e) => setAgenticScope(e.target.value)} style={{ ...inp, borderColor: agenticScope ? 'var(--border)' : 'var(--red, #e5484d)' }}>
+              <option value="">— how much did the AI do? —</option>
+              {AGENTIC_SCOPES.map((s) => <option key={s.v} value={s.v}>{s.v} · {s.label}</option>)}
+            </select>
+          </div>
+        </div>
+
         {/* 2. Product-Audience + Stack (stack optional) */}
         <div className="row" style={{ gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 320px' }}>
@@ -1279,25 +1305,6 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
               value={details} onChange={(e) => setDetails(e.target.value)} />
           </div>
         )}
-
-        {/* Deliverable (from your team's goals) · Agentic execution scope (required) */}
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 320px' }}>
-            <div style={label()}>Deliverable <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· from your team's goals</span></div>
-            <select value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)} style={inp}>
-              <option value="">— none —</option>
-              {deliverableOpts.map((d) => <option key={d.id} value={d.id}>{d.text} · {d.goal}</option>)}
-            </select>
-            {deliverableOpts.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No deliverables assigned to this owner yet — your L2 assigns them on the Goals page.</div>}
-          </div>
-          <div style={{ flex: '1 1 320px' }}>
-            <div style={label()}>Agentic execution scope <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
-            <select value={agenticScope} onChange={(e) => setAgenticScope(e.target.value)} style={{ ...inp, borderColor: agenticScope ? 'var(--border)' : 'var(--red, #e5484d)' }}>
-              <option value="">— how much did the AI do? —</option>
-              {AGENTIC_SCOPES.map((s) => <option key={s.v} value={s.v}>{s.v} · {s.label}</option>)}
-            </select>
-          </div>
-        </div>
 
         {/* 5. Status · Reason · Estimated time */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
