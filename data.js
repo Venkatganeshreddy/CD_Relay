@@ -204,9 +204,9 @@
   // ── Team goals → deliverables ──────────────────────────────────────────
   // L2 leads write deliverables (free-text, many) under each team goal; L1s pick
   // a deliverable when logging a task. `sub` is the team key (see BUSINESS_DIRECTIONS).
-  const GOAL = (id, title, deliverables = []) => ({
-    id, sub: 'Content — Fullstack', dept: 'd-fsgci', title,
-    deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text })),
+  const GOAL = (id, title, deliverables = [], products = []) => ({
+    id, sub: 'Content — Fullstack', dept: 'd-fsgci', title, products,
+    deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text, assignees: [] })),
   });
   const GOALS = [
     GOAL('goal-fs-1', 'IDE repairs & improvements', ['Fix Monaco autosave race on tab switch', 'Reduce cold-start latency to < 2s']),

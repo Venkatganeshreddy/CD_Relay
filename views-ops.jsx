@@ -1127,11 +1127,14 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
     }
   }, [open]);
 
-  // Deliverables the task can be tied to — flattened from this creator's own-team goals.
+  // Deliverables the task owner can pick — only the ones assigned to THEM (their
+  // L2 assigns deliverables per person), flattened from the owner's team goals.
   const deliverableOpts = (() => {
-    const goals = (window.CDC.filterGoals ? window.CDC.filterGoals(me.id) : []) || [];
+    const goals = (window.CDC.filterGoals ? window.CDC.filterGoals(owner) : []) || [];
     const out = [];
-    for (const g of goals) for (const d of (g.deliverables || [])) out.push({ id: d.id, text: d.text, goal: g.title });
+    for (const g of goals) for (const d of (g.deliverables || [])) {
+      if ((d.assignees || []).includes(owner)) out.push({ id: d.id, text: d.text, goal: g.title });
+    }
     return out;
   })();
   const AGENTIC_SCOPES = CAT.AGENTIC_SCOPES || [];
@@ -1280,7 +1283,7 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
               <option value="">— none —</option>
               {deliverableOpts.map((d) => <option key={d.id} value={d.id}>{d.text} · {d.goal}</option>)}
             </select>
-            {deliverableOpts.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No deliverables yet — your L2 adds them on the Goals page.</div>}
+            {deliverableOpts.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No deliverables assigned to this owner yet — your L2 assigns them on the Goals page.</div>}
           </div>
           <div style={{ flex: '1 1 320px' }}>
             <div style={label()}>Agentic execution scope <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>

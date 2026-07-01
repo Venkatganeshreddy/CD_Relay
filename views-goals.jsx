@@ -1,7 +1,8 @@
 // CD-Copilot — Team Goals → Deliverables + Agentic-execution feedback.
-// One page for every user: L2 leads write the deliverables under each team goal
-// (L1s pick them when logging a task); everyone sees the goals and the agentic
-// execution-scope rollup (how AI-assisted the team's work is). Reads window.CDC.
+// One page for every user: L2 leads write deliverables under each team goal and
+// assign each to specific people in their stack (multi-select); those people see
+// only their own deliverables when logging a task. Everyone sees the goals and
+// the agentic execution-scope rollup. Reads window.CDC.
 
 const { useState: useState_g } = React;
 
@@ -10,9 +11,11 @@ function isLeadRole(u) {
     ['L2', 'L3', 'ADMIN', 'PRODUCT_OWNER', 'DEPARTMENT_LEAD', 'SUB_LEAD', 'CENTRAL_OPS'].includes(u.role);
 }
 const SCOPE_TONE = { L0: 'outline', L1: 'blue', L2: 'blue', L3: 'accent', L4: 'green', L5: 'green' };
+const shortName = (u) => (u && u.name ? u.name.split(' ')[0] : '—');
 
 function GoalsView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
+  const CAT = CDC.TASK_CATALOG || {};
   const me = currentUser;
   const seesAll = CDC.scopeForUser(me.id).kind === 'all';
   const [, force] = useState_g(0);
@@ -26,42 +29,56 @@ function GoalsView({ tweaks, currentUser, nav }) {
 
   const goals = scoped.filter((g) => g.sub === team);
   const canEdit = seesAll || (isLeadRole(me) && me.sub === team);
+  // Assignable people = the team's stack (same sub).
+  const teamPeople = (CDC.USERS || []).filter((u) => u.sub === team);
+
+  // Filters shown in the goal interface.
+  const [prodFilter, setProdFilter] = useState_g('');
+  const [assigneeFilter, setAssigneeFilter] = useState_g('');
+  const allProducts = [...new Set(goals.flatMap((g) => g.products || []))].sort();
+  const visibleGoals = goals
+    .filter((g) => !prodFilter || (g.products || []).includes(prodFilter))
+    .filter((g) => !assigneeFilter || (g.deliverables || []).some((d) => (d.assignees || []).includes(assigneeFilter)));
 
   // Agentic feedback: scope distribution across this team's live tasks.
   const teamTasks = ((CDC.filterTasks ? CDC.filterTasks(me.id) : []) || [])
     .filter((t) => (CDC.lookup.user(t.owner) || {}).sub === team && !['SUGGESTED', 'REJECTED'].includes(t.status));
-  const scopes = (CDC.TASK_CATALOG.AGENTIC_SCOPES || []);
+  const scopes = (CAT.AGENTIC_SCOPES || []);
   const counts = scopes.map((s) => ({ ...s, n: teamTasks.filter((t) => t.agenticScope === s.v).length }));
   const unset = teamTasks.filter((t) => !t.agenticScope).length;
   const maxN = Math.max(1, ...counts.map((c) => c.n));
   const scored = teamTasks.length - unset;
 
-  async function saveDeliverables(goal, deliverables) {
-    if (CDC.db && CDC.db.updateGoal) await CDC.db.updateGoal(goal.id, { deliverables });
-    else goal.deliverables = deliverables;   // offline fallback
+  async function saveGoal(goal, patch) {
+    if (CDC.db && CDC.db.updateGoal) await CDC.db.updateGoal(goal.id, patch);
+    else Object.assign(goal, patch);   // offline fallback
     refresh();
   }
 
-  // Add a new goal to the selected team (leads/admin). Dept inherited from the team.
+  // Add a new goal to the selected team (leads/admin) with a product-audience.
   const teamDept = (goals[0] && goals[0].dept) || (CDC.USERS.find((u) => u.sub === team) || {}).dept || me.dept;
   const [newGoal, setNewGoal] = useState_g('');
+  const [newProducts, setNewProducts] = useState_g([]);
+  const toggleNewProduct = (p) => setNewProducts((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
   async function addGoal() {
     const title = newGoal.trim();
     if (!title || !team) return;
-    const goal = { id: `goal-${Date.now()}`, sub: team, dept: teamDept, title, deliverables: [] };
+    const goal = { id: `goal-${Date.now()}`, sub: team, dept: teamDept, title, products: newProducts, deliverables: [] };
     if (CDC.db && CDC.db.addGoal) await CDC.db.addGoal(goal);
     else (CDC.GOALS = CDC.GOALS || []).push(goal);
-    setNewGoal('');
+    setNewGoal(''); setNewProducts([]);
     refresh();
   }
+
+  const selStyle = { height: 30, fontSize: 13, padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' };
 
   return (
     <div className="fadein">
       <SectionHeader
         title="Goals"
-        subtitle="Team goals and the deliverables that achieve them. Leads write deliverables; contributors pick one when logging a task."
+        subtitle="Team goals and their deliverables. Leads assign each deliverable to people in their stack; those people see only their own when logging a task."
         actions={teams.length > 1 && seesAll ? (
-          <select className="btn" data-size="sm" value={team} onChange={(e) => setTeamSel(e.target.value)}>
+          <select style={selStyle} value={team} onChange={(e) => { setTeamSel(e.target.value); setAssigneeFilter(''); setProdFilter(''); }}>
             {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
           </select>
         ) : (
@@ -97,29 +114,60 @@ function GoalsView({ tweaks, currentUser, nav }) {
         </div>
       </Card>
 
-      {/* Goals + deliverables board. */}
-      <h2 className="h-section">Goals & deliverables <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· {goals.length}</span></h2>
+      {/* Goals + deliverables board with product-audience + assignee filters. */}
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '26px 0 12px' }}>
+        <h2 className="h-section" style={{ margin: 0 }}>Goals & deliverables <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>· {visibleGoals.length}</span></h2>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {allProducts.length > 0 && (
+            <select style={selStyle} value={prodFilter} onChange={(e) => setProdFilter(e.target.value)} title="Filter by product-audience">
+              <option value="">All product-audience</option>
+              {allProducts.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+          {teamPeople.length > 0 && (
+            <select style={selStyle} value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} title="Filter by assignee">
+              <option value="">All assignees</option>
+              {teamPeople.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          )}
+        </div>
+      </div>
 
       {canEdit && team && (
-        <Card className="" >
-          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <Icon name="check" size={14} />
-            <input value={newGoal} placeholder="Add a new goal for this team…"
-              onChange={(e) => setNewGoal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addGoal(); }}
-              style={{ flex: 1, fontSize: 13, padding: '8px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)' }} />
-            <button className="btn" data-variant="primary" data-size="sm" disabled={!newGoal.trim()} onClick={addGoal}>
-              <Icon name="check" size={11} /> Add goal
-            </button>
+        <Card>
+          <div className="col" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <Icon name="check" size={14} />
+              <input value={newGoal} placeholder="Add a new goal for this team…"
+                onChange={(e) => setNewGoal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addGoal(); }}
+                style={{ flex: 1, fontSize: 14, padding: '9px 11px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }} />
+              <button className="btn" data-variant="primary" data-size="sm" disabled={!newGoal.trim()} onClick={addGoal}>
+                <Icon name="check" size={11} /> Add goal
+              </button>
+            </div>
+            {(CAT.PRODUCTS || []).length > 0 && (
+              <div>
+                <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.05, fontWeight: 600, marginBottom: 6 }}>Product-Audience</div>
+                <div className="chip-grid">
+                  {(CAT.PRODUCTS || []).map((p) => (
+                    <div key={p} className="chip" data-selected={newProducts.includes(p)} onClick={() => toggleNewProduct(p)}>
+                      {newProducts.includes(p) && <Icon name="check" size={10} stroke={2.4} />}<span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       )}
 
-      {goals.length === 0 ? (
-        <div className="empty" style={{ marginTop: 12 }}>No goals for this team yet.{canEdit ? ' Add one above.' : ''}</div>
+      {visibleGoals.length === 0 ? (
+        <div className="empty" style={{ marginTop: 12 }}>No goals{prodFilter || assigneeFilter ? ' match the filters' : ' for this team yet'}.{canEdit && !prodFilter && !assigneeFilter ? ' Add one above.' : ''}</div>
       ) : (
         <div className="col" style={{ gap: 12, marginTop: 12 }}>
-          {goals.map((g) => (
-            <GoalCard key={g.id} goal={g} canEdit={canEdit} onSave={(dels) => saveDeliverables(g, dels)} />
+          {visibleGoals.map((g) => (
+            <GoalCard key={g.id} goal={g} canEdit={canEdit} people={teamPeople} assigneeFilter={assigneeFilter}
+              onSave={(patch) => saveGoal(g, patch)} />
           ))}
         </div>
       )}
@@ -128,39 +176,52 @@ function GoalsView({ tweaks, currentUser, nav }) {
 }
 window.GoalsView = GoalsView;
 
-// One goal card: title + its deliverables. Leads edit inline (add / edit / remove).
-function GoalCard({ goal, canEdit, onSave }) {
+// One goal card: title + product-audience + its deliverables, each with assignees.
+function GoalCard({ goal, canEdit, people, assigneeFilter, onSave }) {
+  const CDC = window.CDC;
   const [adding, setAdding] = useState_g('');
   const dels = goal.deliverables || [];
-  const add = () => { const t = adding.trim(); if (!t) return; onSave([...dels, { id: `${goal.id}-d${Date.now()}`, text: t }]); setAdding(''); };
-  const editText = (id, text) => onSave(dels.map((d) => (d.id === id ? { ...d, text } : d)));
-  const remove = (id) => onSave(dels.filter((d) => d.id !== id));
-  const inp = { fontSize: 12.5, padding: '6px 9px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)' };
+  const shown = assigneeFilter ? dels.filter((d) => (d.assignees || []).includes(assigneeFilter)) : dels;
+  const saveDels = (next) => onSave({ deliverables: next });
+  const add = () => { const t = adding.trim(); if (!t) return; saveDels([...dels, { id: `${goal.id}-d${Date.now()}`, text: t, assignees: [] }]); setAdding(''); };
+  const editText = (id, text) => saveDels(dels.map((d) => (d.id === id ? { ...d, text } : d)));
+  const setAssignees = (id, assignees) => saveDels(dels.map((d) => (d.id === id ? { ...d, assignees } : d)));
+  const remove = (id) => saveDels(dels.filter((d) => d.id !== id));
+  const inp = { fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' };
   return (
     <Card>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>{goal.title}</div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{goal.title}</div>
+          {(goal.products || []).length > 0 && (
+            <div className="row" style={{ gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+              {(goal.products || []).map((p) => <Pill key={p} tone="accent">{p}</Pill>)}
+            </div>
+          )}
+        </div>
         <Pill tone="outline">{dels.length} deliverable{dels.length === 1 ? '' : 's'}</Pill>
       </div>
-      {dels.length === 0 && !canEdit && <div className="muted" style={{ fontSize: 12 }}>No deliverables yet.</div>}
-      <div className="col" style={{ gap: 6 }}>
-        {dels.map((d) => (
-          <div key={d.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <span className="muted">↳</span>
+
+      {shown.length === 0 && <div className="muted" style={{ fontSize: 12.5 }}>{assigneeFilter ? 'No deliverables for this person.' : 'No deliverables yet.'}</div>}
+      <div className="col" style={{ gap: 8 }}>
+        {shown.map((d) => (
+          <div key={d.id} className="row" style={{ gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <span className="muted" style={{ marginTop: 7 }}>↳</span>
             {canEdit ? (
-              <>
-                <input defaultValue={d.text} onBlur={(e) => e.target.value.trim() && e.target.value !== d.text && editText(d.id, e.target.value.trim())}
-                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} style={{ ...inp, flex: 1 }} />
-                <button className="btn" data-size="sm" data-variant="danger" title="Remove deliverable" onClick={() => remove(d.id)}>✕</button>
-              </>
+              <input defaultValue={d.text} onBlur={(e) => e.target.value.trim() && e.target.value !== d.text && editText(d.id, e.target.value.trim())}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }} style={{ ...inp, flex: '1 1 260px' }} />
             ) : (
-              <span style={{ fontSize: 12.5 }}>{d.text}</span>
+              <span style={{ fontSize: 13, flex: '1 1 260px' }}>{d.text}</span>
             )}
+            <AssigneeControl assignees={d.assignees || []} people={people} canEdit={canEdit}
+              onChange={(next) => setAssignees(d.id, next)} />
+            {canEdit && <button className="btn" data-size="sm" data-variant="danger" title="Remove deliverable" onClick={() => remove(d.id)}>✕</button>}
           </div>
         ))}
       </div>
+
       {canEdit && (
-        <div className="row" style={{ gap: 8, alignItems: 'center', marginTop: 8 }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', marginTop: 10 }}>
           <span className="muted">↳</span>
           <input value={adding} placeholder="Add a deliverable to achieve this goal…"
             onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
@@ -174,3 +235,36 @@ function GoalCard({ goal, canEdit, onSave }) {
   );
 }
 window.GoalCard = GoalCard;
+
+// Multi-select assignees for one deliverable: pills (removable) + an add-select
+// of the remaining stack members. Read-only shows the assigned names.
+function AssigneeControl({ assignees, people, canEdit, onChange }) {
+  const CDC = window.CDC;
+  const nameOf = (id) => shortName(CDC.lookup.user(id));
+  const remaining = (people || []).filter((u) => !assignees.includes(u.id));
+  if (!canEdit) {
+    return assignees.length
+      ? <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>{assignees.map((id) => <Pill key={id} tone="blue" dot>{nameOf(id)}</Pill>)}</div>
+      : <span className="muted" style={{ fontSize: 11.5 }}>unassigned</span>;
+  }
+  return (
+    <div className="row" style={{ gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+      {assignees.map((id) => (
+        <span key={id} className="pill" data-tone="blue" style={{ gap: 4 }}>
+          {nameOf(id)}
+          <span style={{ cursor: 'pointer', fontWeight: 700, opacity: 0.8 }} title="Unassign"
+            onClick={() => onChange(assignees.filter((x) => x !== id))}>×</span>
+        </span>
+      ))}
+      {remaining.length > 0 && (
+        <select value="" onChange={(e) => e.target.value && onChange([...assignees, e.target.value])}
+          style={{ height: 26, fontSize: 12, padding: '0 6px', borderRadius: 'var(--radius)', border: '1px dashed var(--border-strong)', background: 'transparent', color: 'var(--text-muted)' }}
+          title="Assign a person">
+          <option value="">+ assign</option>
+          {remaining.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
+window.AssigneeControl = AssigneeControl;
