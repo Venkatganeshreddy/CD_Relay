@@ -735,8 +735,8 @@ function GuidelineView({ tweaks, currentUser, nav }) {
               <div className="flow-step">
                 <div className="flow-num">3</div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Pavan sees the right view at the right time</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>Dashboard at 9 AM. Weekly draft on Monday. Notifications only when something needs him.</div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>L3 sees the right view at the right time</div>
+                  <div className="muted" style={{ fontSize: 11.5 }}>Dashboard at 9 AM. Weekly draft on Monday. Notifications only when something needs them.</div>
                 </div>
               </div>
             </div>
