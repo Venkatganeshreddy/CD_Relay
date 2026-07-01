@@ -111,7 +111,7 @@ function ManagerView({ tweaks, currentUser, nav }) {
         <>
           {/* ── Section 8.1 — Team Overview ────────────────────────── */}
           <h2 className="h-section">Team overview</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             <div className="kpi-tile" data-tone={reportRate >= 0.8 ? 'green' : reportRate >= 0.6 ? 'amber' : 'red'}>
               <div className="kpi-name">Report completion · {rangeShort}</div>
               <div className="kpi-value">{Math.round(reportRate * 100)}<span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 400 }}>%</span></div>
@@ -548,7 +548,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
 
       {/* This-week summary */}
       <h2 className="h-section">Your week</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <div className="kpi-tile">
           <div className="kpi-name">Tasks logged</div>
           <div className="kpi-value">{recent.length}</div>
@@ -611,7 +611,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
 
       {/* Daily Workflow shortcut */}
       <h2 className="h-section">Daily workflow</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <div className="card card-pad" onClick={() => nav.go('my-tasks')}>
           <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
             <div className="banner-icon" style={{ width: 32, height: 32 }}><Icon name="edit" size={14} /></div>

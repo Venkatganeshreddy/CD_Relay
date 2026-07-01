@@ -159,7 +159,7 @@ function MissingReportsView({ tweaks, currentUser, nav }) {
   return (
     <div className="fadein">
       <SectionHeader title="Missing reports · today" subtitle={`${submitted.length} of ${status.length} reporters submitted. ${missing.length} missing.`} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile"><div className="kpi-name">Submitted</div><div className="kpi-value">{submitted.length}</div></div>
         <div className="kpi-tile" data-tone={missing.length ? 'amber' : undefined}><div className="kpi-name">Missing</div><div className="kpi-value">{missing.length}</div></div>
         <div className="kpi-tile" data-tone={pct >= 80 ? 'green' : pct >= 60 ? 'amber' : 'red'}><div className="kpi-name">Completion</div><div className="kpi-value">{pct}%</div></div>
@@ -1522,7 +1522,7 @@ function RunsView({ tweaks, currentUser }) {
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile">
           <div className="kpi-name">Total runs (7d)</div>
           <div className="kpi-value">{list.length}</div>

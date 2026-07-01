@@ -493,7 +493,7 @@ function DepartmentView({ deptId, tweaks, currentUser, nav }) {
       />
 
       {/* Stat strip — all live from worklogs/tasks */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <div className="kpi-tile">
           <div className="kpi-name">Hours logged (7d)</div>
           <div className="kpi-value">{hours7.toFixed(1)}</div>
