@@ -955,7 +955,11 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
                 </React.Fragment>
               );
             })}
-            {list.length === 0 && <tr><td colSpan={5}><div className="empty">No {filter.toLowerCase()} tasks.</div></td></tr>}
+            {list.length === 0 && <tr><td colSpan={5}><div className="empty" style={{ border: 0, background: 'transparent', padding: '30px 20px' }}>
+              {filter === 'MINE' ? 'You have no tasks yet — click “New task” to add one.'
+                : filter === 'ALL' ? 'No team-mate tasks.'
+                : `No ${(TAB_LABELS[filter] || filter).toLowerCase()} tasks.`}
+            </div></td></tr>}
           </tbody>
         </table>
       </Card>
