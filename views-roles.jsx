@@ -506,10 +506,10 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
         eyebrow="Your week · live"
         context={`${currentUser.title} · ${submittedToday ? "today's report is in" : 'today not submitted yet'}`}
         actions={<>
-          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('submit')}>
+          <button className="btn" data-variant="accent" data-size="sm" onClick={() => nav.go('my-tasks')}>
             <Icon name="edit" size={12} /> {submittedToday ? 'Edit today' : 'Submit today'}
           </button>
-          <button className="btn" data-size="sm" onClick={() => nav.go('my-tasks')}><Icon name="tasks" size={12} /> My tasks</button>
+          <button className="btn" data-size="sm" onClick={() => nav.go('submit')}><Icon name="sheet" size={12} /> Day-end glance</button>
         </>}
         ring={{
           pct: hoursPct, label: 'of weekly target', tone: hoursTone, onClick: () => nav.go('worklogs'),
@@ -541,7 +541,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
                 Logs against {CDC.empIdForUser(currentUser.id)}. Window closes 8:00 PM IST.
               </div>
             </div>
-            <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go('submit')}>{hasTasks ? 'Review now' : 'Add task'}</button>
+            <button className="btn" data-variant="primary" data-size="sm" onClick={() => nav.go(hasTasks ? 'submit' : 'my-tasks')}>{hasTasks ? 'Review now' : 'Add task'}</button>
           </div>
         );
       })()}
