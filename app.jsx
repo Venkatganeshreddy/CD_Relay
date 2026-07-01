@@ -192,7 +192,8 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     // Department group (which carries the manager Dashboard) is hidden for them.
     ...(isContributor ? [{ id: 'dashboard', label: 'Dashboard', icon: 'dashboard' }] : []),
     { id: 'my-tasks', label: 'Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => tt.owner === currentUser.id && tt.status !== 'DONE' && tt.status !== 'REJECTED').length || null, badgeTone: 'amber' },
-    { id: 'goals', label: 'Goals', icon: 'weekly' },
+    // Goals management is for leads/admin — hidden from L1/L0 contributors.
+    ...(isContributor ? [] : [{ id: 'goals', label: 'Goals', icon: 'weekly' }]),
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
   ];
