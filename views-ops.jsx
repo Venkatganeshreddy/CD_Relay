@@ -787,35 +787,38 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
         subtitle="Your task board. Create tasks, assign to anyone, update status. Managers see their team mates' tasks via the team mates tab + reportee filter."
         actions={
           <>
-            <button className="btn" data-size="sm" data-variant={showCal ? 'primary' : 'ghost'} onClick={() => setShowCal((v) => !v)} title="Toggle the calendar"><Icon name="weekly" size={12} /> Calendar</button>
-            <button className="btn" data-size="sm" onClick={refreshNow} title="Re-pull the latest data and refresh escalations"><Icon name="refresh" size={12} /> Refresh</button>
-            <button className="btn" data-size="sm" data-variant="primary" onClick={() => setCreating(true)}><Icon name="check" size={12} /> New task</button>
+            <button className="btn" data-variant={showCal ? 'primary' : 'ghost'} onClick={() => setShowCal((v) => !v)} title="Toggle the calendar"><Icon name="weekly" size={14} /> Calendar</button>
+            <button className="btn" onClick={refreshNow} title="Re-pull the latest data and refresh escalations"><Icon name="refresh" size={14} /> Refresh</button>
+            <button className="btn" data-variant="accent" onClick={() => setCreating(true)}><Icon name="check" size={14} /> New task</button>
           </>
         }
       />
 
-      <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         {tabs.map((f) => (
           <button key={f} className="btn" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
             {TAB_LABELS[f] || f.toLowerCase()}
             <span className="mono" style={{ marginLeft: 7, opacity: 0.6, fontWeight: 700 }}>{tabCount(f)}</span>
           </button>
         ))}
-        <span style={{ flex: 1 }} />
-        {teams.length > 0 && (
-          <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)} style={FILTER_SELECT} title="Filter by team">
-            <option value="">All teams</option>
-            {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
-          </select>
-        )}
-        {reportees.length > 0 && (
-          <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)} style={FILTER_SELECT} title="Filter by immediate reportee">
-            <option value="">All reportees</option>
-            {reportees.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.level} · {r.sub || r.dept}</option>)}
-          </select>
-        )}
-        {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12.5 }}>{reviewed} of {suggested.length} triaged</span>}
       </div>
+      {(teams.length > 0 || reportees.length > 0 || filter === 'SUGGESTED') && (
+        <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+          {teams.length > 0 && (
+            <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)} style={FILTER_SELECT} title="Filter by team">
+              <option value="">All teams</option>
+              {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
+            </select>
+          )}
+          {reportees.length > 0 && (
+            <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)} style={FILTER_SELECT} title="Filter by immediate reportee">
+              <option value="">All reportees</option>
+              {reportees.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.level} · {r.sub || r.dept}</option>)}
+            </select>
+          )}
+          {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12.5 }}>{reviewed} of {suggested.length} triaged</span>}
+        </div>
+      )}
 
       {showCal && (
         <div className="row" style={{ gap: 12, alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' }}>
