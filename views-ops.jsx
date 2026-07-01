@@ -1190,7 +1190,11 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
   const sectionGap = { display: 'flex', flexDirection: 'column', gap: 16 };
   const selCount = (n) => <span className="muted" style={{ textTransform: 'none', fontWeight: 400, fontSize: 11 }}>{n ? `· ${n} selected` : '· multi-select'}</span>;
   return (
-    <Modal open={open} onClose={onClose} title={editing ? 'Edit task' : 'New task — CD Task flow'} width={840}
+    <Modal open={open} onClose={onClose} width={840}
+      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+        <span className="tf-badge"><Icon name={editing ? 'edit' : 'sparkles'} size={14} /></span>
+        <span>{editing ? 'Edit task' : 'New task'}<span className="muted" style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>· CD Task flow</span></span>
+      </span>}
       footer={<>
         <span className="muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
           {!outputCategory ? 'Pick a product-audience & output category'

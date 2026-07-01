@@ -579,16 +579,34 @@ input, select, textarea, .tbl tr td {
 }
 .modal-b { padding: 18px 20px; overflow-y: auto; flex: 1; min-height: 0; font-size: 14px; }
 
+/* Gradient icon badge in the modal title. */
+.tf-badge {
+  width: 28px; height: 28px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--accent-grad); color: var(--accent-fg);
+  box-shadow: var(--shadow-accent), inset 0 0 0 1px rgba(255,255,255,0.16);
+}
+
 /* Task-creation form: group each section into a soft tinted card so the modal
-   reads structured and lively instead of a flat white sheet. */
+   reads structured and lively instead of a flat white sheet. Cards stagger in
+   on open and lift on hover for a premium, tactile feel. */
 .taskform > div {
   background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 4%, var(--surface)), var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 15px 16px;
   box-shadow: var(--shadow-sm);
+  animation: taskform-in 0.36s var(--ease) both;
 }
-.taskform > div:hover { border-color: var(--border-strong); }
+.taskform > div:nth-child(1) { animation-delay: 0.02s; }
+.taskform > div:nth-child(2) { animation-delay: 0.06s; }
+.taskform > div:nth-child(3) { animation-delay: 0.10s; }
+.taskform > div:nth-child(4) { animation-delay: 0.14s; }
+.taskform > div:nth-child(5) { animation-delay: 0.18s; }
+.taskform > div:nth-child(6) { animation-delay: 0.22s; }
+.taskform > div:nth-child(n+7) { animation-delay: 0.26s; }
+@keyframes taskform-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.taskform > div:hover { border-color: var(--accent-border); box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .modal-f { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Misc */
