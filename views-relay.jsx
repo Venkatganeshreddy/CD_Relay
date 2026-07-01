@@ -1190,6 +1190,11 @@ function MomLoader({ open, onClose, currentUser, nav }) {
           )}
           {(step === 'scribe' || step === 'dispatcher') && (
             <div className="col" style={{ gap: 12, padding: 20 }}>
+              <div className="mom-processing">
+                <div className="mom-orb"><Icon name="sparkles" size={24} /></div>
+                <div className="mom-processing-label">{step === 'scribe' ? 'Scribe is reading the transcript…' : 'Dispatcher is matching owners…'}</div>
+                <div className="mom-scan"><span /></div>
+              </div>
               <div className="mom-step" data-state={step === 'scribe' ? 'running' : 'done'}>
                 <span className="mom-step-num">{step === 'scribe' ? '1' : <Icon name="check" size={12} stroke={2.4}/>}</span>
                 <div style={{ flex: 1 }}>

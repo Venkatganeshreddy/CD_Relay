@@ -1075,6 +1075,33 @@ input, select, textarea, .tbl tr td {
 .mom-action-item[data-state="rejected"] {
   opacity: 0.5; text-decoration: line-through;
 }
+/* Cool "AI is thinking" visual while the pipeline runs — a radar-pulsing orb
+   with expanding rings and a sweeping scan bar. */
+.mom-processing { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 10px 0 20px; }
+.mom-orb {
+  position: relative; width: 66px; height: 66px; border-radius: 50%;
+  background: var(--accent-grad); color: var(--accent-fg);
+  display: grid; place-items: center;
+  box-shadow: var(--shadow-accent), inset 0 0 0 1px rgba(255,255,255,0.16);
+  animation: mom-orb-bob 2.6s var(--ease) infinite;
+}
+.mom-orb::before, .mom-orb::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--accent) 70%, transparent);
+  animation: mom-ring 2s ease-out infinite;
+}
+.mom-orb::after { animation-delay: 1s; }
+@keyframes mom-ring { 0% { transform: scale(1); opacity: 0.65; } 100% { transform: scale(2.3); opacity: 0; } }
+@keyframes mom-orb-bob { 50% { transform: translateY(-4px); } }
+.mom-processing-label { font-size: 13.5px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.01em; }
+.mom-scan { width: 240px; height: 5px; border-radius: 999px; overflow: hidden; background: var(--panel-2); position: relative; }
+.mom-scan span {
+  position: absolute; top: 0; left: -45%; width: 45%; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+  animation: mom-scan-sweep 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes mom-scan-sweep { 0% { left: -45%; } 100% { left: 100%; } }
+
 .mom-step {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px;
