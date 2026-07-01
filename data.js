@@ -204,10 +204,11 @@
   // ── Team goals → deliverables ──────────────────────────────────────────
   // L2 leads write deliverables (free-text, many) under each team goal; L1s pick
   // a deliverable when logging a task. `sub` is the team key (see BUSINESS_DIRECTIONS).
-  const GOAL = (id, title, deliverables = [], products = []) => ({
-    id, sub: 'Content — Fullstack', dept: 'd-fsgci', title, products,
+  const GOAL = (id, title, deliverables = [], products = [], sub = 'Content — Fullstack') => ({
+    id, sub, dept: 'd-fsgci', title, products,
     deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text, assignees: [] })),
   });
+  const GA_GOAL = (id, title) => GOAL(id, title, [], [], 'Content — GenAI');
   const GOALS = [
     GOAL('goal-fs-1', 'IDE repairs & improvements', ['Fix Monaco autosave race on tab switch', 'Reduce cold-start latency to < 2s']),
     GOAL('goal-fs-2', 'Adaptive Question Picking for Computer Programming Practice', ['Design difficulty-band picker spec']),
@@ -224,6 +225,16 @@
     GOAL('goal-fs-13', 'Content Quality Issues & Feedback Resolution'),
     GOAL('goal-fs-14', 'Launchpad Content Review Support – SQL'),
     GOAL('goal-fs-15', 'Launchpad Content Review Support – OS'),
+
+    // Gen AI team goals.
+    GA_GOAL('goal-ga-1', 'IDE repairs & improvements'),
+    GA_GOAL('goal-ga-2', 'Practical Software Engineering Content Delivery'),
+    GA_GOAL('goal-ga-3', 'Introduction to Generative AI - Revamp'),
+    GA_GOAL('goal-ga-4', 'Gen AI Role-specific awareness Sessions - Induction'),
+    GA_GOAL('goal-ga-5', 'AI for Finance Content Delivery'),
+    GA_GOAL('goal-ga-6', 'Content Quality Issues & Feedback Resolution'),
+    GA_GOAL('goal-ga-7', 'Observability Systems'),
+    GA_GOAL('goal-ga-8', 'Team Capacity Building'),
   ];
 
   // ── Daily Reports ──────────────────────────────────────────────────────
