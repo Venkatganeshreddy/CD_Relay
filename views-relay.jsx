@@ -1996,7 +1996,8 @@ function normPeriod(p) {
 function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
   const CDC = window.CDC;
   const seesAll = CDC.scopeForUser(currentUser.id).kind === 'all';
-  const rows = CDC.filterNonpayroll(currentUser.id) || [];
+  // April '26 excluded from the budget (stale month).
+  const rows = (CDC.filterNonpayroll(currentUser.id) || []).filter((r) => normPeriod(r.period) !== '2026-04');
   // Dept-level budgets (DS&ML / DS&Algo) come in with sub:null — show them under the dept name, not the '—' bucket.
   const teamOf = (r) => r.sub || CDC.lookup.dept(r.dept)?.name || '—';
   const periods = useMP(() => [...new Set(rows.map((r) => normPeriod(r.period)))].sort(), [rows]);
@@ -2093,7 +2094,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       {openFilter && <div onClick={() => setOpenFilter(null)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />}
       <SectionHeader
         title="Non-Payroll Budget"
-        subtitle={seesAll ? "Budgeted non-payroll spend across all teams (Apr'26–Mar'27, INR excl GST). Actuals to follow." : "Your team's budgeted non-payroll spend (INR excl GST). Actuals to follow."}
+        subtitle={seesAll ? "Budgeted non-payroll spend across all teams (May'26–Mar'27, INR excl GST). Actuals to follow." : "Your team's budgeted non-payroll spend (INR excl GST). Actuals to follow."}
         actions={
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', position: 'relative', zIndex: 50 }}>
             <div className="seg">
@@ -2112,7 +2113,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       />
 
       {/* KPI tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile">
           <div className="kpi-name">Budget</div>
           <div className="kpi-value">{inr(budget)}</div>
@@ -2141,14 +2142,15 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       {/* Monthly budget trend */}
       {trend.length > 1 && (
         <Card title="Monthly budget" meta={`${trend.length} months`}>
-          <div className="row" style={{ alignItems: 'flex-end', gap: 8, height: 90 }}>
+          <div className="row" style={{ alignItems: 'flex-end', gap: 10, height: 120 }}>
             {trend.map((m, i) => {
               const max = Math.max(...trend.map((x) => x.budget));
+              const on = months.length === 0 || months.includes(m.period);
               return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>{(m.budget / 1e5).toFixed(1)}L</span>
-                  <div title={inr(m.budget)} style={{ width: '100%', height: `${(m.budget / max) * 100}%`, background: (months.length === 0 || months.includes(m.period)) ? 'var(--accent)' : 'var(--accent-soft)', borderRadius: 4, minHeight: 6, cursor: 'pointer' }} onClick={() => toggleMonth(m.period)} />
-                  <span className="muted" style={{ fontSize: 9.5, whiteSpace: 'nowrap' }}>{pLabel(m.period)}</span>
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text-faint)' }}>{(m.budget / 1e5).toFixed(1)}L</span>
+                  <div title={inr(m.budget)} style={{ width: '100%', height: `${(m.budget / max) * 100}%`, background: on ? 'linear-gradient(180deg, var(--accent), var(--accent-2))' : 'var(--panel-2)', borderRadius: '6px 6px 3px 3px', minHeight: 8, cursor: 'pointer', boxShadow: on ? 'var(--shadow-sm)' : 'none', transition: 'height 0.3s var(--ease)' }} onClick={() => toggleMonth(m.period)} />
+                  <span className="muted" style={{ fontSize: 10, whiteSpace: 'nowrap', fontWeight: on ? 600 : 400 }}>{pLabel(m.period)}</span>
                 </div>
               );
             })}
@@ -2158,7 +2160,7 @@ function NonPayrollExpenseView({ tweaks, currentUser, nav }) {
       )}
 
       {/* By category / by vendor */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginTop: 12 }}>
         <Card title="By category" pad={false}>
           {byCategory.map((c) => <BudgetRow key={c.k} label={c.k} value={c.budget} max={maxCat} />)}
         </Card>
