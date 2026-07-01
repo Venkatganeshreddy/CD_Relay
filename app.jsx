@@ -196,6 +196,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     ...(isContributor ? [] : [{ id: 'goals', label: 'Goals', icon: 'weekly' }]),
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
+    { id: 'feedback', label: 'Feedback', icon: 'sparkles' },
   ];
   const groupDept = (isL2 || isL3orAdmin) ? [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -255,7 +256,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
       </div>
 
       <CDCTweaksPanel t={t} setTweak={setTweak} />
-      <FeedbackFab />
+      <FeedbackFab currentUser={currentUser} nav={nav} />
       {momOpen && <MomLoader open={momOpen} onClose={() => setMomOpen(false)} currentUser={currentUser} nav={nav} />}
     </div>
   );
@@ -277,6 +278,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} initialFilter={route.params.filter} />;
     case 'my-tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} myOnly initialFilter={route.params.filter} />;
     case 'goals': return <GoalsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
+    case 'feedback': return <FeedbackView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'second-brain': return <SecondBrainView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -471,6 +473,7 @@ function buildCrumbs(route, currentUser) {
     case 'submit': return ['Daily work', 'Day-end glance'];
     case 'my-tasks': return ['Daily work', 'My tasks'];
     case 'goals': return ['Daily work', 'Goals'];
+    case 'feedback': return ['Daily work', 'Feedback'];
     case 'worklogs': return ['Daily work', 'Worklogs'];
     case 'codex': return ['System', 'Codex'];
     case 'catalog': return ['System', 'Admin', 'Task catalog'];

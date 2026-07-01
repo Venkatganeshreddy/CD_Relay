@@ -41,8 +41,10 @@
     knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
     recommendations: 'RECOMMENDATIONS', nonpayroll_expense: 'NONPAYROLL_EXPENSE',
     goals: 'GOALS',
+    app_feedback: 'FEEDBACK',
   };
   if (!Array.isArray(window.CDC.GOALS)) window.CDC.GOALS = [];
+  if (!Array.isArray(window.CDC.FEEDBACK)) window.CDC.FEEDBACK = [];
   if (!Array.isArray(window.CDC.NONPAYROLL_EXPENSE)) window.CDC.NONPAYROLL_EXPENSE = [];
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
   if (!Array.isArray(window.CDC.WEEKLY_DIGESTS)) window.CDC.WEEKLY_DIGESTS = [];
@@ -526,6 +528,19 @@
       if (i >= 0) arr.splice(i, 1);
       const remoteOk = await remote(() => sb.from('goals').delete().eq('id', id));
       return { remoteOk };
+    },
+    // Application feedback (idea / bug / praise / annoyance) — anyone can submit.
+    async addFeedback(fb) {
+      const arr = window.CDC.FEEDBACK || (window.CDC.FEEDBACK = []);
+      arr.unshift(fb);
+      const remoteOk = await remote(() => sb.from('app_feedback').insert({ id: fb.id, user_id: fb.userId || null, kind: fb.kind || null, status: fb.status || 'open', data: fb }));
+      return { item: fb, remoteOk };
+    },
+    async updateFeedback(id, patch) {
+      const f = (window.CDC.FEEDBACK || []).find((x) => x.id === id);
+      if (f) Object.assign(f, patch);
+      const remoteOk = await remote(() => sb.from('app_feedback').update({ status: (f || patch).status || 'open', data: f || { id, ...patch } }).eq('id', id));
+      return { item: f, remoteOk };
     },
     // Master data: persist a department's edited fields into BOTH the
     // departments table (drives lookup.dept) and the nested business_directions

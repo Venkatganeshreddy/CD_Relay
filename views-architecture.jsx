@@ -663,7 +663,7 @@ function CostBar({ agents, total }) {
 }
 
 // ── Feedback FAB (global) ──────────────────────────────────────────────
-function FeedbackFab() {
+function FeedbackFab({ currentUser, nav }) {
   const [open, setOpen] = useStA(false);
   const [sent, setSent] = useStA(false);
   const [text, setText] = useStA('');
@@ -671,6 +671,17 @@ function FeedbackFab() {
 
   function submit() {
     if (!text.trim()) return;
+    const CDC = window.CDC;
+    const fb = {
+      id: `fb-${Date.now()}`, kind, text: text.trim(),
+      page: (typeof location !== 'undefined' && location.hash) || 'main',
+      userId: currentUser ? currentUser.id : null,
+      userName: currentUser ? currentUser.name : 'Someone',
+      status: 'open', at: CDC && CDC.fmtTs ? undefined : new Date().toISOString(),
+      ts: (CDC && CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10)),
+    };
+    if (CDC && CDC.db && CDC.db.addFeedback) CDC.db.addFeedback(fb);
+    else (window.CDC.FEEDBACK = window.CDC.FEEDBACK || []).unshift(fb);
     setSent(true);
     setTimeout(() => {
       setOpen(false);
@@ -728,3 +739,77 @@ function FeedbackFab() {
   );
 }
 window.FeedbackFab = FeedbackFab;
+
+// ── Feedback page (everyone) — all app feedback submitted via the FAB ──────
+const FB_KINDS = ['idea', 'bug', 'praise', 'annoyance'];
+const FB_TONE = { idea: 'accent', bug: 'red', praise: 'green', annoyance: 'amber' };
+const FB_STATUSES = ['open', 'reviewed', 'done'];
+function FeedbackView({ currentUser, nav }) {
+  const CDC = window.CDC;
+  const isAdmin = ['L3', 'ADMIN', 'Admin', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.level === 'L3' || currentUser.level === 'Admin';
+  const [, force] = useStA(0);
+  const [kindF, setKindF] = useStA('all');
+  const [statusF, setStatusF] = useStA('all');
+  const all = CDC.FEEDBACK || [];
+  const list = all.filter((f) => (kindF === 'all' || f.kind === kindF) && (statusF === 'all' || (f.status || 'open') === statusF));
+  const countKind = (k) => all.filter((f) => f.kind === k).length;
+  async function setStatus(f, s) {
+    if (CDC.db && CDC.db.updateFeedback) await CDC.db.updateFeedback(f.id, { status: s });
+    else f.status = s;
+    force((n) => n + 1);
+  }
+  const chip = (val, cur, set, label, tone) => (
+    <button className="btn" data-size="sm" data-variant={cur === val ? 'primary' : 'ghost'} onClick={() => set(val)}>{label}</button>
+  );
+  return (
+    <div className="fadein">
+      <SectionHeader title="Feedback"
+        subtitle="Ideas, bugs, praise and annoyances from across the team. Add yours with the ✎ button at the bottom-right of any page." />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+        {FB_KINDS.map((k) => (
+          <div key={k} className="kpi-tile" data-tone={FB_TONE[k]} style={{ cursor: 'pointer' }} onClick={() => setKindF(kindF === k ? 'all' : k)}>
+            <div className="kpi-name">{k}</div>
+            <div className="kpi-value">{countKind(k)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="row" style={{ gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {chip('all', kindF, setKindF, 'all kinds')}
+        {FB_KINDS.map((k) => chip(k, kindF, setKindF, k))}
+        <span style={{ flex: 1 }} />
+        {chip('all', statusF, setStatusF, 'any status')}
+        {FB_STATUSES.map((s) => chip(s, statusF, setStatusF, s))}
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">No feedback{kindF !== 'all' || statusF !== 'all' ? ' matches the filters' : ' yet'}.</div>
+      ) : (
+        <div className="col" style={{ gap: 10 }}>
+          {list.map((f) => (
+            <Card key={f.id}>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+                    <Pill tone={FB_TONE[f.kind] || 'outline'} dot>{f.kind}</Pill>
+                    <Pill tone={(f.status || 'open') === 'done' ? 'green' : (f.status || 'open') === 'reviewed' ? 'blue' : 'outline'}>{f.status || 'open'}</Pill>
+                    <span className="muted" style={{ fontSize: 11.5 }}>{f.userName || 'Someone'} · {f.ts || ''}{f.page ? ` · ${f.page}` : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{f.text}</div>
+                </div>
+                {isAdmin && (
+                  <select value={f.status || 'open'} onChange={(e) => setStatus(f, e.target.value)}
+                    style={{ height: 28, fontSize: 12, padding: '0 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>
+                    {FB_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+window.FeedbackView = FeedbackView;
