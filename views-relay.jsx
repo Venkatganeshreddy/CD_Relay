@@ -1374,31 +1374,36 @@ function MomLoader({ open, onClose, currentUser, nav }) {
                 </div>
               )}
 
-              {momTab === 'pipeline' && (
-                <div className="col" style={{ gap: 8, maxHeight: 420, overflowY: 'auto', padding: 4 }}>
-                  {[
-                    { id: 'paste', title: '1 · Paste transcript', sub: 'or upload .vtt / .txt' },
-                    { id: 'scribe', title: '2 · Scribe extracts', sub: 'claude-sonnet-4-6' },
-                    { id: 'dispatcher', title: '3 · Dispatcher routes', sub: 'manager_id graph + role' },
-                    { id: 'review', title: '4 · Human review', sub: 'edit, approve, reject' },
-                    { id: 'done', title: '5 · Commit', sub: 'Tasks + Second Brain node' },
-                  ].map((s, i) => {
-                    const order = ['paste', 'scribe', 'dispatcher', 'review', 'done'];
-                    const current = order.indexOf(step);
-                    const sIdx = order.indexOf(s.id);
-                    const state = sIdx < current ? 'done' : sIdx === current ? 'running' : 'pending';
-                    return (
-                      <div key={s.id} className="mom-step" data-state={state}>
-                        <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : sIdx + 1}</span>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 500 }}>{s.title}</div>
-                          <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
+              {momTab === 'pipeline' && (() => {
+                const steps = [
+                  { id: 'paste', title: 'Paste transcript', sub: 'or upload .vtt / .txt' },
+                  { id: 'scribe', title: 'Scribe extracts', sub: 'claude-sonnet-4-6' },
+                  { id: 'dispatcher', title: 'Dispatcher routes', sub: 'manager_id graph + role' },
+                  { id: 'review', title: 'Human review', sub: 'edit, approve, reject' },
+                  { id: 'done', title: 'Commit', sub: 'Tasks + Second Brain node' },
+                ];
+                const order = steps.map((s) => s.id);
+                const current = order.indexOf(step);
+                const pf = current <= 0 ? 0 : (current / (order.length - 1)) * 100;
+                return (
+                  <div className="mom-pipeline" style={{ '--pf': `${pf}%`, maxHeight: 420, overflowY: 'auto' }}>
+                    {steps.map((s, i) => {
+                      const state = i < current ? 'done' : i === current ? 'running' : 'pending';
+                      return (
+                        <div key={s.id} className="mom-step" data-state={state}>
+                          <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={12} stroke={2.4} /> : i + 1}</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600 }}>{s.title}</div>
+                            <div className="muted" style={{ fontSize: 11 }}>{s.sub}</div>
+                          </div>
+                          {state === 'running' && <Pill tone="accent" dot>in progress</Pill>}
+                          {state === 'done' && <Pill tone="green" dot>done</Pill>}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
           {step === 'done' && (
@@ -1414,26 +1419,34 @@ function MomLoader({ open, onClose, currentUser, nav }) {
           {step !== 'review' && (
             <>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)' }}>Pipeline</div>
-              {[
-                { id: 'paste', title: '1 · Paste transcript', sub: 'or upload .vtt / .txt' },
-                { id: 'scribe', title: '2 · Scribe extracts', sub: 'claude-sonnet-4-6' },
-                { id: 'dispatcher', title: '3 · Dispatcher routes', sub: 'manager_id graph + role' },
-                { id: 'review', title: '4 · Human review', sub: 'edit, approve, reject' },
-                { id: 'done', title: '5 · Commit', sub: 'Tasks + Second Brain node' },
-              ].map((s, i) => {
-                const current = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(step);
-                const sIdx = ['paste', 'scribe', 'dispatcher', 'review', 'done'].indexOf(s.id);
-                const state = sIdx < current ? 'done' : sIdx === current ? 'running' : 'pending';
+              {(() => {
+                const steps = [
+                  { id: 'paste', title: 'Paste transcript', sub: 'or upload .vtt / .txt' },
+                  { id: 'scribe', title: 'Scribe extracts', sub: 'claude-sonnet-4-6' },
+                  { id: 'dispatcher', title: 'Dispatcher routes', sub: 'manager_id graph + role' },
+                  { id: 'review', title: 'Human review', sub: 'edit, approve, reject' },
+                  { id: 'done', title: 'Commit', sub: 'Tasks + Second Brain node' },
+                ];
+                const order = steps.map((s) => s.id);
+                const current = order.indexOf(step);
+                const pf = current <= 0 ? 0 : (current / (order.length - 1)) * 100;
                 return (
-                  <div key={s.id} className="mom-step" data-state={state}>
-                    <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : sIdx + 1}</span>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{s.title}</div>
-                      <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
-                    </div>
+                  <div className="mom-pipeline" style={{ '--pf': `${pf}%` }}>
+                    {steps.map((s, i) => {
+                      const state = i < current ? 'done' : i === current ? 'running' : 'pending';
+                      return (
+                        <div key={s.id} className="mom-step" data-state={state}>
+                          <span className="mom-step-num">{state === 'done' ? <Icon name="check" size={11} stroke={2.4} /> : i + 1}</span>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600 }}>{s.title}</div>
+                            <div className="muted" style={{ fontSize: 10.5 }}>{s.sub}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              })}
+              })()}
             </>
           )}
 
@@ -1473,7 +1486,7 @@ function ActionItem({ item, state, onDecide, canReassign, onReassign, people, on
           {editing ? (
             <input className="input-text" value={item.text} placeholder="Describe the action item…" onChange={(e) => onEditText(item.id, e.target.value)} onBlur={() => setEditing(false)} autoFocus />
           ) : (
-            <span onClick={() => !state && setEditing(true)} title="Click to edit">{item.text}{textChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9, marginLeft: 6 }}>edited</span>}</span>
+            <span onClick={() => !state && setEditing(true)} title="Click to edit">{item.text}{textChanged && <span className="pill" data-tone="amber" style={{ fontSize: 9, marginLeft: 6 }}>edited</span>}{!state && <span className="mom-edit-hint"><Icon name="edit" size={11} /></span>}</span>
           )}
         </div>
         <ConfChip value={item.confidence} show={true} />

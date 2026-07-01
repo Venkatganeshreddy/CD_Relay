@@ -1132,6 +1132,40 @@ input, select, textarea, .tbl tr td {
   background: var(--panel-2); color: var(--text-faint); box-shadow: inset 0 0 0 1px var(--border);
 }
 
+/* Vertical pipeline with a flowing connector line — energy flows down through
+   completed/running stages up to --pf (the current progress). */
+.mom-pipeline { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.mom-pipeline::before {
+  content: ""; position: absolute; left: 17px; top: 20px; bottom: 20px; width: 2px;
+  background: var(--border); border-radius: 999px;
+}
+.mom-pipeline::after {
+  content: ""; position: absolute; left: 17px; top: 20px; width: 2px; height: var(--pf, 0%);
+  max-height: calc(100% - 40px);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent) 100%);
+  background-size: 100% 220%;
+  border-radius: 999px;
+  box-shadow: 0 0 8px color-mix(in oklch, var(--accent) 55%, transparent);
+  animation: mom-flow 1.1s linear infinite;
+  transition: height 0.5s var(--ease);
+}
+@keyframes mom-flow { to { background-position: 0 -220%; } }
+.mom-pipeline .mom-step {
+  position: relative; z-index: 1;
+  background: transparent; border: 0; box-shadow: none; border-radius: var(--radius);
+  padding: 8px 8px;
+}
+.mom-pipeline .mom-step[data-state="running"] {
+  background: color-mix(in oklch, var(--accent-soft) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+.mom-pipeline .mom-step[data-state="pending"] { opacity: 0.6; }
+.mom-pipeline .mom-step > div:nth-child(2) { flex: 1; }
+
+/* Clear "editable" hint on an action item's text. */
+.mom-edit-hint { margin-left: 6px; opacity: 0.45; cursor: pointer; vertical-align: -1px; }
+.mom-action-item span[title="Click to edit"]:hover .mom-edit-hint { opacity: 0.9; }
+
 /* ── Guideline tour ────────────────────────────────────────────────── */
 .guideline-page {
   max-width: 1100px;
