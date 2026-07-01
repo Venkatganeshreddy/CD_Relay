@@ -9,6 +9,10 @@ function dmy(s) {
 }
 window.dmy = dmy;
 
+// Shared filter-select style — matches the small button height (30px) so filter
+// rows line up cleanly instead of using ad-hoc smaller inline styles.
+const FILTER_SELECT = { height: 30, fontSize: 13, padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' };
+
 // ════════════════════════════════════════════════════════════════════════
 // WEEKLY VIEW
 // ════════════════════════════════════════════════════════════════════════
@@ -790,31 +794,27 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
         }
       />
 
-      <div className="row" style={{ gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {tabs.map((f) => (
-          <button key={f} className="btn" data-size="sm" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
+          <button key={f} className="btn" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
             {TAB_LABELS[f] || f.toLowerCase()}
-            <span className="mono muted" style={{ marginLeft: 6 }}>{tabCount(f)}</span>
+            <span className="mono" style={{ marginLeft: 7, opacity: 0.6, fontWeight: 700 }}>{tabCount(f)}</span>
           </button>
         ))}
         <span style={{ flex: 1 }} />
         {teams.length > 0 && (
-          <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)}
-            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
-            title="Filter by team">
+          <select value={teamSel} onChange={(e) => setTeamSel(e.target.value)} style={FILTER_SELECT} title="Filter by team">
             <option value="">All teams</option>
             {teams.map((s) => <option key={s} value={s}>{s.replace('Content — ', '')}</option>)}
           </select>
         )}
         {reportees.length > 0 && (
-          <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)}
-            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}
-            title="Filter by immediate reportee">
+          <select value={reporteeSel} onChange={(e) => setReporteeSel(e.target.value)} style={FILTER_SELECT} title="Filter by immediate reportee">
             <option value="">All reportees</option>
             {reportees.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.level} · {r.sub || r.dept}</option>)}
           </select>
         )}
-        {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12 }}>{reviewed} of {suggested.length} triaged</span>}
+        {filter === 'SUGGESTED' && <span className="muted" style={{ fontSize: 12.5 }}>{reviewed} of {suggested.length} triaged</span>}
       </div>
 
       {showCal && (
