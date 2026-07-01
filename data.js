@@ -201,6 +201,31 @@
     { id: 'k-10', name: 'DS&Algo student pass rate',   dept: 'd-dsalgo', target: 78, current: 70, unit: '%',  status: 'red',   trend: [76, 74, 73, 72, 71, 70], owner: 'NW0002023' },
   ];
 
+  // ── Team goals → deliverables ──────────────────────────────────────────
+  // L2 leads write deliverables (free-text, many) under each team goal; L1s pick
+  // a deliverable when logging a task. `sub` is the team key (see BUSINESS_DIRECTIONS).
+  const GOAL = (id, title, deliverables = []) => ({
+    id, sub: 'Content — Fullstack', dept: 'd-fsgci', title,
+    deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text })),
+  });
+  const GOALS = [
+    GOAL('goal-fs-1', 'IDE repairs & improvements', ['Fix Monaco autosave race on tab switch', 'Reduce cold-start latency to < 2s']),
+    GOAL('goal-fs-2', 'Adaptive Question Picking for Computer Programming Practice', ['Design difficulty-band picker spec']),
+    GOAL('goal-fs-3', 'Personalized Revision Path'),
+    GOAL('goal-fs-4', 'Gamified Solution Revealing: Timer to Solution Revealing to CP Coding Questions'),
+    GOAL('goal-fs-5', 'ADYPU: Operating Systems Content Delivery'),
+    GOAL('goal-fs-6', 'Aurora: Advanced DBMS Content Delivery'),
+    GOAL('goal-fs-7', 'Web Application Development - Revamp'),
+    GOAL('goal-fs-8', 'Computer Programming - Revamp'),
+    GOAL('goal-fs-9', 'Advanced Java: Hibernate, Spring Framework, and Microservices'),
+    GOAL('goal-fs-10', 'Django'),
+    GOAL('goal-fs-11', 'Integration & Deployment'),
+    GOAL('goal-fs-12', 'FS Role-specific Library & Tech Sessions — Induction'),
+    GOAL('goal-fs-13', 'Content Quality Issues & Feedback Resolution'),
+    GOAL('goal-fs-14', 'Launchpad Content Review Support – SQL'),
+    GOAL('goal-fs-15', 'Launchpad Content Review Support – OS'),
+  ];
+
   // ── Daily Reports ──────────────────────────────────────────────────────
   // Each manager files for their sub-team / department.
   const REPORTS = [
@@ -1291,6 +1316,14 @@
     if (s.kind === 'sub') return KPIS.filter((k) => k.dept === s.dept);
     return [];
   }
+  // Team goals scope by sub-team; L3/Admin see all, dept leads see their dept.
+  function filterGoals(userId) {
+    const s = scopeForUser(userId);
+    if (s.kind === 'all') return GOALS;
+    if (s.kind === 'dept') return GOALS.filter((g) => g.dept === s.dept);
+    if (s.kind === 'sub') return GOALS.filter((g) => g.sub === s.sub);
+    return [];
+  }
   function filterTasks(userId) {
     const s = scopeForUser(userId);
     if (s.kind === 'all') return TASKS;            // L3 / Admin: whole org (all L2s and below)
@@ -1560,7 +1593,17 @@
     { id: 'detail', label: 'Details', type: 'textarea', ph: 'Scope, specifics, notes…' },
   ];
 
-  const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, DEFAULT_TEMPLATE };
+  // How much of a task the AI executes end-to-end — the "agentic execution scope".
+  const AGENTIC_SCOPES = [
+    { v: 'L0', label: 'Nothing, fully manual' },
+    { v: 'L1', label: 'Single subtask (brainstorm, autocomplete)' },
+    { v: 'L2', label: 'One workflow stage (drafting, review)' },
+    { v: 'L3', label: 'End-to-end task (full module, full ticket)' },
+    { v: 'L4', label: 'Multi-stage pipeline' },
+    { v: 'L5', label: 'Full domain end-to-end' },
+  ];
+
+  const TASK_CATALOG = { PRODUCTS, STACKS, OUTPUT_MAP, OUTPUT_CATEGORIES, COUNT_NA, STATUSES, TASK_TEMPLATES, DEFAULT_TEMPLATE, AGENTIC_SCOPES };
 
   // Weekly Digests — consolidated, all-departments weekly glance (Second Brain).
   // Starts empty; filled live from Supabase (weekly_digests) or generated in-app.
@@ -1616,11 +1659,11 @@
     ROLES, USERS,
     TASK_CATALOG, applyTaskCatalog, fmtTs,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
-    KPIS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
+    KPIS, GOALS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
     WORKLOGS, empIdForUser, WEEKLY_DIGESTS, RECOMMENDATIONS,
     ENGRAM, EVAL_SETS, PROPOSALS, FARM_AGENTS,
     RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, NONPAYROLL_EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,
-    scopeForUser, filterDepartments, filterReports, filterKpis, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterNonpayroll, filterEngram,
+    scopeForUser, filterDepartments, filterReports, filterKpis, filterGoals, filterTasks, filterFlags, filterWeekly, filterWorklogs, filterNonpayroll, filterEngram,
     stackForUser, reportersInScope, dailyStatus, consolidateByCategory, worklogsWithin,
     lookup,
   };

@@ -192,6 +192,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     // Department group (which carries the manager Dashboard) is hidden for them.
     ...(isContributor ? [{ id: 'dashboard', label: 'Dashboard', icon: 'dashboard' }] : []),
     { id: 'my-tasks', label: 'Tasks', icon: 'tasks', badge: window.CDC.filterTasks(currentUser.id).filter((tt) => tt.owner === currentUser.id && tt.status !== 'DONE' && tt.status !== 'REJECTED').length || null, badgeTone: 'amber' },
+    { id: 'goals', label: 'Goals', icon: 'weekly' },
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
   ];
@@ -274,6 +275,7 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'monthly': return <MonthlyView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} initialFilter={route.params.filter} />;
     case 'my-tasks': return <TasksView tweaks={tweaks} currentUser={currentUser} nav={nav} myOnly initialFilter={route.params.filter} />;
+    case 'goals': return <GoalsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'second-brain': return <SecondBrainView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -467,6 +469,7 @@ function buildCrumbs(route, currentUser) {
     case 'dashboard': return ['Department', 'Dashboard'];
     case 'submit': return ['Daily work', 'Day-end glance'];
     case 'my-tasks': return ['Daily work', 'My tasks'];
+    case 'goals': return ['Daily work', 'Goals'];
     case 'worklogs': return ['Daily work', 'Worklogs'];
     case 'codex': return ['System', 'Codex'];
     case 'catalog': return ['System', 'Admin', 'Task catalog'];

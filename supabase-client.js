@@ -40,7 +40,9 @@
     codex_guidelines: 'CODEX_GUIDELINES', ai_runs: 'AI_RUNS', activity: 'ACTIVITY',
     knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
     recommendations: 'RECOMMENDATIONS', nonpayroll_expense: 'NONPAYROLL_EXPENSE',
+    goals: 'GOALS',
   };
+  if (!Array.isArray(window.CDC.GOALS)) window.CDC.GOALS = [];
   if (!Array.isArray(window.CDC.NONPAYROLL_EXPENSE)) window.CDC.NONPAYROLL_EXPENSE = [];
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
   if (!Array.isArray(window.CDC.WEEKLY_DIGESTS)) window.CDC.WEEKLY_DIGESTS = [];
@@ -501,6 +503,19 @@
       if (i >= 0) arr.splice(i, 1);
       const remoteOk = await remote(() => sb.from('kpis').delete().eq('id', id));
       return { remoteOk };
+    },
+    // Team goals + deliverables. L2 leads edit `deliverables` here; persisted like KPIs.
+    async addGoal(goal) {
+      const arr = window.CDC.GOALS || (window.CDC.GOALS = []);
+      arr.push(goal);
+      const remoteOk = await remote(() => sb.from('goals').insert({ id: goal.id, dept: goal.dept || null, sub: goal.sub || null, data: goal }));
+      return { item: goal, remoteOk };
+    },
+    async updateGoal(id, patch) {
+      const g = (window.CDC.GOALS || []).find((x) => x.id === id);
+      if (g) Object.assign(g, patch);
+      const remoteOk = await remote(() => sb.from('goals').update({ dept: (g || patch).dept || null, sub: (g || patch).sub || null, data: g || { id, ...patch } }).eq('id', id));
+      return { item: g, remoteOk };
     },
     // Master data: persist a department's edited fields into BOTH the
     // departments table (drives lookup.dept) and the nested business_directions

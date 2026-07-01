@@ -64,6 +64,8 @@ function GlanceView({ tweaks, currentUser, nav }) {
       outputCount: form.outputCount ?? null, template: form.template || {},
       estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
       blockReason: form.reason || '',
+      deliverableId: form.deliverableId || null, deliverable: form.deliverable || null,
+      agenticScope: form.agenticScope || null,
     };
     if (status === 'BLOCKED') { task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = currentUser.managerId || null; }
     CDC.db.addTask(task);

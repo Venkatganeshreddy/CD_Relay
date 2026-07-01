@@ -668,6 +668,8 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
       desc: note,
       estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
       blockReason: form.reason || '',
+      deliverableId: form.deliverableId || null, deliverable: form.deliverable || null,
+      agenticScope: form.agenticScope || null,
     };
     if (status === 'BLOCKED') {
       const chain = managerChain(form.owner);
@@ -721,6 +723,8 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
       outputCount: form.outputCount ?? null, template: form.template || {}, desc: note,
       estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : null,
       due: form.due || null,
+      deliverableId: form.deliverableId || null, deliverable: form.deliverable || null,
+      agenticScope: form.agenticScope || null,
     };
     if (CDC.db && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(id, patch);
     CDC.db.logInteraction && CDC.db.logInteraction({ agent: '—', flow: 'task_edit', inputRef: `Task ${id}`,
@@ -874,6 +878,12 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
                     {(((t.products && t.products.length) || (t.stacks && t.stacks.length) || t.estHours != null)) && (
                       <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
                         {[(t.products || []).join(', '), (t.stacks || []).join(', '), t.estHours != null && t.estHours !== '' ? `${t.estHours}h est` : ''].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                    {(t.deliverable || t.agenticScope) && (
+                      <div className="row" style={{ gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+                        {t.agenticScope && <Pill tone="accent" dot title="Agentic execution scope">⚡ {t.agenticScope}</Pill>}
+                        {t.deliverable && <span className="muted" style={{ fontSize: 11 }} title="Deliverable">→ {t.deliverable}</span>}
                       </div>
                     )}
                     <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.source === 'manual' ? 'Manual' : t.reason}</div>
@@ -1086,6 +1096,8 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
   const [due, setDue] = useState_o('');
   const [reason, setReason] = useState_o('');
   const [details, setDetails] = useState_o('');
+  const [deliverableId, setDeliverableId] = useState_o('');   // links task to an L2 deliverable
+  const [agenticScope, setAgenticScope] = useState_o('');     // L0..L5 — how much the AI executes (required)
   useEffect_o(() => {
     if (!open) return;
     if (initial) {
@@ -1096,11 +1108,22 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
       setEstHours(initial.estHours == null ? '' : String(initial.estHours));
       setStatus(TASK_STATUS_LABEL[initial.status] || 'In-progress'); setDue(initial.due || '');
       setReason(initial.blockReason || ''); setDetails(initial.desc || '');
+      setDeliverableId(initial.deliverableId || ''); setAgenticScope(initial.agenticScope || '');
     } else {
       setOwner(me.id); setProducts([]); setStacks([]); setOutputCategory(''); setCatSearch('');
       setOutputCount(''); setTemplate({}); setEstHours(''); setStatus('In-progress'); setDue(''); setReason(''); setDetails('');
+      setDeliverableId(''); setAgenticScope('');
     }
   }, [open]);
+
+  // Deliverables the task can be tied to — flattened from this creator's own-team goals.
+  const deliverableOpts = (() => {
+    const goals = (window.CDC.filterGoals ? window.CDC.filterGoals(me.id) : []) || [];
+    const out = [];
+    for (const g of goals) for (const d of (g.deliverables || [])) out.push({ id: d.id, text: d.text, goal: g.title });
+    return out;
+  })();
+  const AGENTIC_SCOPES = CAT.AGENTIC_SCOPES || [];
 
   const map = outputCategory ? CAT.OUTPUT_MAP[outputCategory] : null;
   const taskCategory = map ? map.task : '';
@@ -1110,9 +1133,9 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
   const filteredCats = CAT.OUTPUT_CATEGORIES.filter((c) => c.toLowerCase().includes(catSearch.toLowerCase()));
 
   // Stack, Task (template) and Output count are optional — count defaults to 0.
-  // Status and Due date are mandatory.
+  // Status, Due date and Agentic execution scope are mandatory.
   const valid = products.length > 0 && !!outputCategory &&
-    !!status && !!due &&
+    !!status && !!due && (editing || !!agenticScope) &&
     details.trim().length > 0 &&
     (!needsReason || reason.trim().length > 0);
 
@@ -1144,13 +1167,16 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
           {!outputCategory ? 'Pick a product-audience & output category'
             : !details.trim() ? 'Task details are required'
             : !due ? 'Due date is required'
+            : (!editing && !agenticScope) ? 'Pick an agentic execution scope'
             : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
             : `${map.metric} · ${map.task}`}
         </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
           onClick={() => onCreate({ owner, products, stacks, outputCategory, details,
-            outputCount: null, template: {}, estHours, status, due: due || null, reason })}>
+            outputCount: null, template: {}, estHours, status, due: due || null, reason,
+            deliverableId: deliverableId || null, deliverable: (deliverableOpts.find((d) => d.id === deliverableId) || {}).text || null,
+            agenticScope })}>
           {editing ? 'Save changes' : 'Create task'}
         </button>
       </>}
@@ -1234,6 +1260,25 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
               value={details} onChange={(e) => setDetails(e.target.value)} />
           </div>
         )}
+
+        {/* Deliverable (from your team's goals) · Agentic execution scope (required) */}
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <div style={label()}>Deliverable <span className="muted" style={{ textTransform: 'none', fontWeight: 400 }}>· from your team's goals</span></div>
+            <select value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)} style={inp}>
+              <option value="">— none —</option>
+              {deliverableOpts.map((d) => <option key={d.id} value={d.id}>{d.text} · {d.goal}</option>)}
+            </select>
+            {deliverableOpts.length === 0 && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No deliverables yet — your L2 adds them on the Goals page.</div>}
+          </div>
+          <div style={{ flex: '1 1 320px' }}>
+            <div style={label()}>Agentic execution scope <span style={{ color: 'var(--red, #e5484d)' }}>*</span></div>
+            <select value={agenticScope} onChange={(e) => setAgenticScope(e.target.value)} style={{ ...inp, borderColor: agenticScope ? 'var(--border)' : 'var(--red, #e5484d)' }}>
+              <option value="">— how much did the AI do? —</option>
+              {AGENTIC_SCOPES.map((s) => <option key={s.v} value={s.v}>{s.v} · {s.label}</option>)}
+            </select>
+          </div>
+        </div>
 
         {/* 5. Status · Reason · Estimated time */}
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
