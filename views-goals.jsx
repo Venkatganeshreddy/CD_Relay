@@ -212,6 +212,7 @@ window.GoalsView = GoalsView;
 // One goal card: title + product-audience + its deliverables, each with assignees.
 function GoalCard({ goal, canEdit, people, assigneeFilter, onSave, onDelete }) {
   const CDC = window.CDC;
+  const CAT = CDC.TASK_CATALOG || {};
   const [adding, setAdding] = useState_g('');
   const dels = goal.deliverables || [];
   const shown = assigneeFilter ? dels.filter((d) => (d.assignees || []).includes(assigneeFilter)) : dels;
@@ -220,17 +221,36 @@ function GoalCard({ goal, canEdit, people, assigneeFilter, onSave, onDelete }) {
   const editText = (id, text) => saveDels(dels.map((d) => (d.id === id ? { ...d, text } : d)));
   const setAssignees = (id, assignees) => saveDels(dels.map((d) => (d.id === id ? { ...d, assignees } : d)));
   const remove = (id) => saveDels(dels.filter((d) => d.id !== id));
+  const products = goal.products || [];
+  const remainingProducts = (CAT.PRODUCTS || []).filter((p) => !products.includes(p));
+  const setProducts = (next) => onSave({ products: next });
   const inp = { fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' };
   return (
     <Card>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 15 }}>{goal.title}</div>
-          {(goal.products || []).length > 0 && (
-            <div className="row" style={{ gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-              {(goal.products || []).map((p) => <Pill key={p} tone="accent">{p}</Pill>)}
-            </div>
+          {goal.workflowLevels && (
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>⚡ Agentic levels · {goal.workflowLevels}</div>
           )}
+          {/* Product-Audience — editable on existing goals for leads/admin. */}
+          <div className="row" style={{ gap: 5, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {products.map((p) => (
+              canEdit
+                ? <span key={p} className="pill" data-tone="accent" style={{ gap: 4 }}>{p}
+                    <span style={{ cursor: 'pointer', fontWeight: 700, opacity: 0.8 }} title="Remove" onClick={() => setProducts(products.filter((x) => x !== p))}>×</span>
+                  </span>
+                : <Pill key={p} tone="accent">{p}</Pill>
+            ))}
+            {canEdit && remainingProducts.length > 0 && (
+              <select value="" onChange={(e) => e.target.value && setProducts([...products, e.target.value])}
+                style={{ height: 24, fontSize: 11.5, padding: '0 6px', borderRadius: 'var(--radius)', border: '1px dashed var(--border-strong)', background: 'transparent', color: 'var(--text-muted)' }}
+                title="Add product-audience">
+                <option value="">+ product-audience</option>
+                {remainingProducts.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+          </div>
         </div>
         <div className="row" style={{ gap: 8, alignItems: 'center' }}>
           <Pill tone="outline">{dels.length} deliverable{dels.length === 1 ? '' : 's'}</Pill>

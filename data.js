@@ -204,27 +204,51 @@
   // ── Team goals → deliverables ──────────────────────────────────────────
   // L2 leads write deliverables (free-text, many) under each team goal; L1s pick
   // a deliverable when logging a task. `sub` is the team key (see BUSINESS_DIRECTIONS).
-  const GOAL = (id, title, deliverables = [], products = [], sub = 'Content — Fullstack') => ({
-    id, sub, dept: 'd-fsgci', title, products,
+  const GOAL = (id, title, deliverables = [], products = [], sub = 'Content — Fullstack', workflowLevels = '') => ({
+    id, sub, dept: 'd-fsgci', title, products, workflowLevels,
     deliverables: deliverables.map((text, i) => ({ id: `${id}-d${i + 1}`, text, assignees: [] })),
   });
+  const FS_GOAL = (id, title, deliverables = [], workflowLevels = '') => GOAL(id, title, deliverables, [], 'Content — Fullstack', workflowLevels);
   const GA_GOAL = (id, title, deliverables = []) => GOAL(id, title, deliverables, [], 'Content — GenAI');
   const GOALS = [
-    GOAL('goal-fs-1', 'IDE repairs & improvements', ['Fix Monaco autosave race on tab switch', 'Reduce cold-start latency to < 2s']),
-    GOAL('goal-fs-2', 'Adaptive Question Picking for Computer Programming Practice', ['Design difficulty-band picker spec']),
-    GOAL('goal-fs-3', 'Personalized Revision Path'),
-    GOAL('goal-fs-4', 'Gamified Solution Revealing: Timer to Solution Revealing to CP Coding Questions'),
-    GOAL('goal-fs-5', 'ADYPU: Operating Systems Content Delivery'),
-    GOAL('goal-fs-6', 'Aurora: Advanced DBMS Content Delivery'),
-    GOAL('goal-fs-7', 'Web Application Development - Revamp'),
-    GOAL('goal-fs-8', 'Computer Programming - Revamp'),
-    GOAL('goal-fs-9', 'Advanced Java: Hibernate, Spring Framework, and Microservices'),
-    GOAL('goal-fs-10', 'Django'),
-    GOAL('goal-fs-11', 'Integration & Deployment'),
-    GOAL('goal-fs-12', 'FS Role-specific Library & Tech Sessions — Induction'),
-    GOAL('goal-fs-13', 'Content Quality Issues & Feedback Resolution'),
-    GOAL('goal-fs-14', 'Launchpad Content Review Support – SQL'),
-    GOAL('goal-fs-15', 'Launchpad Content Review Support – OS'),
+    FS_GOAL('goal-fs-1', 'IDE repairs & improvements', [
+      'Reduce IDE loading/opening time (~50s)',
+      'Reduce code submission time (under 1 minute)',
+      'UI/UX improvements (font, color, loading time, modernise)',
+      'Add preview button',
+      'IDE observability dashboard',
+    ]),
+    FS_GOAL('goal-fs-2', 'Adaptive Question Picking for Computer Programming Practice', [
+      'Make all relevant coding practice units adaptive per student proficiency',
+      'Update tags on coding questions to align with the Adaptive feature',
+    ]),
+    FS_GOAL('goal-fs-3', 'Personalized Revision Path', [
+      'Personalized learning material based on student performance in placement-prep exams',
+    ], 'L3'),
+    FS_GOAL('goal-fs-4', 'Gamified Solution Revealing: Timer to Solution Revealing to CP Coding Questions', [
+      'Add timer to the tutorial tab',
+      'Add Tutorial MCQ steps for Solutions to Computer Programming',
+    ]),
+    FS_GOAL('goal-fs-5', 'ADYPU: Operating Systems Content Delivery', ['33 session learning content'], 'Objective Content: L4 · Content Review: L2 · Reading Material: L0 · PPT: L4'),
+    FS_GOAL('goal-fs-6', 'Aurora: Advanced DBMS Content Delivery', ['27 session learning content'], 'Objective Content: L4 · Content Review: L2 · Reading Material: L0 · PPT: L4'),
+    FS_GOAL('goal-fs-7', 'Web Application Development - Revamp', ['41 session learning content', 'Add academic questions to all cheat sheets', 'Work on content of spill-over sessions'], 'Recording Review: L2 · Content Review: L0 · Reading Material: L1 · PPT: L4'),
+    FS_GOAL('goal-fs-8', 'Computer Programming - Revamp', ['33 session learning content', 'Add academic questions to all cheat sheets', 'Work on content of spill-over sessions'], 'Recording Review: L2 · Content Review: L0 · Reading Material: L1 · PPT: L4'),
+    FS_GOAL('goal-fs-9', 'Advanced Java: Hibernate, Spring Framework, and Microservices', ['65 session learning content'], 'Objective Content: L4 · Content Review: L2 · Reading Material: L0 · PPT: L4 · Coding: L3'),
+    FS_GOAL('goal-fs-10', 'Django', ['~25 session learning content'], 'Objective Content: L4 · Recording Review: L2 · Content Review: L0 · Reading Material: L0 · PPT: L4 · Coding: L3'),
+    FS_GOAL('goal-fs-11', 'Integration & Deployment', ['~20 session learning content'], 'Objective Content: L4 · Recording Review: L2 · Content Review: L0 · Reading Material: L0 · PPT: L4 · Coding: L3'),
+    FS_GOAL('goal-fs-12', 'FS Role-specific Library & Tech Sessions — Induction'),
+    FS_GOAL('goal-fs-13', 'Content Quality Issues & Feedback Resolution', [
+      'Resolve all existing content feedback & quality issues (Zoho and other means)',
+      'Resolve any newer ones arising in July',
+    ]),
+    FS_GOAL('goal-fs-14', 'Launchpad Content Review Support – SQL', [], 'Recording Review: L0 · Practice Content Review: L0 · Reading Material: L0 · PPT: L0'),
+    FS_GOAL('goal-fs-15', 'Launchpad Content Review Support – OS', [], 'Recording Review: L0 · Practice Content Review: L0 · Reading Material: L0 · PPT: L0'),
+    FS_GOAL('goal-fs-16', 'Web Slides Generator', [], 'L4'),
+    FS_GOAL('goal-fs-17', 'Objective Content Creator', [], 'L4'),
+    FS_GOAL('goal-fs-18', 'Market Intelligence and curriculum gap analyzer', [], 'L4'),
+    FS_GOAL('goal-fs-19', 'Video Reviewer Workflow', [], 'L3'),
+    FS_GOAL('goal-fs-20', 'Interactive Reading-Material', [], 'L3'),
+    FS_GOAL('goal-fs-21', 'Coding Question Generator', [], 'L3'),
 
     // Gen AI team goals.
     GA_GOAL('goal-ga-1', 'IDE repairs & improvements', [
