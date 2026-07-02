@@ -83,7 +83,10 @@ function GlanceView({ tweaks, currentUser, nav }) {
       outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
       activityCategory: m.activity || '', metricCategory: m.metric || '',
       outputCount: form.outputCount ?? 0, template: form.template || {},
-      hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
+      // Future-due tasks don't count toward today (see TasksView mirror).
+      hours: (form.due && form.due > todayStr) ? 0
+        : (form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0),
+      estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
       status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
     });
     // Nudge: how many hours are left to reach the 8h day — only when logging
@@ -369,23 +372,22 @@ function SubmitView({ tweaks, currentUser, nav }) {
       sub: currentUser.sub || null, dept: currentUser.dept, validation: 'OK', confidence: 0.9,
       items, kpiHits: [], source: 'native_form',
     };
-    if (CDC.db) CDC.db.addDailyReport(report);
-
-    // One worklog per task (today) — drives Missing-reports + weekly/monthly rollups.
-    tasks.forEach((t, i) => {
-      const w = {
-        id: `wl-${Date.now()}-${i}`, userId: currentUser.id, userName: currentUser.name, userInitials: currentUser.initials,
-        empId: currentUser.id, dept: currentUser.dept, sub: currentUser.sub || null,
-        date: today, daysAgo: 0,
-        products: t.products || [], stacks: t.stacks || [myStack],
-        outputCategory: t.outputCategory || 'Other', taskCategory: t.taskCategory || '',
-        activityCategory: t.activityCategory || '', metricCategory: t.metricCategory || '',
-        outputCount: t.outputCount || 0, template: t.template || {},
-        hours: Number(t.hours) || 0, status: t.status || 'Done', reason: t.reason || '',
-        submittedAt: 'just now',
-      };
-      if (CDC.db) CDC.db.addWorklog(w);
-    });
+    // One worklog per task (today) — drives Missing-reports + weekly/monthly
+    // rollups. source 'day_end' marks them as this flow's rows so a resubmit
+    // replaces them instead of double-counting.
+    const worklogs = tasks.map((t, i) => ({
+      id: `wl-${Date.now()}-${i}`, userId: currentUser.id, userName: currentUser.name, userInitials: currentUser.initials,
+      empId: currentUser.id, dept: currentUser.dept, sub: currentUser.sub || null,
+      date: today, daysAgo: 0, source: 'day_end',
+      products: t.products || [], stacks: t.stacks || [myStack],
+      outputCategory: t.outputCategory || 'Other', taskCategory: t.taskCategory || '',
+      activityCategory: t.activityCategory || '', metricCategory: t.metricCategory || '',
+      outputCount: t.outputCount || 0, template: t.template || {},
+      hours: Number(t.hours) || 0, status: t.status || 'Done', reason: t.reason || '',
+      submittedAt: 'just now',
+    }));
+    if (CDC.db && CDC.db.replaceDayReport) CDC.db.replaceDayReport(report, worklogs);
+    else if (CDC.db) { CDC.db.addDailyReport(report); worklogs.forEach((w) => CDC.db.addWorklog(w)); }
   }
 
   function restart() {

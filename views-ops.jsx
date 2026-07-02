@@ -702,7 +702,12 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
       outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
       activityCategory: m.activity || '', metricCategory: m.metric || '',
       outputCount: form.outputCount ?? 0, template: form.template || {},
-      hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
+      // Est hours count toward today only when the task is actually today's
+      // work (due today or earlier). A task due next week must not instantly
+      // "complete" today's 8h and inflate today's KPIs.
+      hours: (form.due && form.due > todayStr) ? 0
+        : (form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0),
+      estHours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
       status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
     });
     // Remaining-hours nudge — only when logging your own work (not when a

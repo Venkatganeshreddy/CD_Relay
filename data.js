@@ -1700,7 +1700,11 @@
     if (Array.isArray(cat.products) && cat.products.length) { PRODUCTS.length = 0; PRODUCTS.push(...cat.products); }
     if (Array.isArray(cat.stacks) && cat.stacks.length) { STACKS.length = 0; STACKS.push(...cat.stacks); }
     if (cat.outputMap && typeof cat.outputMap === 'object' && Object.keys(cat.outputMap).length) {
-      for (const k of Object.keys(OUTPUT_MAP)) delete OUTPUT_MAP[k];
+      // Merge the DB catalog ON TOP of code defaults instead of wiping — a
+      // saved snapshot otherwise shadows every code-added category forever
+      // (and a mid-poll admin delete could crash open submit forms).
+      // ponytail: trade-off — a category deleted in the admin UI reappears
+      // after reload; add an explicit removed-list if that ever matters.
       Object.assign(OUTPUT_MAP, cat.outputMap);
     }
     OUTPUT_CATEGORIES.length = 0; OUTPUT_CATEGORIES.push(...Object.keys(OUTPUT_MAP));

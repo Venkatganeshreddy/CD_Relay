@@ -396,6 +396,28 @@
       if (Array.isArray(window.CDC.WORKLOGS)) window.CDC.WORKLOGS.unshift(w);
       await remote(() => sb.from('worklogs').insert({ id: w.id, owner_id: w.userId, dept: w.dept, work_date: w.date, data: w }));
     },
+    // Day-end chat submit is REPLACE semantics: re-submitting the same day
+    // (edit & resubmit, or a reload + re-log) must not append a second report
+    // and a second set of worklogs — that double-counted every hours KPI.
+    // Only rows from this flow are replaced (report source 'native_form',
+    // worklog source 'day_end'); task-mirrored worklogs are untouched.
+    async replaceDayReport(report, worklogs) {
+      const R = window.CDC.REPORTS || [], W = window.CDC.WORKLOGS || [];
+      for (let i = R.length - 1; i >= 0; i--) {
+        if (R[i].author === report.author && R[i].date === report.date && R[i].source === 'native_form') R.splice(i, 1);
+      }
+      for (let i = W.length - 1; i >= 0; i--) {
+        if (W[i].userId === report.author && W[i].date === report.date && W[i].source === 'day_end') W.splice(i, 1);
+      }
+      await remote(() => sb.from('daily_reports').delete()
+        .eq('author_id', report.author).eq('report_date', report.date)
+        .contains('data', { source: 'native_form' }));
+      await remote(() => sb.from('worklogs').delete()
+        .eq('owner_id', report.author).eq('work_date', report.date)
+        .contains('data', { source: 'day_end' }));
+      await this.addDailyReport(report);
+      for (const w of worklogs) await this.addWorklog(w);
+    },
     async updateTask(id, status) {
       const t = (window.CDC.TASKS || []).find((x) => x.id === id); if (t) t.status = status;
       // No local copy → update the status column only; writing a stub into the
@@ -416,7 +438,13 @@
         for (const k of ['products', 'stacks', 'outputCategory', 'taskCategory', 'activityCategory', 'metricCategory', 'outputCount', 'template']) {
           if (patch[k] !== undefined) wl[k] = patch[k];
         }
-        if (patch.estHours !== undefined) wl.hours = Number(patch.estHours) || 0;
+        if (patch.estHours !== undefined) {
+          // Same rule as task creation: future-due work doesn't count today.
+          const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+          const due = patch.due !== undefined ? patch.due : t.due;
+          wl.estHours = Number(patch.estHours) || 0;
+          wl.hours = (due && due > today) ? 0 : Number(patch.estHours) || 0;
+        }
         await remote(() => sb.from('worklogs').update({ data: wl }).eq('id', wl.id));
       }
     },
