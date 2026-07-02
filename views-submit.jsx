@@ -1028,12 +1028,13 @@ function CelebrationOverlay({ onDone }) {
   }, []);
   return (
     <div className="confetti-overlay" onClick={onDone}>
-      {Array.from({ length: 28 }).map((_, i) => (
+      {Array.from({ length: 60 }).map((_, i) => (
         <span key={i} className="confetti-piece" style={{
-          left: `${(i * 37) % 100}%`,
+          left: `${(i * 17 + (i % 3) * 5) % 100}%`,
           background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-          animationDelay: `${(i % 7) * 0.12}s`,
-          animationDuration: `${1.6 + (i % 5) * 0.25}s`,
+          animationDelay: `${(i % 10) * 0.09}s`,
+          animationDuration: `${1.8 + (i % 6) * 0.28}s`,
+          transform: `rotate(${(i * 47) % 360}deg)`,
         }} />
       ))}
       <div className="msg">

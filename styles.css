@@ -1931,15 +1931,21 @@ input, select, textarea, .tbl tr td {
 .confetti-overlay .msg p { margin: 0; color: var(--text-muted); font-size: 13px; }
 .confetti-piece {
   position: absolute; top: -12vh;
-  width: 8px; height: 12px; border-radius: 2px;
-  opacity: 0.9;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .confetti-piece { animation: confetti-fall linear forwards; }
+  width: 10px; height: 16px; border-radius: 3px;
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(.3,.5,.5,1);
+  animation-fill-mode: forwards;
 }
 @keyframes confetti-fall {
-  to { transform: translateY(118vh) rotate(720deg); opacity: 0; }
+  0%   { transform: translateY(0) rotate(0deg);        opacity: 1; }
+  100% { transform: translateY(120vh) rotate(720deg);  opacity: 0; }
 }
+/* Reduced-motion: don't rain — fade a scattered burst in place instead. */
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece { top: 34vh; animation-name: confetti-fade; }
+}
+@keyframes confetti-fade { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ── Responsive / system-adaptive layout ─────────────────────────────────
    Reflow the desktop-first shell down to laptops and tablets. Fonts already
