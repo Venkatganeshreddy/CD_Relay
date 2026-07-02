@@ -1537,6 +1537,13 @@
     'Elective & Compliance Course Development': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
     'Reading Material Prepared for BITS Courses': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
     'Review Video Recordings & PPTs': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
+
+    // Meeting categories from the partner team's taxonomy. Executive Ops /
+    // Stakeholder Alignment metrics keep them out of content-velocity counts.
+    'Meetings - Adhoc': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
+    'Meetings - Content (Business requirements)': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
+    'Meetings - Content (Pre-sprint, Sprint & Reviews)': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    'Meetings - Product & Content Sync': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
   };
 
   const OUTPUT_CATEGORIES = Object.keys(OUTPUT_MAP);

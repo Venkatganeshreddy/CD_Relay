@@ -1910,6 +1910,37 @@ input, select, textarea, .tbl tr td {
   font-size: 13px;
 }
 
+/* ── 8-hour celebration overlay ──────────────────────────────────────────── */
+.confetti-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  background: color-mix(in oklch, var(--bg, #000) 22%, transparent);
+  animation: fadein 0.2s ease both;
+  overflow: hidden;
+}
+.confetti-overlay .msg {
+  text-align: center;
+  padding: 32px 28px;
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface));
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-accent);
+  animation: modal-in 0.3s ease both;
+}
+.confetti-overlay .msg h2 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+.confetti-overlay .msg p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.confetti-piece {
+  position: absolute; top: -12vh;
+  width: 8px; height: 12px; border-radius: 2px;
+  opacity: 0.9;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .confetti-piece { animation: confetti-fall linear forwards; }
+}
+@keyframes confetti-fall {
+  to { transform: translateY(118vh) rotate(720deg); opacity: 0; }
+}
+
 /* ── Responsive / system-adaptive layout ─────────────────────────────────
    Reflow the desktop-first shell down to laptops and tablets. Fonts already
    scale via clamp() (see body/.h-title/.pulse-title). */

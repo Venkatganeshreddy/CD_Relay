@@ -180,8 +180,24 @@ function SubmitView({ tweaks, currentUser, nav }) {
   const [step, setStep] = useS('greet');           // current step
   const [transcript, setTranscript] = useS([]);    // chat entries: { role, kind, text, payload? }
   const [isTyping, setTyping] = useS(false);
+  const [celebrate, setCelebrate] = useS(false);
 
   const chatRef = useR(null);
+
+  // ponytail: session-sum only (matches the visible DailyHoursBar); combining
+  // with already-logged WORKLOGS would need a scan and muddy the "crossing".
+  const totalHrs = tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+
+  // Confetti pop the first time today's session total reaches the 8h floor.
+  // localStorage key is the once-per-day gate — survives reloads/resubmits.
+  useE(() => {
+    if (totalHrs < DAILY_TARGET_HRS) return;
+    const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+    const seenKey = `relay:celebrated8h:${currentUser.id}:${today}`;
+    if (localStorage.getItem(seenKey)) return;
+    localStorage.setItem(seenKey, '1');
+    setCelebrate(true);
+  }, [totalHrs]);
 
   // Scroll to bottom on new messages
   useE(() => {
@@ -323,7 +339,6 @@ function SubmitView({ tweaks, currentUser, nav }) {
 
   function onWrapUp() {
     pushUser("That's all for today");
-    const totalHrs = tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
     const short = DAILY_TARGET_HRS - totalHrs;
     typeThen(() => {
       const base = `Wrapped up. ${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${totalHrs.toFixed(1)} hrs logged against ${myEmpId} for today.`;
@@ -398,6 +413,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
 
   return (
     <div className="fadein">
+      {celebrate && <CelebrationOverlay onDone={() => setCelebrate(false)} />}
       <SectionHeader
         title="Day-end check-in"
         subtitle={`${weekdayLabel} · ${timeStr} · Logged for ${currentUser.name} (${myEmpId})`}
@@ -1001,4 +1017,32 @@ function SessionRail({ tasks, current, step, currentUser }) {
     </aside>
   );
 }
+
+// ── 8-hour celebration overlay ────────────────────────────────────────────
+// Pure-CSS confetti burst + message; auto-fades after 2.5s, click to dismiss.
+const CONFETTI_COLORS = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
+function CelebrationOverlay({ onDone }) {
+  useE(() => {
+    const t = setTimeout(onDone, 2500);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="confetti-overlay" onClick={onDone}>
+      {Array.from({ length: 28 }).map((_, i) => (
+        <span key={i} className="confetti-piece" style={{
+          left: `${(i * 37) % 100}%`,
+          background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+          animationDelay: `${(i % 7) * 0.12}s`,
+          animationDuration: `${1.6 + (i % 5) * 0.25}s`,
+        }} />
+      ))}
+      <div className="msg">
+        <div style={{ fontSize: 34, marginBottom: 6 }}>🎉</div>
+        <h2>8 hours in the bag — nice work!</h2>
+        <p>You've hit today's {DAILY_TARGET_HRS}h. Wrap up whenever you're ready.</p>
+      </div>
+    </div>
+  );
+}
+window.CelebrationOverlay = CelebrationOverlay;
 
