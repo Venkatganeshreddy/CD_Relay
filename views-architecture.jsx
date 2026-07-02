@@ -733,6 +733,11 @@ function FeedbackSubmit({ currentUser }) {
                 <span className="muted" style={{ fontSize: 11.5 }}>{f.ts || ''}</span>
               </div>
               <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{f.text}</div>
+              {f.comment && (
+                <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2, rgba(127,127,127,.08))', borderRadius: 'var(--radius)', fontSize: 12.5, lineHeight: 1.5 }}>
+                  <span className="muted" style={{ fontSize: 11 }}>Response from the team:</span><br />{f.comment}
+                </div>
+              )}
             </Card>
           ))}
         </div>
@@ -756,6 +761,12 @@ function FeedbackDashboard({ currentUser, nav }) {
     if (CDC.db && CDC.db.updateFeedback) await CDC.db.updateFeedback(f.id, { status: s });
     else f.status = s;
     force((n) => n + 1);
+  }
+  async function saveComment(f, c) {
+    if (CDC.db && CDC.db.updateFeedback) await CDC.db.updateFeedback(f.id, { comment: c });
+    else f.comment = c;
+    force((n) => n + 1);
+    if (CDC.toast) CDC.toast('Comment saved — visible to the submitter', 'green');
   }
   const chip = (val, cur, set, label, tone) => (
     <button className="btn" data-size="sm" data-variant={cur === val ? 'primary' : 'ghost'} onClick={() => set(val)}>{label}</button>
@@ -804,6 +815,7 @@ function FeedbackDashboard({ currentUser, nav }) {
                   </select>
                 )}
               </div>
+              <FbComment f={f} onSave={(c) => saveComment(f, c)} />
             </Card>
           ))}
         </div>
@@ -812,3 +824,18 @@ function FeedbackDashboard({ currentUser, nav }) {
   );
 }
 window.FeedbackDashboard = FeedbackDashboard;
+
+// Owner's reply box on a feedback card — saved comment is shown to the submitter.
+function FbComment({ f, onSave }) {
+  const [v, setV] = useStA(f.comment || '');
+  const dirty = v.trim() !== (f.comment || '');
+  return (
+    <div className="row" style={{ gap: 6, marginTop: 8 }}>
+      <input className="field-input" value={v} onChange={(e) => setV(e.target.value)}
+        placeholder="Reply to the submitter…"
+        style={{ flex: 1, height: 30, fontSize: 12.5, padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }} />
+      <button className="btn" data-size="sm" data-variant="accent" disabled={!dirty} onClick={() => onSave(v.trim())}>Save</button>
+    </div>
+  );
+}
+window.FbComment = FbComment;

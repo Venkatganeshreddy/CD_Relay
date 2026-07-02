@@ -196,6 +196,8 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     ...(isContributor ? [] : [{ id: 'goals', label: 'Goals', icon: 'weekly' }]),
     { id: 'submit', label: 'Day-end glance', icon: 'sheet', badge: '6:00', badgeTone: 'accent' },
     { id: 'worklogs', label: 'Worklogs', icon: 'sheet' },
+    // Feedback triage dashboard — owner only (everyone else uses the ✎ FAB).
+    ...(currentUser.id === 'NW0006717' ? [{ id: 'feedback', label: 'Feedback', icon: 'sheet' }] : []),
   ];
   const groupDept = (isL2 || isL3orAdmin) ? [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
