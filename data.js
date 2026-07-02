@@ -1721,15 +1721,37 @@
     return `${+m[3]} ${MON[+m[2] - 1]} · ${hm}`;
   }
 
-  // Full-screen confetti the first time a user completes their 8h day —
+  // Full-screen robot-confetti blast when a user completes their 8h day —
   // callable from ANY logging path (Day-end glance, Tasks quick-add, task
-  // board). Vanilla DOM so it needs no React mount point; once-per-day guard
-  // lives here so call sites can fire it unconditionally on >=8h.
+  // board). Vanilla DOM so it needs no React mount point. Fires on EVERY
+  // qualifying log (no once-per-day guard — the team wanted it repetitive).
+  // Full-body robot is inline SVG: zero external assets.
+  const ROBOT_SVG =
+    '<svg viewBox="0 0 120 150" width="120" height="150" aria-hidden="true">' +
+    // antenna
+    '<line x1="60" y1="18" x2="60" y2="30" stroke="#64748b" stroke-width="4"/>' +
+    '<circle cx="60" cy="12" r="7" fill="#f59e0b"><animate attributeName="r" values="7;9;7" dur="0.8s" repeatCount="indefinite"/></circle>' +
+    // head
+    '<rect x="34" y="28" width="52" height="40" rx="12" fill="#94a3b8" stroke="#64748b" stroke-width="3"/>' +
+    '<circle cx="50" cy="46" r="6" fill="#0f172a"/><circle cx="70" cy="46" r="6" fill="#0f172a"/>' +
+    '<circle cx="52" cy="44" r="2" fill="#fff"/><circle cx="72" cy="44" r="2" fill="#fff"/>' +
+    '<path d="M50 58 Q60 66 70 58" stroke="#0f172a" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+    // ears
+    '<rect x="26" y="40" width="8" height="16" rx="4" fill="#64748b"/><rect x="86" y="40" width="8" height="16" rx="4" fill="#64748b"/>' +
+    // body
+    '<rect x="38" y="72" width="44" height="42" rx="10" fill="#cbd5e1" stroke="#64748b" stroke-width="3"/>' +
+    '<rect x="48" y="82" width="24" height="14" rx="4" fill="#3b82f6" opacity="0.85"/>' +
+    '<circle cx="60" cy="105" r="4" fill="#f43f5e"/>' +
+    // left arm down, right arm raised firing the popper
+    '<path d="M38 80 Q24 88 26 104" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+    '<path d="M82 80 Q98 70 102 54" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+    '<path d="M96 56 L112 40 L108 60 Z" fill="#f59e0b" stroke="#d97706" stroke-width="2"/>' +
+    // legs + feet
+    '<rect x="44" y="114" width="10" height="18" rx="4" fill="#64748b"/><rect x="66" y="114" width="10" height="18" rx="4" fill="#64748b"/>' +
+    '<rect x="38" y="132" width="22" height="10" rx="5" fill="#94a3b8"/><rect x="60" y="132" width="22" height="10" rx="5" fill="#94a3b8"/>' +
+    '</svg>';
   function celebrate8h(userId) {
-    const today = fmt(new Date());
-    const key = `relay:celebrated8h:v4:${userId}:${today}`;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, '1');
+    if (document.querySelector('.confetti-overlay')) return; // one at a time
     const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
     const el = document.createElement('div');
     el.className = 'confetti-overlay';
@@ -1744,7 +1766,7 @@
       pieces += `<span class="burst-piece" style="--tx:${tx}vw;--ty:${ty}vh;background:${colors[i % colors.length]};animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s"></span>`;
     }
     el.innerHTML =
-      '<div class="robot">🤖</div>' + pieces +
+      `<div class="robot">${ROBOT_SVG}</div>` + pieces +
       '<div class="msg"><div style="font-size:34px;margin-bottom:6px">🎉</div>' +
       '<h2>8 hours in the bag — nice work!</h2>' +
       "<p>You've hit today's 8h. Wrap up whenever you're ready.</p></div>";

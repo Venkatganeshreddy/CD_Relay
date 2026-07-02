@@ -1933,14 +1933,9 @@ input, select, textarea, .tbl tr td {
 
 /* The robot: slides up from below, winds up, recoils as the cannon fires. */
 .confetti-overlay .robot {
-  position: absolute; bottom: 8vh; left: 50%;
-  width: 92px; height: 92px; margin-left: -46px;
-  display: grid; place-items: center;
-  font-size: 58px; line-height: 1;
-  background: var(--surface);
-  border: 1px solid var(--accent-border);
-  border-radius: 50%;
-  box-shadow: var(--shadow-accent);
+  position: absolute; bottom: 6vh; left: 50%;
+  width: 120px; margin-left: -60px;
+  filter: drop-shadow(0 8px 20px rgba(0,0,0,.25));
   animation:
     robot-in 0.55s cubic-bezier(.2,.9,.3,1.25) both,
     robot-recoil 0.35s ease 0.58s;
@@ -1959,7 +1954,7 @@ input, select, textarea, .tbl tr td {
 
 /* Confetti fired from the robot's muzzle: up-and-out arc, then gravity fall. */
 .burst-piece {
-  position: absolute; bottom: 16vh; left: 50%;
+  position: absolute; bottom: calc(6vh + 108px); left: calc(50% + 48px);
   width: 10px; height: 14px; border-radius: 3px;
   opacity: 0;
   animation-name: confetti-burst;
