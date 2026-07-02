@@ -63,6 +63,9 @@
     }
   }
 
+  // Tables observed (this session) to lack created_at — see selectAll.
+  const noOrderTables = new Set();
+
   async function loadFromSupabase() {
     if (!sb || !window.CDC) return false;
     let loadedAny = false;
@@ -80,9 +83,11 @@
         if (ordered) q = q.order('created_at', { ascending: false });
         return q.range(from, from + PAGE - 1);
       };
-      let ordered = true;
-      let res = await fetchPage(true, 0);
-      if (res.error) { ordered = false; res = await fetchPage(false, 0); }
+      // Tables without created_at 400 on the ordered query — remember them so
+      // every 20s poll doesn't re-fire a known-failing request (console noise).
+      let ordered = !noOrderTables.has(t);
+      let res = await fetchPage(ordered, 0);
+      if (res.error && ordered) { ordered = false; noOrderTables.add(t); res = await fetchPage(false, 0); }
       if (res.error) return res;
       const rows = res.data || [];
       while (res.data && res.data.length === PAGE) {
