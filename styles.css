@@ -1925,27 +1925,59 @@ input, select, textarea, .tbl tr td {
   border: 1px solid var(--accent-border);
   border-radius: 14px;
   box-shadow: var(--shadow-accent);
-  animation: modal-in 0.3s ease both;
 }
 .confetti-overlay .msg h2 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
 .confetti-overlay .msg p { margin: 0; color: var(--text-muted); font-size: 13px; }
-.confetti-piece {
-  position: absolute; top: -12vh;
-  width: 10px; height: 16px; border-radius: 3px;
-  opacity: 0.95;
-  animation-name: confetti-fall;
-  animation-timing-function: cubic-bezier(.3,.5,.5,1);
+/* Message pops in just after the blast fires. */
+.confetti-overlay .msg { opacity: 0; animation: modal-in 0.35s cubic-bezier(.2,.9,.3,1.2) 0.9s both; }
+
+/* The robot: slides up from below, winds up, recoils as the cannon fires. */
+.confetti-overlay .robot {
+  position: absolute; bottom: 8vh; left: 50%;
+  width: 92px; height: 92px; margin-left: -46px;
+  display: grid; place-items: center;
+  font-size: 58px; line-height: 1;
+  background: var(--surface);
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  box-shadow: var(--shadow-accent);
+  animation:
+    robot-in 0.55s cubic-bezier(.2,.9,.3,1.25) both,
+    robot-recoil 0.35s ease 0.58s;
+}
+@keyframes robot-in {
+  0%   { transform: translateY(24vh) scale(.6); opacity: 0; }
+  70%  { transform: translateY(-2vh) scale(1.05); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes robot-recoil {
+  0%   { transform: translateY(0) rotate(0deg) scale(1); }
+  35%  { transform: translateY(3vh) rotate(-9deg) scale(.92); }
+  70%  { transform: translateY(-1vh) rotate(5deg) scale(1.06); }
+  100% { transform: translateY(0) rotate(0deg) scale(1); }
+}
+
+/* Confetti fired from the robot's muzzle: up-and-out arc, then gravity fall. */
+.burst-piece {
+  position: absolute; bottom: 16vh; left: 50%;
+  width: 10px; height: 14px; border-radius: 3px;
+  opacity: 0;
+  animation-name: confetti-burst;
+  animation-timing-function: cubic-bezier(.15,.6,.35,1);
   animation-fill-mode: forwards;
 }
-@keyframes confetti-fall {
-  0%   { transform: translateY(0) rotate(0deg);        opacity: 1; }
-  100% { transform: translateY(120vh) rotate(720deg);  opacity: 0; }
+@keyframes confetti-burst {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(.4); opacity: 1; }
+  40%  { transform: translate(calc(var(--tx) * .75), var(--ty)) rotate(300deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), 30vh) rotate(720deg) scale(.9); opacity: 0; }
 }
-/* Reduced-motion: don't rain — fade a scattered burst in place instead. */
+
+/* Reduced-motion: robot fades in place; pieces sparkle without travel. */
 @media (prefers-reduced-motion: reduce) {
-  .confetti-piece { top: 34vh; animation-name: confetti-fade; }
+  .confetti-overlay .robot { animation: fadein 0.4s ease both; }
+  .burst-piece { bottom: 40vh; left: calc(50% + var(--tx) / 3); animation-name: confetti-sparkle; }
 }
-@keyframes confetti-fade { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes confetti-sparkle { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ── Responsive / system-adaptive layout ─────────────────────────────────
    Reflow the desktop-first shell down to laptops and tablets. Fonts already

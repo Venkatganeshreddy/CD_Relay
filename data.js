@@ -1721,8 +1721,40 @@
     return `${+m[3]} ${MON[+m[2] - 1]} · ${hm}`;
   }
 
+  // Full-screen confetti the first time a user completes their 8h day —
+  // callable from ANY logging path (Day-end glance, Tasks quick-add, task
+  // board). Vanilla DOM so it needs no React mount point; once-per-day guard
+  // lives here so call sites can fire it unconditionally on >=8h.
+  function celebrate8h(userId) {
+    const today = fmt(new Date());
+    const key = `relay:celebrated8h:v4:${userId}:${today}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
+    const el = document.createElement('div');
+    el.className = 'confetti-overlay';
+    // Robot cannon: ~70 pieces blast up-and-out from the robot's muzzle, arc,
+    // then fall. Spread/height are index-derived (deterministic, no RNG).
+    let pieces = '';
+    for (let i = 0; i < 70; i++) {
+      const tx = ((i * 29) % 85) - 42;              // −42vw … +42vw
+      const ty = -(45 + ((i * 13) % 36));           // peak −45vh … −80vh
+      const delay = 0.6 + ((i * 7) % 26) / 100;     // fire 0.6–0.85s (after recoil)
+      const dur = 1.4 + ((i * 11) % 9) / 10;        // 1.4–2.2s flight
+      pieces += `<span class="burst-piece" style="--tx:${tx}vw;--ty:${ty}vh;background:${colors[i % colors.length]};animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s"></span>`;
+    }
+    el.innerHTML =
+      '<div class="robot">🤖</div>' + pieces +
+      '<div class="msg"><div style="font-size:34px;margin-bottom:6px">🎉</div>' +
+      '<h2>8 hours in the bag — nice work!</h2>' +
+      "<p>You've hit today's 8h. Wrap up whenever you're ready.</p></div>";
+    el.addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  }
+
   window.CDC = {
-    fmt, daysAgo: liveDaysAgo,
+    fmt, daysAgo: liveDaysAgo, celebrate8h,
     ROLES, USERS,
     TASK_CATALOG, applyTaskCatalog, fmtTs,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,

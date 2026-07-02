@@ -91,6 +91,7 @@ function GlanceView({ tweaks, currentUser, nav }) {
         ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
         : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
       left > 0.01 ? 'amber' : 'green');
+    if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(currentUser.id);
     setCreating(false);
     setTick((x) => x + 1);
   }
@@ -180,8 +181,6 @@ function SubmitView({ tweaks, currentUser, nav }) {
   const [step, setStep] = useS('greet');           // current step
   const [transcript, setTranscript] = useS([]);    // chat entries: { role, kind, text, payload? }
   const [isTyping, setTyping] = useS(false);
-  const [celebrate, setCelebrate] = useS(false);
-
   const chatRef = useR(null);
 
   // ponytail: session-sum only (matches the visible DailyHoursBar); combining
@@ -189,16 +188,9 @@ function SubmitView({ tweaks, currentUser, nav }) {
   const totalHrs = tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
 
   // Confetti pop the first time today's session total reaches the 8h floor.
-  // localStorage key is the once-per-day gate — survives reloads/resubmits.
+  // CDC.celebrate8h owns the once-per-day guard, shared with the other paths.
   useE(() => {
-    if (totalHrs < DAILY_TARGET_HRS) return;
-    const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
-    // v2 in the key: anyone who triggered the broken (emoji-only) version
-    // earlier today still gets the fixed confetti once.
-    const seenKey = `relay:celebrated8h:v2:${currentUser.id}:${today}`;
-    if (localStorage.getItem(seenKey)) return;
-    localStorage.setItem(seenKey, '1');
-    setCelebrate(true);
+    if (totalHrs >= DAILY_TARGET_HRS && window.CDC.celebrate8h) window.CDC.celebrate8h(currentUser.id);
   }, [totalHrs]);
 
   // Scroll to bottom on new messages
@@ -415,7 +407,6 @@ function SubmitView({ tweaks, currentUser, nav }) {
 
   return (
     <div className="fadein">
-      {celebrate && <CelebrationOverlay onDone={() => setCelebrate(false)} />}
       <SectionHeader
         title="Day-end check-in"
         subtitle={`${weekdayLabel} · ${timeStr} · Logged for ${currentUser.name} (${myEmpId})`}
@@ -1019,33 +1010,4 @@ function SessionRail({ tasks, current, step, currentUser }) {
     </aside>
   );
 }
-
-// ── 8-hour celebration overlay ────────────────────────────────────────────
-// Pure-CSS confetti burst + message; auto-fades after 2.5s, click to dismiss.
-const CONFETTI_COLORS = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
-function CelebrationOverlay({ onDone }) {
-  useE(() => {
-    const t = setTimeout(onDone, 2500);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <div className="confetti-overlay" onClick={onDone}>
-      {Array.from({ length: 60 }).map((_, i) => (
-        <span key={i} className="confetti-piece" style={{
-          left: `${(i * 17 + (i % 3) * 5) % 100}%`,
-          background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-          animationDelay: `${(i % 10) * 0.09}s`,
-          animationDuration: `${1.8 + (i % 6) * 0.28}s`,
-          transform: `rotate(${(i * 47) % 360}deg)`,
-        }} />
-      ))}
-      <div className="msg">
-        <div style={{ fontSize: 34, marginBottom: 6 }}>🎉</div>
-        <h2>8 hours in the bag — nice work!</h2>
-        <p>You've hit today's {DAILY_TARGET_HRS}h. Wrap up whenever you're ready.</p>
-      </div>
-    </div>
-  );
-}
-window.CelebrationOverlay = CelebrationOverlay;
 
