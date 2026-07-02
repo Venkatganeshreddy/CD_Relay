@@ -140,10 +140,12 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
   // subscriptions only if this load becomes a problem.
   useEffect_a(() => {
     if (authMode !== 'authed' || !window.CDC.loadFromSupabase) return;
-    let alive = true;
+    let alive = true, inFlight = false;
     const tick = async () => {
-      if (document.hidden) return;
+      if (document.hidden || inFlight) return; // don't interleave slow loads
+      inFlight = true;
       try { await window.CDC.loadFromSupabase(); if (alive) setRefreshTick((n) => n + 1); } catch (_) {}
+      inFlight = false;
     };
     const id = setInterval(tick, 20000);
     return () => { alive = false; clearInterval(id); };
@@ -305,12 +307,17 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
 function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, depts, currentUser, isContributor }) {
   const [expanded, setExpanded] = useState_a({ depts: false });
 
+  // Keyboard-accessible nav rows (divs with onClick were mouse-only).
+  const navKeys = (fn) => (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } };
   const item = (it) => (
     <div
       key={it.id}
       className="sb-item"
       data-active={route.name === it.id}
+      role="button"
+      tabIndex={0}
       onClick={() => nav.go(it.id)}
+      onKeyDown={navKeys(() => nav.go(it.id))}
     >
       <Icon name={it.icon} size={14} />
       <span>{it.label}</span>
@@ -349,7 +356,10 @@ function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, d
                 key={d.id}
                 className="sb-item"
                 data-active={route.name === 'department' && route.params.id === d.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => nav.go('department', { id: d.id })}
+                onKeyDown={navKeys(() => nav.go('department', { id: d.id }))}
                 style={{ paddingLeft: 18 }}
               >
                 <span className="dot" />
@@ -636,11 +646,8 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
                 {matches.tasks.map((t) => (
                   <div key={t.id} className="list-row" onClick={() => pick(() => nav.go('tasks'))}>
                     <div className="row" style={{ justifyContent: 'space-between' }}>
-                      <div className="row" style={{ gap: 8 }}>
-                        <Pill tone={t.priority === 'P0' ? 'red' : 'amber'}>{t.priority}</Pill>
-                        <span>{t.title}</span>
-                      </div>
-                      <Pill tone={t.status === 'SUGGESTED' ? 'amber' : 'green'}>{t.status.toLowerCase()}</Pill>
+                      <span>{t.title}</span>
+                      <Pill tone={t.status === 'SUGGESTED' ? 'amber' : 'green'}>{(t.status || '').toLowerCase()}</Pill>
                     </div>
                   </div>
                 ))}
@@ -1340,7 +1347,7 @@ function relayPickUser(setTweak, id) {
     return null;
   }
 
-  let me = null, real = null, authMode = 'demo';
+  let me = null, real = null, authMode = 'demo', authError = '';
   try {
     if (window.CDC && window.CDC.auth) {
       const session = await resolveSession();
@@ -1348,6 +1355,12 @@ function relayPickUser(setTweak, id) {
         me = await window.CDC.whoami();
         real = window.CDC.whoamiReal ? await window.CDC.whoamiReal() : me;
         if (me) { authMode = 'authed'; await window.CDC.loadFromSupabase(); }
+        else {
+          // Signed in but not linked to a rostered employee — without this the
+          // login screen reappears silently and Google sign-in loops forever.
+          authError = 'Your account isn’t linked to an employee in the roster yet. Ask an admin to add you, then sign in again.';
+          try { await window.CDC.auth.signOut(); } catch (_) {}
+        }
       }
     }
   } catch (e) { console.warn('[Relay] session check failed', e); }
@@ -1362,6 +1375,6 @@ function relayPickUser(setTweak, id) {
   } else {
     // Clear any stale route hash on login so everyone lands on the dashboard.
     const landOnDashboard = () => { try { sessionStorage.setItem('relay:intro', '1'); history.replaceState(null, '', location.pathname + location.search); } catch (_) {} location.reload(); };
-    root.render(<ErrorBoundary><LoginScreen onAuthed={landOnDashboard} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
+    root.render(<ErrorBoundary><LoginScreen initialError={authError} onAuthed={landOnDashboard} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
   }
 })();

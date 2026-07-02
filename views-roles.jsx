@@ -30,8 +30,10 @@ function ManagerView({ tweaks, currentUser, nav }) {
     if (mgr.sub && direct.length === 0) {
       direct = CDC.USERS.filter((u) => u.sub === mgr.sub && u.id !== mgr.id);
     }
-    // If still empty, synthesize people from worklogs filtered to the team
-    if (direct.length === 0 && mgr.sub) {
+    // Demo mode only: synthesize placeholder reportees so the dashboard has
+    // something to show. NEVER in authed/prod — invented people would render
+    // as real reportees with fake metrics.
+    if (direct.length === 0 && mgr.sub && window.CDC.__source !== 'supabase') {
       direct = synthesizeReportees(mgr);
     }
     return direct;
@@ -621,7 +623,7 @@ function L1Dashboard({ tweaks, currentUser, nav }) {
             </div>
           </div>
         </div>
-        <div className="card card-pad" onClick={() => nav.go('my-tasks')}>
+        <div className="card card-pad" onClick={() => nav.go('my-tasks', { filter: 'ESCALATED' })}>
           <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
             <div className="banner-icon" style={{ width: 32, height: 32, background: 'var(--amber)' }}><Icon name="flag" size={14} /></div>
             <div>
@@ -868,8 +870,8 @@ function GuidelineView({ tweaks, currentUser, nav }) {
               <button className="btn" data-variant="primary" onClick={() => nav.go('copilot')}>
                 <Icon name="sparkles" size={12} /> Open Concierge
               </button>
-              <button className="btn">View FAQ</button>
-              <button className="btn">Report a bug or request a feature</button>
+              <button className="btn" onClick={() => nav.go('guideline')}>View FAQ</button>
+              <button className="btn" onClick={() => nav.go('feedback')}>Report a bug or request a feature</button>
             </div>
             <p className="muted" style={{ fontSize: 12.5, marginTop: 12, lineHeight: 1.6 }}>
               Concierge is your first stop for anything — from &ldquo;how do I submit a report&rdquo; to &ldquo;what blockers does my team have open&rdquo;.

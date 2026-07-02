@@ -85,6 +85,12 @@ function Icon({ name, size = 14, stroke = 1.6 }) {
       return <svg {...props}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z" /></svg>;
     case 'eye':
       return <svg {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+    case 'users':
+      return <svg {...props}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M21.5 20a6.5 6.5 0 0 0-4.5-6.2" /></svg>;
+    case 'plus':
+      return <svg {...props}><path d="M12 5v14M5 12h14" /></svg>;
+    case 'calendar':
+      return <svg {...props}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>;
     default: return null;
   }
 }
@@ -292,9 +298,9 @@ function GreetingHeader({ currentUser, context, actions }) {
 window.GreetingHeader = GreetingHeader;
 
 // ── Card wrapper ────────────────────────────────────────────────────────
-function Card({ title, meta, actions, children, pad = true, className = '' }) {
+function Card({ title, meta, actions, children, pad = true, className = '', style }) {
   return (
-    <div className={`card ${className}`}>
+    <div className={`card ${className}`} style={style}>
       {title && (
         <div className="card-h">
           <div className="row" style={{ gap: 8 }}>

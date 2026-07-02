@@ -695,9 +695,13 @@ window.FeedbackView = FeedbackView;
 // Regular-user view: give feedback + see your own.
 function FeedbackSubmit({ currentUser }) {
   const CDC = window.CDC;
-  const [kind, setKind] = useStA('idea');
+  const [kind, setKind] = useStA(FB_KINDS[0]); // must be a real kind — 'idea' vanished from the owner's kind filters
   const [text, setText] = useStA('');
   const [, force] = useStA(0);
+  // Pull the latest feedback (status/comment updates from the owner) on mount.
+  useEA(() => {
+    if (CDC.db && CDC.db.refreshFeedback) CDC.db.refreshFeedback().then((ok) => { if (ok) force((n) => n + 1); });
+  }, []);
   const mine = (CDC.FEEDBACK || []).filter((f) => f.userId === currentUser.id);
   function submit() {
     const t = text.trim(); if (!t) return;
@@ -708,7 +712,7 @@ function FeedbackSubmit({ currentUser }) {
   }
   return (
     <div className="fadein">
-      <SectionHeader title="Feedback" subtitle="Tell us what would make Relay better — an idea, a bug, praise, or an annoyance. It goes to the working group." />
+      <SectionHeader title="Feedback" subtitle="Tell us what would make Relay better — performance, UI/UX, data, a feature idea, or a bug. It goes to the working group." />
       <Card>
         <div className="col" style={{ gap: 12 }}>
           <div className="seg">{FB_KINDS.map((k) => <button key={k} data-active={kind === k} onClick={() => setKind(k)}>{k}</button>)}</div>
@@ -754,6 +758,10 @@ function FeedbackDashboard({ currentUser, nav }) {
   const [, force] = useStA(0);
   const [kindF, setKindF] = useStA('all');
   const [statusF, setStatusF] = useStA('all');
+  // Pull submissions that landed after this session's boot load.
+  useEA(() => {
+    if (CDC.db && CDC.db.refreshFeedback) CDC.db.refreshFeedback().then((ok) => { if (ok) force((n) => n + 1); });
+  }, []);
   const all = CDC.FEEDBACK || [];
   const list = all.filter((f) => (kindF === 'all' || f.kind === kindF) && (statusF === 'all' || (f.status || 'open') === statusF));
   const countKind = (k) => all.filter((f) => f.kind === k).length;
@@ -768,8 +776,8 @@ function FeedbackDashboard({ currentUser, nav }) {
     force((n) => n + 1);
     if (CDC.toast) CDC.toast('Comment saved — visible to the submitter', 'green');
   }
-  const chip = (val, cur, set, label, tone) => (
-    <button className="btn" data-size="sm" data-variant={cur === val ? 'primary' : 'ghost'} onClick={() => set(val)}>{label}</button>
+  const chip = (val, cur, set, label) => (
+    <button key={val} className="btn" data-size="sm" data-variant={cur === val ? 'primary' : 'ghost'} onClick={() => set(val)}>{label}</button>
   );
   return (
     <div className="fadein">

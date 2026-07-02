@@ -9,7 +9,7 @@
   --border-strong: oklch(0.84 0.008 250);
   --text: oklch(0.20 0.012 260);
   --text-muted: oklch(0.50 0.012 260);
-  --text-faint: oklch(0.65 0.010 260);
+  --text-faint: oklch(0.55 0.010 260); /* was 0.65 — failed contrast on the smallest labels */
 
   --accent: oklch(0.54 0.19 274);
   --accent-2: oklch(0.50 0.20 290);
@@ -125,7 +125,17 @@ input, select, textarea, .tbl tr td {
   transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease),
     color 0.15s var(--ease), box-shadow 0.18s var(--ease), transform 0.18s var(--ease);
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Reduced motion: collapse animations to their end state instead of killing
+   them — `animation: none` left elements whose visibility depends on a fill
+   state (fadein/modal-in etc.) stuck invisible. Covers pseudo-elements too. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}
 
 /* Refined, unobtrusive scrollbars. */
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
@@ -626,12 +636,6 @@ input, select, textarea, .tbl tr td {
 .tnum { font-variant-numeric: tabular-nums; }
 .code { font-family: var(--font-mono); font-size: 12px; background: var(--panel-2); padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--border); }
 
-/* Scrollbars */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 2px solid var(--bg); background-clip: content-box; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-faint); border: 2px solid var(--bg); background-clip: content-box; }
-
 /* Animation */
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 .fadein { animation: fadein 0.18s ease-out both; }
@@ -682,7 +686,7 @@ input, select, textarea, .tbl tr td {
   padding: 6px 12px;
   font-size: 12px;
   color: var(--text-muted);
-  cursor: default;
+  cursor: pointer;
   white-space: nowrap;
 }
 .suggested-q:hover { background: var(--surface); color: var(--text); }
@@ -1054,13 +1058,10 @@ input, select, textarea, .tbl tr td {
   border: 0;
   box-shadow: var(--shadow-lg);
   display: grid; place-items: center;
-  cursor: default;
+  cursor: pointer;
   z-index: 100;
 }
 .fab:hover { transform: translateY(-1px); }
-.fab[data-open="true"] {
-  background: var(--accent); color: var(--accent-fg);
-}
 
 /* ── Topbar env pill (BETA glow) ──────────────────────────────────── */
 .topbar [data-env="beta"] { box-shadow: 0 0 0 1px var(--amber); }
@@ -1636,6 +1637,11 @@ input, select, textarea, .tbl tr td {
   gap: 16px;
   min-height: calc(100vh - 200px);
 }
+/* Below ~900px the fixed 320px rail crushes the chat column — stack instead. */
+@media (max-width: 900px) {
+  .submit-layout { grid-template-columns: 1fr; }
+  .session-rail { position: static; max-height: none; }
+}
 
 .chat-stream {
   display: flex; flex-direction: column;
@@ -1917,7 +1923,11 @@ input, select, textarea, .tbl tr td {
   background: color-mix(in oklch, var(--bg, #000) 22%, transparent);
   animation: fadein 0.2s ease both;
   overflow: hidden;
+  /* Celebration must never block work: clicks pass through the scrim;
+     only the message card is interactive (click = dismiss). */
+  pointer-events: none;
 }
+.confetti-overlay .msg { pointer-events: auto; cursor: pointer; }
 .confetti-overlay .msg {
   text-align: center;
   padding: 32px 28px;
@@ -2027,10 +2037,10 @@ input, select, textarea, .tbl tr td {
 
 /* ── Post-login intro splash ─────────────────────────────────────────────── */
 .intro-splash {
-  position: fixed; inset: 0; z-index: 100;
+  position: fixed; inset: 0; z-index: 300; /* above the FAB (100), below modals (1000) */
   display: grid; place-items: center; align-content: center; gap: 6px;
   background: var(--accent-grad, linear-gradient(135deg, #4f46e5, #7c3aed));
-  color: #fff;
+  color: var(--accent-fg, #fff); /* dark theme's accent-grad is light — keep text readable */
   cursor: pointer;
   animation: intro-exit 0.55s cubic-bezier(.7,0,.3,1) 2.05s both;
 }

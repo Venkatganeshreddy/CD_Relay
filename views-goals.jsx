@@ -53,7 +53,10 @@ function GoalsView({ tweaks, currentUser, nav }) {
   const scored = teamTasks.length - unset;
 
   async function saveGoal(goal, patch) {
-    if (CDC.db && CDC.db.updateGoal) await CDC.db.updateGoal(goal.id, patch);
+    // updateGoal mutates the local goal synchronously before its network
+    // write — refresh immediately so two quick edits don't build the second
+    // patch from a stale render (lost-update during the write RTT).
+    if (CDC.db && CDC.db.updateGoal) CDC.db.updateGoal(goal.id, patch);
     else Object.assign(goal, patch);   // offline fallback
     refresh();
   }

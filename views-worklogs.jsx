@@ -214,9 +214,9 @@ function WorklogsView({ tweaks, currentUser, nav }) {
             options={[{ value: 'all', label: 'All categories' }, ...categories.map((c) => ({ value: c, label: c }))]} />
           <DropdownFilter label="Status" value={filterStatus} setValue={setFilterStatus}
             options={[{ value: 'all', label: 'All status' }, ...['Done', 'In-progress', 'Blocked', 'Overdue'].map((s) => ({ value: s, label: s }))]} />
-          {(filterUser !== 'all' || filterStack !== 'all' || filterCat !== 'all' || filterStatus !== 'all' || search) && (
+          {(filterUser !== 'all' || filterProduct !== 'all' || filterStack !== 'all' || filterCat !== 'all' || filterStatus !== 'all' || search) && (
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => {
-              setFilterUser('all'); setFilterStack('all'); setFilterCat('all'); setFilterStatus('all'); setSearch('');
+              setFilterUser('all'); setFilterProduct('all'); setFilterStack('all'); setFilterCat('all'); setFilterStatus('all'); setSearch('');
             }}>Clear filters</button>
           )}
         </div>

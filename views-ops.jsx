@@ -1,6 +1,6 @@
 // CD-Copilot — Weekly drafts, Task triage, Data Quality, AI Runs.
 
-const { useState: useState_o, useMemo: useMemo_o, useEffect: useEffect_o } = React;
+const { useState: useState_o, useMemo: useMemo_o, useEffect: useEffect_o, useRef: useRef_o } = React;
 
 // Display an ISO date (YYYY-MM-DD) as dd/mm/yyyy; pass through anything else.
 function dmy(s) {
@@ -464,6 +464,7 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
   const [reporteeSel, setReporteeSel] = useState_o(''); // L2/L3 reportee drill-down ('' = all)
   const [teamSel, setTeamSel] = useState_o('');         // team (owner's sub) filter ('' = all)
   const [editing, setEditing] = useState_o(null);
+  const editTitleRef = useRef_o(null);                // title input in the suggested-task modal
   const [editTask, setEditTask] = useState_o(null);   // owner full-edit of their own task
   const [expanded, setExpanded] = useState_o({});     // taskId -> subtasks expanded?
   const [creating, setCreating] = useState_o(false);
@@ -479,7 +480,7 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
     setTick((n) => n + 1);
   }
 
-  const isOverdue = (t) => t.due && t.due < todayStr && t.status !== 'DONE' && t.status !== 'SUGGESTED';
+  const isOverdue = (t) => t.due && t.due < todayStr && !['DONE', 'SUGGESTED', 'REJECTED'].includes(t.status);
   // Escalated = ONLY tasks at ESCALATED status. Blocked and Overdue have their
   // own tabs, so they are no longer folded into the Escalated count.
   const isEscalated = (t) => t.status === 'ESCALATED';
@@ -611,6 +612,10 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
     for (const t of allTasks) {
       const reason = escalationTrigger(t);
       if (!reason) continue;
+      // One climb + one notification per task per day — without this every
+      // Refresh click re-escalated and re-notified all overdue tasks.
+      if (t.lastEscalScan === todayStr) continue;
+      t.lastEscalScan = todayStr;
       const chain = managerChain(t.owner);
       const top = chain.length - 1;
       const nextIdx = chain.length ? Math.min((t.escalIdx ?? -1) + 1, top) : -1;
@@ -984,14 +989,19 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
       <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit suggested task"
         footer={<>
           <button className="btn" data-variant="ghost" onClick={() => setEditing(null)}>Cancel</button>
-          <button className="btn" data-variant="primary" onClick={() => { approve(editing.id); setEditing(null); }}>Save & approve</button>
+          <button className="btn" data-variant="primary" onClick={async () => {
+            // Persist the edited title before approving — it was silently dropped.
+            const v = (editTitleRef.current && editTitleRef.current.value || '').trim();
+            if (v && v !== editing.title && CDC.db.updateTaskFields) await CDC.db.updateTaskFields(editing.id, { title: v });
+            approve(editing.id); setEditing(null);
+          }}>Save & approve</button>
         </>}
       >
         {editing && (
           <div className="col" style={{ gap: 12 }}>
             <div>
               <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Title</div>
-              <input className="tb-search" defaultValue={editing.title} style={{ width: '100%' }} />
+              <input ref={editTitleRef} className="tb-search" defaultValue={editing.title} style={{ width: '100%' }} />
             </div>
             <div>
               <div style={{ fontSize: 11.5, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 0.06, fontWeight: 600, marginBottom: 4 }}>Reason (AI-generated)</div>
@@ -1167,9 +1177,10 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
 
   // Stack, Task (template) and Output count are optional — count defaults to 0.
   // Status, Due date and Agentic execution scope are mandatory.
+  const hoursOk = estHours === '' || (Number(estHours) > 0 && Number(estHours) <= 24);
   const valid = products.length > 0 && !!outputCategory &&
     !!status && !!due && (editing || !!agenticScope) &&
-    details.trim().length > 0 &&
+    details.trim().length > 0 && hoursOk &&
     (!needsReason || reason.trim().length > 0);
 
   const label = () => ({ fontSize: 12.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.05, fontWeight: 700, marginBottom: 8, borderLeft: '3px solid var(--accent)', paddingLeft: 9, lineHeight: 1.1 });
@@ -1204,14 +1215,18 @@ function CreateTaskModal({ open, onClose, onCreate, me, people, todayStr, initia
           {!outputCategory ? 'Pick a product-audience & output category'
             : !details.trim() ? 'Task details are required'
             : !due ? 'Due date is required'
+            : !hoursOk ? 'Est. hours must be between 0 and 24'
             : (!editing && !agenticScope) ? 'Pick an agentic execution scope'
             : needsReason && !reason.trim() ? `Reason required for ${status.toLowerCase()}`
-            : `${map.metric} · ${map.task}`}
+            : `${(map || {}).metric || '—'} · ${(map || {}).task || '—'}`}
         </span>
         <button className="btn" data-variant="ghost" onClick={onClose}>Cancel</button>
         <button className="btn" data-variant="primary" disabled={!valid}
           onClick={() => onCreate({ owner, products, stacks, outputCategory, details,
-            outputCount: null, template: {}, estHours, status, due: due || null, reason,
+            // Pass loaded values through — hardcoding null/{} wiped an edited
+            // task's existing count/template (and its mirrored worklog's).
+            outputCount: outputCount === '' ? null : Number(outputCount) || 0,
+            template, estHours, status, due: due || null, reason,
             deliverableId: deliverableId || null, deliverable: (deliverableOpts.find((d) => d.id === deliverableId) || {}).text || null,
             agenticScope })}>
           {editing ? 'Save changes' : 'Create task'}

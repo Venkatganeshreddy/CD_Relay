@@ -93,7 +93,14 @@ function TaskCatalogView({ tweaks, currentUser, nav }) {
                 </td>
                 <td>
                   <button className="btn" data-size="sm" data-variant="ghost" title="Remove category"
-                    onClick={() => { const next = { ...outputMap }; delete next[name]; setOutputMap(next); touch(); }}>✕</button>
+                    onClick={() => {
+                      // Warn when live rows still reference the category — after
+                      // deletion their metric/task lookups fall back to '—'.
+                      const inUse = ((CDC.WORKLOGS || []).filter((w) => w.outputCategory === name).length)
+                        + ((CDC.TASKS || []).filter((t) => t.outputCategory === name).length);
+                      if (inUse && !window.confirm(`“${name}” is referenced by ${inUse} existing worklog/task row${inUse === 1 ? '' : 's'}. Those rows will lose their metric mapping. Remove anyway?`)) return;
+                      const next = { ...outputMap }; delete next[name]; setOutputMap(next); touch();
+                    }}>✕</button>
                 </td>
               </tr>
             ))}

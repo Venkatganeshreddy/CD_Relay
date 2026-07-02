@@ -71,11 +71,28 @@
     // but an unordered select returns rows arbitrarily after a reload — which is
     // how Engram/AI-run timestamps ended up looking shuffled. Fall back to an
     // unordered read for any table without created_at.
-    const settled = await Promise.all(tables.map(async (t) => {
-      let res = await sb.from(t).select('data').order('created_at', { ascending: false });
-      if (res.error) res = await sb.from(t).select('data');
-      return { t, res };
-    }));
+    // PostgREST silently caps un-ranged selects at 1000 rows — page until a
+    // short page so big tables (worklogs, activity) aren't silently truncated.
+    const PAGE = 1000;
+    const selectAll = async (t) => {
+      const fetchPage = (ordered, from) => {
+        let q = sb.from(t).select('data');
+        if (ordered) q = q.order('created_at', { ascending: false });
+        return q.range(from, from + PAGE - 1);
+      };
+      let ordered = true;
+      let res = await fetchPage(true, 0);
+      if (res.error) { ordered = false; res = await fetchPage(false, 0); }
+      if (res.error) return res;
+      const rows = res.data || [];
+      while (res.data && res.data.length === PAGE) {
+        res = await fetchPage(ordered, rows.length);
+        if (res.error) break;
+        rows.push(...(res.data || []));
+      }
+      return { data: rows, error: null };
+    };
+    const settled = await Promise.all(tables.map(async (t) => ({ t, res: await selectAll(t) })));
     for (const { t, res } of settled) {
       if (res.error) { console.warn('[Relay]', t, '—', res.error.message); continue; }
       if (res.data && res.data.length) { fillArray(ARRAY_MAP[t], res.data.map((r) => r.data)); loadedAny = true; }
@@ -229,17 +246,18 @@
   // remaining-hours nudge after logging a task). tone: amber | green | info | red.
   window.CDC.toast = function (msg, tone) {
     try {
-      const palette = {
-        amber: ['#fff8e6', '#92600a', '#e8c887'],
-        green: ['#e9f9ef', '#1e7e34', '#34c759'],
-        red:   ['#fdecee', '#b3261e', '#f85149'],
-        info:  ['#eef4ff', '#1d4ed8', '#9bbcfa'],
-      };
-      const [bg, fg, br] = palette[tone] || palette.info;
+      // Theme-token surface + a colored accent border so dark mode isn't
+      // blasted with light-mode hex chips.
+      const accent = {
+        amber: 'var(--amber, #b7791f)',
+        green: 'var(--green, #1e7e34)',
+        red:   'var(--red, #b3261e)',
+        info:  'var(--accent, #1d4ed8)',
+      }[tone] || 'var(--accent, #1d4ed8)';
       const el = document.createElement('div');
       el.textContent = msg;
       el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;' +
-        `background:${bg};color:${fg};border:1px solid ${br};border-radius:10px;` +
+        `background:var(--surface, #fff);color:var(--text, #222);border:1px solid var(--border, #ddd);border-left:3px solid ${accent};border-radius:10px;` +
         'padding:11px 18px;font:13px/1.45 system-ui,sans-serif;font-weight:500;' +
         'box-shadow:0 6px 24px rgba(0,0,0,.16);max-width:92vw;text-align:center';
       document.body.appendChild(el);
@@ -380,15 +398,18 @@
     },
     async updateTask(id, status) {
       const t = (window.CDC.TASKS || []).find((x) => x.id === id); if (t) t.status = status;
-      await remote(() => sb.from('tasks').update({ status, data: t || { id, status } }).eq('id', id));
+      // No local copy → update the status column only; writing a stub into the
+      // data jsonb would wipe the server row's title/owner/template.
+      await remote(() => sb.from('tasks').update(t ? { status, data: t } : { status }).eq('id', id));
     },
     // Owner fills in execution data (template fields like iterations/accuracy,
     // and the task description) on a task assigned to them. Merges the patch into
     // the task and keeps the mirrored worklog's template in sync so rollups match.
     async updateTaskFields(id, patch) {
       const t = (window.CDC.TASKS || []).find((x) => x.id === id);
-      if (t) Object.assign(t, patch);
-      await remote(() => sb.from('tasks').update({ data: t || { id, ...patch } }).eq('id', id));
+      if (!t) return; // no local copy — a partial stub would clobber the server row
+      Object.assign(t, patch);
+      await remote(() => sb.from('tasks').update({ data: t }).eq('id', id));
       const wl = (window.CDC.WORKLOGS || []).find((w) => w.taskId === id);
       if (wl) {
         // Keep the mirrored worklog in sync so rollups/dashboards match the edit.
@@ -457,7 +478,7 @@
         if (note) { if (status === 'Backlog') t.backlogNote = note; else t.blockReason = note; }
         t.status = newStatus;
       }
-      await remote(() => sb.from('tasks').update({ status: newStatus, data: t || { id, status: newStatus } }).eq('id', id));
+      await remote(() => sb.from('tasks').update(t ? { status: newStatus, data: t } : { status: newStatus }).eq('id', id));
       const ackId = rid('ack-');
       await remote(() => sb.from('task_acknowledgements').insert({
         id: ackId, task_id: id, owner_id: t ? t.owner : null, ack_date: today, status: status || null, note: note || null,
@@ -530,6 +551,15 @@
       return { remoteOk };
     },
     // Application feedback (idea / bug / praise / annoyance) — anyone can submit.
+    // Refetch feedback on demand (the Feedback page mounts) so submitters see
+    // owner replies/status and the owner sees new submissions without a reload.
+    async refreshFeedback() {
+      if (!sb) return false;
+      const res = await sb.from('app_feedback').select('data').order('created_at', { ascending: false });
+      if (res.error || !res.data) return false;
+      fillArray('FEEDBACK', res.data.map((r) => r.data));
+      return true;
+    },
     async addFeedback(fb) {
       const arr = window.CDC.FEEDBACK || (window.CDC.FEEDBACK = []);
       arr.unshift(fb);

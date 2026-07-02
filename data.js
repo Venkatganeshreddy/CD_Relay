@@ -1332,9 +1332,11 @@
   function scopeForUser(userId) {
     const u = USERS.find((x) => x.id === userId);
     if (!u) return { kind: 'none' };
-    const r = u.role;
-    // Admin sees all
-    if (r === 'ADMIN') return { kind: 'all' };
+    // Roles arrive with mixed casing ('ADMIN' from seed, 'Admin' from the
+    // Admin UI's role_level options) — normalize before matching.
+    const r = String(u.role || '').toUpperCase();
+    // Admin sees all (role or level)
+    if (r === 'ADMIN' || String(u.level || '').toUpperCase() === 'ADMIN') return { kind: 'all' };
     // L3 / legacy Product Owner sees all departments
     if (r === 'L3' || r === 'PRODUCT_OWNER') return { kind: 'all' };
     // Central Ops cross-team

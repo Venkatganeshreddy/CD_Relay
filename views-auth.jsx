@@ -3,12 +3,12 @@
 // creates their own account and chooses their password on first login.
 // "Continue in demo mode" bypasses auth and uses the bundled data + free role
 // switcher (the prototype's original behavior) for offline demos.
-function LoginScreen({ onAuthed, onDemo }) {
+function LoginScreen({ onAuthed, onDemo, initialError }) {
   const [mode, setMode] = React.useState('signin'); // 'signin' | 'signup'
   const [email, setEmail] = React.useState('');
   const [pw, setPw] = React.useState('');
   const [pw2, setPw2] = React.useState('');
-  const [err, setErr] = React.useState('');
+  const [err, setErr] = React.useState(initialError || '');
   const [info, setInfo] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const canAuth = !!(window.CDC && window.CDC.auth);

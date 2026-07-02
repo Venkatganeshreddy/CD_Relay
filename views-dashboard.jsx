@@ -69,9 +69,11 @@ function Dashboard({ tweaks, currentUser, nav }) {
       stacks: w.stacks || [], outputCat: w.outputCategory, count: w.outputCount,
       task: tmplText(w.template), status: w.status, reason: w.reason, est: w.hours,
     })),
-    // Every captured task in scope (manual, MOM-derived, agent — any source),
-    // excluding untriaged suggestions and rejected ones.
-    ...tasks.filter((t) => !['SUGGESTED', 'REJECTED'].includes(t.status)).map((t) => {
+    // Tasks created TODAY (manual, MOM-derived, agent — any source), excluding
+    // untriaged suggestions/rejected — and excluding tasks whose mirrored
+    // worklog is already listed above (they'd double-count).
+    ...tasks.filter((t) => t.created === todayStr && !['SUGGESTED', 'REJECTED'].includes(t.status)
+      && !worklogs.some((w) => w.taskId === t.id && w.date === todayStr)).map((t) => {
       const o = CDC.lookup.user(t.owner) || {};
       return { empId: o.empId || t.owner, metric: t.metricCategory, products: t.products || [], taskCat: t.taskCategory,
         stacks: t.stacks || [], outputCat: t.outputCategory, count: t.outputCount,

@@ -132,7 +132,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setShowKeyInput((v) => !v)}>
               <Icon name="plug" size={12} /> API key
             </button>
-            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { setMessages([]); setStreamText(''); }}>Clear</button>
+            <button className="btn" data-size="sm" data-variant="ghost" onClick={() => { setMessages([]); setStreamText(''); setActState({}); }}>Clear</button>
           </div>
         </div>
       </div>

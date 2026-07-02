@@ -54,9 +54,13 @@ function GlanceView({ tweaks, currentUser, nav }) {
       `${form.outputCategory || 'Task'}${form.outputCount ? ` ×${form.outputCount}` : ''}${tmplSummary ? ` — ${tmplSummary}` : ''}`;
     const STATUS_MAP = { 'In-progress': 'ACTIVE', 'Done': 'DONE', 'Blocked': 'BLOCKED', 'Overdue': 'ACTIVE', 'Backlog': 'BACKLOG' };
     const status = STATUS_MAP[form.status] || 'ACTIVE';
+    // Honor the owner picked in the modal — hardcoding currentUser silently
+    // reassigned tasks a manager created for a reportee (and logged the hours
+    // against the manager).
+    const owner = CDC.lookup.user(form.owner) || currentUser;
     const task = {
       id: `task-${Date.now()}`, title, status, reason: 'Manual', sourceReports: [],
-      owner: currentUser.id, dept: currentUser.dept, created: todayStr, due: form.due || null,
+      owner: owner.id, dept: owner.dept, created: todayStr, due: form.due || null,
       confidence: null, source: 'manual', createdBy: currentUser.id,
       products: form.products || [], stacks: form.stacks || [], stack: (form.stacks || [])[0] || null,
       outputCategory: form.outputCategory || null, taskCategory: m.task || '',
@@ -67,14 +71,14 @@ function GlanceView({ tweaks, currentUser, nav }) {
       deliverableId: form.deliverableId || null, deliverable: form.deliverable || null,
       agenticScope: form.agenticScope || null,
     };
-    if (status === 'BLOCKED') { task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = currentUser.managerId || null; }
+    if (status === 'BLOCKED') { task.blockedAt = new Date().toISOString(); task.escalIdx = 0; task.escalatedTo = owner.managerId || null; }
     CDC.db.addTask(task);
     // Mirror the task into a worklog so the day's work shows up LIVE in the
     // manager dashboard, the worklogs page, and weekly/monthly rollups — all of
     // which read WORKLOGS. Hours come from the estimate; status keeps the label.
     CDC.db.addWorklog({
-      id: `wl-${Date.now()}`, userId: currentUser.id, userName: currentUser.name, userInitials: currentUser.initials,
-      empId: currentUser.id, dept: currentUser.dept, sub: currentUser.sub || null, date: todayStr, daysAgo: 0,
+      id: `wl-${Date.now()}`, taskId: task.id, userId: owner.id, userName: owner.name, userInitials: owner.initials,
+      empId: owner.id, dept: owner.dept, sub: owner.sub || null, date: todayStr, daysAgo: 0,
       products: form.products || [], stacks: form.stacks || [],
       outputCategory: form.outputCategory || 'Other', taskCategory: m.task || '',
       activityCategory: m.activity || '', metricCategory: m.metric || '',
@@ -82,16 +86,19 @@ function GlanceView({ tweaks, currentUser, nav }) {
       hours: form.estHours != null && form.estHours !== '' ? Number(form.estHours) : 0,
       status: form.status || 'In-progress', reason: form.reason || '', submittedAt: 'just now',
     });
-    // Nudge: how many hours are left to reach the 8h day.
-    const dayHrs = (CDC.WORKLOGS || []).filter((w) => w.userId === currentUser.id && w.daysAgo === 0).reduce((s, w) => s + (Number(w.hours) || 0), 0);
-    const target = CDC.DAILY_TARGET_HRS || 8;
-    const left = target - dayHrs;
-    if (CDC.toast) CDC.toast(
-      left > 0.01
-        ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
-        : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
-      left > 0.01 ? 'amber' : 'green');
-    if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(currentUser.id, dayHrs);
+    // Nudge: how many hours are left to reach the 8h day — only when logging
+    // your OWN work (not when a manager creates a task for a reportee).
+    if (owner.id === currentUser.id) {
+      const dayHrs = (CDC.WORKLOGS || []).filter((w) => w.userId === currentUser.id && w.daysAgo === 0).reduce((s, w) => s + (Number(w.hours) || 0), 0);
+      const target = CDC.DAILY_TARGET_HRS || 8;
+      const left = target - dayHrs;
+      if (CDC.toast) CDC.toast(
+        left > 0.01
+          ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
+          : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
+        left > 0.01 ? 'amber' : 'green');
+      if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(currentUser.id, dayHrs);
+    }
     setCreating(false);
     setTick((x) => x + 1);
   }
@@ -187,8 +194,9 @@ function SubmitView({ tweaks, currentUser, nav }) {
   // with already-logged WORKLOGS would need a scan and muddy the "crossing".
   const totalHrs = tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
 
-  // Confetti pop the first time today's session total reaches the 8h floor.
-  // CDC.celebrate8h owns the once-per-day guard, shared with the other paths.
+  // Confetti pop when the session total reaches the 8h floor. Deliberately
+  // fires on each qualifying change (no daily guard — team preference); the
+  // overlay is non-blocking and celebrate8h keeps at most one on screen.
   useE(() => {
     if (totalHrs >= DAILY_TARGET_HRS && window.CDC.celebrate8h) window.CDC.celebrate8h(currentUser.id, totalHrs);
   }, [totalHrs]);
@@ -469,7 +477,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
           )}
 
           {step === 'done' && (
-            <DoneCard tasks={tasks} myEmpId={myEmpId} restart={restart} />
+            <DoneCard tasks={tasks} myEmpId={myEmpId} restart={restart} nav={nav} />
           )}
         </div>
 
@@ -738,7 +746,7 @@ function CategoryInput({ onCategorySubmit }) {
         {filtered.length === 0 && <div className="muted" style={{ fontSize: 12, padding: 4 }}>No matches.</div>}
       </div>
       <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
-        <span className="muted" style={{ fontSize: 11.5 }}>{sel ? `${OUTPUT_MAP[sel].metric} · ${OUTPUT_MAP[sel].task}` : 'Pick one.'}</span>
+        <span className="muted" style={{ fontSize: 11.5 }}>{sel ? `${(OUTPUT_MAP[sel] || {}).metric || '—'} · ${(OUTPUT_MAP[sel] || {}).task || '—'}` : 'Pick one.'}</span>
         <button className="btn" data-variant="primary" disabled={!sel} onClick={() => onCategorySubmit(sel)}>Next <Icon name="arrow-up" size={11} /></button>
       </div>
     </div>
@@ -804,9 +812,9 @@ function TimeInput({ onTimeSubmit }) {
   return (
     <div>
       <div className="input-row">
-        <input className="input-text" data-size="lg" type="number" min="0" step="0.25" placeholder="e.g. 2.5" value={v} onChange={(e) => setV(e.target.value)} />
+        <input className="input-text" data-size="lg" type="number" min="0" max="24" step="0.25" placeholder="e.g. 2.5" value={v} onChange={(e) => setV(e.target.value)} />
         <span className="muted" style={{ fontSize: 12 }}>hours</span>
-        <button className="btn" data-variant="primary" disabled={isNaN(n) || n <= 0} onClick={() => onTimeSubmit(n)}>Next <Icon name="arrow-up" size={12} /></button>
+        <button className="btn" data-variant="primary" disabled={isNaN(n) || n <= 0 || n > 24} onClick={() => onTimeSubmit(n)}>Next <Icon name="arrow-up" size={12} /></button>
       </div>
       <div className="chip-grid" style={{ marginTop: 10 }}>
         {quick.map((q) => (
@@ -896,7 +904,7 @@ function DailyHoursBar({ totalHrs, compact }) {
 }
 
 // ── Done card ───────────────────────────────────────────────────────────
-function DoneCard({ tasks, myEmpId, restart }) {
+function DoneCard({ tasks, myEmpId, restart, nav }) {
   const totalHrs = tasks.reduce((s, t) => s + (t.hours || 0), 0);
   const under = totalHrs < DAILY_TARGET_HRS;
   return (
@@ -910,7 +918,7 @@ function DoneCard({ tasks, myEmpId, restart }) {
         </p>
       )}
       <div className="row" style={{ gap: 8, marginTop: 16, justifyContent: 'center' }}>
-        <button className="btn" data-size="sm">View today's report</button>
+        <button className="btn" data-size="sm" onClick={() => nav && nav.go('worklogs')}>View today's report</button>
         <button className="btn" data-size="sm" data-variant="ghost" onClick={restart}><Icon name="refresh" size={12} /> Edit & resubmit</button>
       </div>
     </div>
