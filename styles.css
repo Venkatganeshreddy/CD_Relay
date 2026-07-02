@@ -1938,12 +1938,12 @@ input, select, textarea, .tbl tr td {
   filter: drop-shadow(0 8px 20px rgba(0,0,0,.25));
   animation:
     robot-in 0.55s cubic-bezier(.2,.9,.3,1.25) both,
-    robot-hop 0.75s ease-in-out 0.58s 3;
+    robot-hop 0.75s ease-in-out 0.58s;
 }
 /* The popper arm pumps while the volleys fire. */
 .confetti-overlay .robot .arm-fire {
   transform-box: fill-box; transform-origin: 0% 100%;
-  animation: arm-pump 0.375s ease-in-out 0.55s 6 alternate;
+  animation: arm-pump 0.375s ease-in-out 0.55s 2 alternate;
 }
 @keyframes arm-pump {
   from { transform: rotate(0deg); }
@@ -1953,7 +1953,7 @@ input, select, textarea, .tbl tr td {
    (0.75s cadence, aligned with the muzzle flash / hop / volley delays). */
 .confetti-overlay .robot .popper-cone {
   transform-box: fill-box; transform-origin: 30% 70%;
-  animation: popper-twist 0.75s ease-in-out 0.30s 3;
+  animation: popper-twist 0.75s ease-in-out 0.30s;
 }
 @keyframes popper-twist {
   0%   { transform: rotate(0deg) scale(1); }
@@ -1985,13 +1985,13 @@ input, select, textarea, .tbl tr td {
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, #fde68a 45%, transparent 70%);
   opacity: 0;
-  animation: muzzle-pop 0.75s ease-out 0.55s 3;
+  animation: muzzle-pop 0.75s ease-out 0.55s;
 }
 .confetti-overlay .muzzle-flash::after {
   content: ''; position: absolute; inset: 0;
   border-radius: 50%;
   border: 3px solid rgba(245, 158, 11, .8);
-  animation: shockwave 0.75s cubic-bezier(.1,.7,.3,1) 0.58s 3;
+  animation: shockwave 0.75s cubic-bezier(.1,.7,.3,1) 0.58s;
 }
 @keyframes muzzle-pop {
   0% { opacity: 0; transform: scale(.2); }

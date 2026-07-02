@@ -1759,13 +1759,13 @@
     const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
     const el = document.createElement('div');
     el.className = 'confetti-overlay';
-    // Robot cannon: 3 volleys of confetti blast up-and-out from the muzzle,
-    // arc, then fall. Spread/height are index-derived (deterministic, no RNG).
+    // Robot cannon: one big volley blasts up-and-out from the muzzle, arcs,
+    // then falls. Spread/height are index-derived (deterministic, no RNG).
     let pieces = '';
-    for (let i = 0; i < 105; i++) {
+    for (let i = 0; i < 80; i++) {
       const tx = ((i * 29) % 85) - 42;              // −42vw … +42vw
       const ty = -(45 + ((i * 13) % 36));           // peak −45vh … −80vh
-      const delay = 0.6 + (i % 3) * 0.75 + ((i * 7) % 22) / 100; // volleys @ .6s, 1.35s, 2.1s
+      const delay = 0.6 + ((i * 7) % 26) / 100;     // fire 0.6–0.85s (after wind-up)
       const dur = 1.4 + ((i * 11) % 9) / 10;        // 1.4–2.2s flight
       pieces += `<span class="burst-piece" style="--tx:${tx}vw;--ty:${ty}vh;background:${colors[i % colors.length]};animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s"></span>`;
     }
@@ -1776,7 +1776,7 @@
       `<p>You've crossed today's ${target}h. Wrap up whenever you're ready.</p></div>`;
     el.addEventListener('click', () => el.remove());
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 6000);
+    setTimeout(() => el.remove(), 4500);
   }
 
   window.CDC = {
