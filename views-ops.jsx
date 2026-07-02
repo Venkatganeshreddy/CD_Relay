@@ -22,10 +22,58 @@ function WeeklyView({ tweaks, currentUser, nav }) {
   const [selectedId, setSelectedId] = useState_o(weekly[0]?.id || null);
   const [overrides, setOverrides] = useState_o({}); // id -> { status, edited }
   const [editingItem, setEditingItem] = useState_o(null); // { wId, sIdx, iIdx, text }
+  const [statusF, setStatusF] = useState_o('all'); // all | draft | published | rejected
+  const [, bump] = useState_o(0);
 
   const selected = weekly.find((w) => w.id === selectedId);
   const liveStatus = (w) => overrides[w.id]?.status || w.status;
   const liveSections = (w) => overrides[w.id]?.sections || w.sections;
+  const shown = weekly.filter((w) => statusF === 'all' || liveStatus(w).toLowerCase() === statusF);
+
+  // Deterministic weekly drafts from this week's worklogs + tasks, one per
+  // in-scope department. No server agent needed — Regenerate on a draft still
+  // upgrades it via Rollup when the edge function is deployed.
+  function generateDrafts() {
+    const d = new Date(CDC.today);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back to Monday
+    const weekOf = CDC.fmt(d);
+    const genAt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()).replace(',', '') + ' IST';
+    const item = (text, cites = []) => ({ text, cites });
+    let created = 0;
+    for (const dept of CDC.filterDepartments(currentUser.id)) {
+      if ((CDC.WEEKLY || []).some((x) => x.dept === dept.id && x.weekOf === weekOf)) continue;
+      const wls = (CDC.WORKLOGS || []).filter((w) => w.dept === dept.id && w.date >= weekOf);
+      const tks = (CDC.TASKS || []).filter((t) => t.dept === dept.id && !['REJECTED', 'SUGGESTED'].includes(t.status));
+      if (!wls.length && !tks.length) continue;
+      const totalH = wls.reduce((s, w) => s + (Number(w.hours) || 0), 0);
+      const people = new Set(wls.map((w) => w.userId)).size;
+      const done = wls.filter((w) => /done/i.test(w.status || ''));
+      const stuck = wls.filter((w) => /block|overdue/i.test(w.status || ''));
+      const sections = [{ h: 'Highlights', items: [
+        item(`${people} contributor${people === 1 ? '' : 's'} logged ${totalH.toFixed(1)}h across ${wls.length} entr${wls.length === 1 ? 'y' : 'ies'} this week.`),
+        ...done.slice(0, 5).map((w) => item(`${w.userName || w.userId}: ${w.outputCategory}${w.outputCount ? ` ×${w.outputCount}` : ''} · ${w.hours}h — Done`, [w.id])),
+      ] }];
+      const risks = [
+        ...stuck.slice(0, 5).map((w) => item(`${w.userName || w.userId}: ${w.outputCategory} — ${w.status}${w.reason ? ` · ${w.reason}` : ''}`, [w.id])),
+        ...tks.filter((t) => t.status === 'BLOCKED').slice(0, 3).map((t) => item(`Blocked task: “${t.title}”${t.blockReason ? ` — ${t.blockReason}` : ''}`, [t.id])),
+      ];
+      if (risks.length) sections.push({ h: 'Risks', items: risks });
+      const asks = tks.filter((t) => t.status === 'ESCALATED').slice(0, 3)
+        .map((t) => item(`Escalated: “${t.title}”${t.escalReason ? ` — ${t.escalReason}` : ''}`, [t.id]));
+      if (asks.length) sections.push({ h: 'Asks', items: asks });
+      const draft = { id: `w-${dept.id}-${weekOf}`, dept: dept.id, deptName: dept.short || dept.name, weekOf,
+        status: 'DRAFT', confidence: 0.9, generatedAt: genAt, generatedBy: 'Rollup (deterministic)',
+        sections, editedBy: null, publishedAt: null };
+      if (CDC.db && CDC.db.addWeekly) CDC.db.addWeekly(draft); else (CDC.WEEKLY || []).unshift(draft);
+      if (!created && !selected) setSelectedId(draft.id);
+      created++;
+    }
+    bump((n) => n + 1);
+    if (CDC.toast) CDC.toast(created
+      ? `${created} weekly draft${created === 1 ? '' : 's'} generated for the week of ${weekOf}.`
+      : 'Nothing to generate — drafts for this week already exist (or no work is logged yet).',
+      created ? 'green' : 'info');
+  }
 
   function approve(id) {
     const w = weekly.find((x) => x.id === id);
@@ -69,15 +117,25 @@ function WeeklyView({ tweaks, currentUser, nav }) {
         subtitle="AI-drafted Mondays at 06:00 IST. Approve, edit, or regenerate before publishing."
         actions={
           <>
-            <button className="btn" data-size="sm"><Icon name="filter" size={12} /> All status</button>
-            <button className="btn" data-size="sm" data-variant="primary" onClick={() => weekly.forEach((w) => regenerate(w.id))}><Icon name="refresh" size={12} /> Generate all</button>
+            <button className="btn" data-size="sm" title="Cycle status filter"
+              onClick={() => setStatusF((f) => ({ all: 'draft', draft: 'published', published: 'rejected', rejected: 'all' }[f]))}>
+              <Icon name="filter" size={12} /> {statusF === 'all' ? 'All status' : statusF}
+            </button>
+            <button className="btn" data-size="sm" data-variant="primary" onClick={generateDrafts}><Icon name="sparkles" size={12} /> Generate this week</button>
           </>
         }
       />
 
       <div className="split" style={{ height: 'calc(100vh - 200px)' }}>
         <div className="split-list">
-          {weekly.map((w) => {
+          {shown.length === 0 && (
+            <div className="empty" style={{ margin: 12 }}>
+              {weekly.length === 0
+                ? 'No weekly drafts yet — click “Generate this week” to build them from this week’s logged work.'
+                : `No ${statusF} drafts.`}
+            </div>
+          )}
+          {shown.map((w) => {
             const st = liveStatus(w);
             return (
               <div key={w.id} className="list-row" data-active={selectedId === w.id} onClick={() => setSelectedId(w.id)}>

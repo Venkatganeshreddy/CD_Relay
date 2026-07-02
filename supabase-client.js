@@ -367,6 +367,11 @@
       if (action && action !== 'accept') maybeRunCurator(row.agent);
       return row;
     },
+    // Create a weekly draft (client-generated — see WeeklyView generateDrafts).
+    async addWeekly(w) {
+      if (Array.isArray(window.CDC.WEEKLY)) window.CDC.WEEKLY.unshift(w);
+      await remote(() => sb.from('weekly_summaries').upsert({ id: w.id, dept: w.dept || null, status: w.status || 'DRAFT', data: w }));
+    },
     async updateWeekly(weeklyObj, patch) {
       const local = (window.CDC.WEEKLY || []).find((w) => w.id === weeklyObj.id);
       const merged = { ...(local || weeklyObj), ...patch };
