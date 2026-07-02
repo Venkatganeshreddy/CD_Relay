@@ -1742,10 +1742,12 @@
     '<rect x="38" y="72" width="44" height="42" rx="10" fill="#cbd5e1" stroke="#64748b" stroke-width="3"/>' +
     '<rect x="48" y="82" width="24" height="14" rx="4" fill="#3b82f6" opacity="0.85"/>' +
     '<circle cx="60" cy="105" r="4" fill="#f43f5e"/>' +
-    // left arm down, right arm raised firing the popper
+    // left arm down, right arm raised firing the popper (grouped: it pumps)
     '<path d="M38 80 Q24 88 26 104" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+    '<g class="arm-fire">' +
     '<path d="M82 80 Q98 70 102 54" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
     '<path d="M96 56 L112 40 L108 60 Z" fill="#f59e0b" stroke="#d97706" stroke-width="2"/>' +
+    '</g>' +
     // legs + feet
     '<rect x="44" y="114" width="10" height="18" rx="4" fill="#64748b"/><rect x="66" y="114" width="10" height="18" rx="4" fill="#64748b"/>' +
     '<rect x="38" y="132" width="22" height="10" rx="5" fill="#94a3b8"/><rect x="60" y="132" width="22" height="10" rx="5" fill="#94a3b8"/>' +
@@ -1757,13 +1759,13 @@
     const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
     const el = document.createElement('div');
     el.className = 'confetti-overlay';
-    // Robot cannon: ~70 pieces blast up-and-out from the robot's muzzle, arc,
-    // then fall. Spread/height are index-derived (deterministic, no RNG).
+    // Robot cannon: 3 volleys of confetti blast up-and-out from the muzzle,
+    // arc, then fall. Spread/height are index-derived (deterministic, no RNG).
     let pieces = '';
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 105; i++) {
       const tx = ((i * 29) % 85) - 42;              // −42vw … +42vw
       const ty = -(45 + ((i * 13) % 36));           // peak −45vh … −80vh
-      const delay = 0.6 + ((i * 7) % 26) / 100;     // fire 0.6–0.85s (after recoil)
+      const delay = 0.6 + (i % 3) * 0.75 + ((i * 7) % 22) / 100; // volleys @ .6s, 1.35s, 2.1s
       const dur = 1.4 + ((i * 11) % 9) / 10;        // 1.4–2.2s flight
       pieces += `<span class="burst-piece" style="--tx:${tx}vw;--ty:${ty}vh;background:${colors[i % colors.length]};animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s"></span>`;
     }
@@ -1774,7 +1776,7 @@
       `<p>You've crossed today's ${target}h. Wrap up whenever you're ready.</p></div>`;
     el.addEventListener('click', () => el.remove());
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 4500);
+    setTimeout(() => el.remove(), 6000);
   }
 
   window.CDC = {

@@ -1938,18 +1938,29 @@ input, select, textarea, .tbl tr td {
   filter: drop-shadow(0 8px 20px rgba(0,0,0,.25));
   animation:
     robot-in 0.55s cubic-bezier(.2,.9,.3,1.25) both,
-    robot-recoil 0.35s ease 0.58s;
+    robot-hop 0.75s ease-in-out 0.58s 3;
+}
+/* The popper arm pumps while the volleys fire. */
+.confetti-overlay .robot .arm-fire {
+  transform-box: fill-box; transform-origin: 0% 100%;
+  animation: arm-pump 0.375s ease-in-out 0.55s 6 alternate;
+}
+@keyframes arm-pump {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-22deg); }
+}
+/* One hop per volley: squash, jump, land. */
+@keyframes robot-hop {
+  0%   { transform: translateY(0) scale(1); }
+  20%  { transform: translateY(2vh) scaleY(.88) scaleX(1.08); }
+  50%  { transform: translateY(-4vh) rotate(-4deg) scale(1.03); }
+  75%  { transform: translateY(.6vh) rotate(2deg) scaleY(.95); }
+  100% { transform: translateY(0) scale(1); }
 }
 @keyframes robot-in {
   0%   { transform: translateY(24vh) scale(.6); opacity: 0; }
   70%  { transform: translateY(-2vh) scale(1.05); opacity: 1; }
   100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-@keyframes robot-recoil {
-  0%   { transform: translateY(0) rotate(0deg) scale(1); }
-  35%  { transform: translateY(3vh) rotate(-9deg) scale(.92); }
-  70%  { transform: translateY(-1vh) rotate(5deg) scale(1.06); }
-  100% { transform: translateY(0) rotate(0deg) scale(1); }
 }
 
 /* Blast at fire time: bright flash + expanding shockwave ring at the popper. */
@@ -1959,13 +1970,13 @@ input, select, textarea, .tbl tr td {
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, #fde68a 45%, transparent 70%);
   opacity: 0;
-  animation: muzzle-pop 0.45s ease-out 0.55s both;
+  animation: muzzle-pop 0.75s ease-out 0.55s 3;
 }
 .confetti-overlay .muzzle-flash::after {
   content: ''; position: absolute; inset: 0;
   border-radius: 50%;
   border: 3px solid rgba(245, 158, 11, .8);
-  animation: shockwave 0.6s cubic-bezier(.1,.7,.3,1) 0.58s both;
+  animation: shockwave 0.75s cubic-bezier(.1,.7,.3,1) 0.58s 3;
 }
 @keyframes muzzle-pop {
   0% { opacity: 0; transform: scale(.2); }
