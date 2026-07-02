@@ -135,9 +135,14 @@ function sb_scopeFilter(currentUser) {
   const CDC = window.CDC;
   const seesAll = ['L3', 'Admin'].includes(currentUser.level)
     || ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.crossDept;
+  const scope = CDC.scopeForUser(currentUser.id);
   const deptIds = new Set((CDC.filterDepartments(currentUser.id) || []).map((d) => d.id));
   return {
-    rec: (r) => seesAll || (r.dept ? deptIds.has(r.dept) : r.by === currentUser.name),
+    // Stack-specific recommendations (r.sub set) are visible only to that
+    // sub-team's viewers; dept-wide recs (no sub) go to every L2 in the dept.
+    rec: (r) => seesAll || (r.dept
+      ? (deptIds.has(r.dept) && (!r.sub || scope.kind !== 'sub' || r.sub === scope.sub))
+      : r.by === currentUser.name),
     mom: (m) => seesAll || !m.dept || deptIds.has(m.dept),
   };
 }
@@ -243,13 +248,32 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
       const items = await CDC.agents.runAdvisor({ ctx, kinds });
       if (!items || !items.length) { setErr('No recommendations returned for this scope.'); return; }
       const now = new Date().toISOString();
+      // Stamp the runner's sub-team so the card is stack-specific: a sub-scoped
+      // L2's run tags their stack; L3/dept-wide runs leave sub empty (dept-wide).
+      const scope = CDC.scopeForUser(currentUser.id);
       const cards = items.map((it, i) => ({
         id: 'rec-' + Date.now().toString(36) + '-' + i,
         kind: it.kind, title: it.title, detail: it.detail || '',
-        dept: it.dept || '', severity: it.severity || 'medium', refs: it.refs || [],
+        dept: it.dept || (scope.dept || ''), sub: it.sub || (scope.kind === 'sub' ? scope.sub : ''),
+        severity: it.severity || 'medium', refs: it.refs || [],
         status: 'new', agent: 'Advisor', ts: now, by: currentUser.name,
       }));
       await CDC.db.addRecommendations(cards);
+      // Route to the respective L2s: notify each targeted sub-team's lead(s).
+      if (CDC.db.notify) {
+        const bySub = {};
+        cards.forEach((c) => { if (c.sub) (bySub[c.sub] = bySub[c.sub] || []).push(c); });
+        for (const [sub, subCards] of Object.entries(bySub)) {
+          const leads = (CDC.USERS || [])
+            .filter((u) => u.sub === sub && u.id !== currentUser.id
+              && (u.level === 'L2' || ['L2', 'SUB_LEAD', 'DEPARTMENT_LEAD'].includes(u.role)))
+            .map((u) => u.id);
+          if (leads.length) CDC.db.notify(leads, {
+            text: `🧠 ${subCards.length} new Advisor recommendation${subCards.length === 1 ? '' : 's'} for ${sub}: ${subCards[0].title}${subCards.length > 1 ? ' …' : ''}`,
+            icon: '🧠', kind: 'recommendation',
+          });
+        }
+      }
       force((n) => n + 1);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setBusy(false); }
@@ -321,7 +345,8 @@ function RecommendationsPanel({ tweaks, currentUser, nav }) {
               <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
                 <Pill tone={k.tone}><Icon name={k.icon} size={11} /> {k.label}</Pill>
                 {r.severity && <Pill tone={r.severity === 'high' ? 'red' : r.severity === 'low' ? 'muted' : 'amber'}>{r.severity}</Pill>}
-                <span className="muted" style={{ fontSize: 11 }}>{deptName}</span>
+                {r.sub && <Pill tone="accent">{r.sub}</Pill>}
+                <span className="muted" style={{ fontSize: 11 }}>{deptName}{r.sub ? '' : ' · dept-wide'}</span>
                 <div style={{ flex: 1 }} />
                 {r.status && r.status !== 'new' && <Pill tone="muted">{r.status}</Pill>}
               </div>
