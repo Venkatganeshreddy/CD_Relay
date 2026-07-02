@@ -1537,27 +1537,6 @@
     'Elective & Compliance Course Development': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
     'Reading Material Prepared for BITS Courses': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
     'Review Video Recordings & PPTs': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'System Efficiency' },
-
-    // ── Activity-type categories adopted from partner team's taxonomy ────────
-    // Meeting/coaching/review types use Executive Ops / Business Impact metrics
-    // so they land in COUNT_NA and don't inflate content-velocity counts.
-    'Content Review': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
-    'Content Revamp': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Relevance' },
-    'Content Quality Issues': { task: 'Industry Review & Quality Check', activity: 'Initiatives / Upgrades', metric: 'Content Effectiveness' },
-    'Skill Assessments Review': { task: 'Assessment Analytics', activity: 'Initiatives / Upgrades', metric: 'Content Effectiveness' },
-    'Process Setting': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
-    'Knowledge Transfers': { task: 'Learning Hours', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
-    'One-on-one Coaching': { task: 'Employee Engagement', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
-    'Team-level Coaching': { task: 'Employee Engagement', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
-    'One-to-one Feedback': { task: 'Employee Engagement', activity: 'Hiring & Developing the best', metric: 'Executive Ops' },
-    'Mid-term Review': { task: 'Reporting Analysis', activity: 'Executive Ops', metric: 'Executive Ops' },
-    'Semester Review': { task: 'Reporting Analysis', activity: 'Executive Ops', metric: 'Executive Ops' },
-    'Day-to-Day': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
-    'Meetings – Adhoc': { task: 'Cross-team Coordination & Adhoc Support', activity: 'Academic Program Operations', metric: 'System Efficiency' },
-    'Meetings – Content (Business requirements)': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
-    'Meetings – Content (Pre-sprint, Sprint & Reviews)': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
-    'Meetings – Product & Content Sync': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Stakeholder Alignment' },
-    'Placement Support': { task: 'Business Requests & Coordination', activity: 'Executive Ops', metric: 'Business Impact' },
   };
 
   const OUTPUT_CATEGORIES = Object.keys(OUTPUT_MAP);
