@@ -1712,7 +1712,10 @@
     if (Array.isArray(cat.products) && cat.products.length) { PRODUCTS.length = 0; PRODUCTS.push(...cat.products); }
     if (Array.isArray(cat.stacks) && cat.stacks.length) { STACKS.length = 0; STACKS.push(...cat.stacks); }
     if (cat.outputMap && typeof cat.outputMap === 'object' && Object.keys(cat.outputMap).length) {
-      for (const k of Object.keys(OUTPUT_MAP)) delete OUTPUT_MAP[k];
+      // ponytail: merge DB catalog ON TOP of code defaults, don't wipe — so
+      // categories added in code always appear. Trade-off: a category deleted
+      // in the admin UI reappears; if hard-removal is ever needed, switch to a
+      // wipe-and-replace keyed off an explicit cat.replace flag.
       Object.assign(OUTPUT_MAP, cat.outputMap);
     }
     OUTPUT_CATEGORIES.length = 0; OUTPUT_CATEGORIES.push(...Object.keys(OUTPUT_MAP));
