@@ -1952,6 +1952,31 @@ input, select, textarea, .tbl tr td {
   100% { transform: translateY(0) rotate(0deg) scale(1); }
 }
 
+/* Blast at fire time: bright flash + expanding shockwave ring at the popper. */
+.confetti-overlay .muzzle-flash {
+  position: absolute; bottom: calc(6vh + 108px); left: calc(50% + 48px);
+  width: 26px; height: 26px; margin: -13px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #fde68a 45%, transparent 70%);
+  opacity: 0;
+  animation: muzzle-pop 0.45s ease-out 0.55s both;
+}
+.confetti-overlay .muzzle-flash::after {
+  content: ''; position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(245, 158, 11, .8);
+  animation: shockwave 0.6s cubic-bezier(.1,.7,.3,1) 0.58s both;
+}
+@keyframes muzzle-pop {
+  0% { opacity: 0; transform: scale(.2); }
+  30% { opacity: 1; transform: scale(2.4); }
+  100% { opacity: 0; transform: scale(3.2); }
+}
+@keyframes shockwave {
+  0% { opacity: .9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(9); }
+}
+
 /* Confetti fired from the robot's muzzle: up-and-out arc, then gravity fall. */
 .burst-piece {
   position: absolute; bottom: calc(6vh + 108px); left: calc(50% + 48px);

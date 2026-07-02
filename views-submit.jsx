@@ -91,7 +91,7 @@ function GlanceView({ tweaks, currentUser, nav }) {
         ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
         : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
       left > 0.01 ? 'amber' : 'green');
-    if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(currentUser.id);
+    if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(currentUser.id, dayHrs);
     setCreating(false);
     setTick((x) => x + 1);
   }
@@ -190,7 +190,7 @@ function SubmitView({ tweaks, currentUser, nav }) {
   // Confetti pop the first time today's session total reaches the 8h floor.
   // CDC.celebrate8h owns the once-per-day guard, shared with the other paths.
   useE(() => {
-    if (totalHrs >= DAILY_TARGET_HRS && window.CDC.celebrate8h) window.CDC.celebrate8h(currentUser.id);
+    if (totalHrs >= DAILY_TARGET_HRS && window.CDC.celebrate8h) window.CDC.celebrate8h(currentUser.id, totalHrs);
   }, [totalHrs]);
 
   // Scroll to bottom on new messages

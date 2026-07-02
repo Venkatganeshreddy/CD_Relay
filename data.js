@@ -1750,8 +1750,10 @@
     '<rect x="44" y="114" width="10" height="18" rx="4" fill="#64748b"/><rect x="66" y="114" width="10" height="18" rx="4" fill="#64748b"/>' +
     '<rect x="38" y="132" width="22" height="10" rx="5" fill="#94a3b8"/><rect x="60" y="132" width="22" height="10" rx="5" fill="#94a3b8"/>' +
     '</svg>';
-  function celebrate8h(userId) {
+  function celebrate8h(userId, hrs) {
     if (document.querySelector('.confetti-overlay')) return; // one at a time
+    const target = (window.CDC && window.CDC.DAILY_TARGET_HRS) || 8;
+    const hrsLbl = Number(hrs) > 0 ? `${Number(hrs).toFixed(1)} hours` : `${target} hours`;
     const colors = ['#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
     const el = document.createElement('div');
     el.className = 'confetti-overlay';
@@ -1766,10 +1768,10 @@
       pieces += `<span class="burst-piece" style="--tx:${tx}vw;--ty:${ty}vh;background:${colors[i % colors.length]};animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s"></span>`;
     }
     el.innerHTML =
-      `<div class="robot">${ROBOT_SVG}</div>` + pieces +
+      `<div class="robot">${ROBOT_SVG}</div><span class="muzzle-flash"></span>` + pieces +
       '<div class="msg"><div style="font-size:34px;margin-bottom:6px">🎉</div>' +
-      '<h2>8 hours in the bag — nice work!</h2>' +
-      "<p>You've hit today's 8h. Wrap up whenever you're ready.</p></div>";
+      `<h2>${hrsLbl} in the bag — nice work!</h2>` +
+      `<p>You've crossed today's ${target}h. Wrap up whenever you're ready.</p></div>`;
     el.addEventListener('click', () => el.remove());
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 4500);

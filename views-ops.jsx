@@ -711,7 +711,7 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
           ? `Logged ${dayHrs.toFixed(1)}h today — ${left.toFixed(1)}h left to reach your ${target}h day. Add another task to fill it.`
           : `Logged ${dayHrs.toFixed(1)}h today — you've completed your ${target}h day. 🎉`,
         left > 0.01 ? 'amber' : 'green');
-      if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(me.id);
+      if (left <= 0.01 && CDC.celebrate8h) CDC.celebrate8h(me.id, dayHrs);
     }
     CDC.db.logInteraction({ agent: '—', flow: 'task_create', inputRef: `Task ${task.id}`, action: 'create',
       reason: `Created "${task.title}" (${m.metric || '—'} · ${m.task || '—'}) for ${owner ? owner.name : form.owner} by ${me.name}`, userId: me.id });
