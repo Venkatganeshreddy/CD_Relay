@@ -193,7 +193,9 @@ function SubmitView({ tweaks, currentUser, nav }) {
   useE(() => {
     if (totalHrs < DAILY_TARGET_HRS) return;
     const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
-    const seenKey = `relay:celebrated8h:${currentUser.id}:${today}`;
+    // v2 in the key: anyone who triggered the broken (emoji-only) version
+    // earlier today still gets the fixed confetti once.
+    const seenKey = `relay:celebrated8h:v2:${currentUser.id}:${today}`;
     if (localStorage.getItem(seenKey)) return;
     localStorage.setItem(seenKey, '1');
     setCelebrate(true);
