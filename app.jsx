@@ -63,8 +63,9 @@ function hashForRoute(r) {
   return '#/' + r.name + (r.params && r.params.id ? '/' + r.params.id : '');
 }
 
-function App({ authMode = 'demo', me = null, realUser = null, impersonating = false }) {
+function App({ authMode = 'demo', me = null, realUser = null, impersonating = false, intro = false }) {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [showIntro, setShowIntro] = useState_a(intro);
   // Everyone (incl. L1/L0 contributors) lands on their dashboard; an explicit
   // URL hash always wins. L1/L0 get a contributor Dashboard in the sidebar too.
   const [route, setRoute] = useState_a(() => routeFromHash() || { name: 'dashboard', params: {} });
@@ -226,6 +227,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
 
   return (
     <div className="app" data-sidebar="open" data-env={t.env}>
+      {showIntro && <IntroSplash user={currentUser} onDone={() => setShowIntro(false)} />}
       <Sidebar
         groupDaily={groupDaily}
         groupDept={groupDept}
@@ -377,6 +379,25 @@ function Sidebar({ groupDaily, groupDept, groupIntel, groupSystem, route, nav, d
         <span>13 agents nominal</span>
         <span className="mono" style={{ marginLeft: 'auto' }}>v0.7.0</span>
       </div>
+    </div>
+  );
+}
+
+// ── Intro splash ─────────────────────────────────────────────────────────
+// Post-login welcome: logo pops with a pulse ring, greeting slides up, then
+// the whole splash wipes upward revealing the dashboard. Fresh logins only.
+function IntroSplash({ user, onDone }) {
+  useEffect_a(() => {
+    const t = setTimeout(onDone, 2600);
+    return () => clearTimeout(t);
+  }, []);
+  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }).format(new Date()));
+  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  return (
+    <div className="intro-splash" onClick={onDone}>
+      <div className="is-logo">re</div>
+      <div className="is-line1">{greet}, {user.name.split(' ')[0]}</div>
+      <div className="is-line2">here's your day at a glance</div>
     </div>
   );
 }
@@ -1333,10 +1354,14 @@ function relayPickUser(setTweak, id) {
 
   if (authMode === 'authed') {
     const impersonating = !!(me && real && me.id !== real.id);
-    root.render(<ErrorBoundary><App authMode="authed" me={me} realUser={real} impersonating={impersonating} /></ErrorBoundary>);
+    // Fresh login (password flag or OAuth return) → play the intro splash once.
+    const freshLogin = sessionStorage.getItem('relay:intro') === '1'
+      || /[?&]code=/.test(location.search) || /access_token=/.test(location.hash);
+    try { sessionStorage.removeItem('relay:intro'); } catch (_) {}
+    root.render(<ErrorBoundary><App authMode="authed" me={me} realUser={real} impersonating={impersonating} intro={freshLogin && !impersonating} /></ErrorBoundary>);
   } else {
     // Clear any stale route hash on login so everyone lands on the dashboard.
-    const landOnDashboard = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {} location.reload(); };
+    const landOnDashboard = () => { try { sessionStorage.setItem('relay:intro', '1'); history.replaceState(null, '', location.pathname + location.search); } catch (_) {} location.reload(); };
     root.render(<ErrorBoundary><LoginScreen onAuthed={landOnDashboard} onDemo={() => root.render(<ErrorBoundary><App authMode="demo" me={null} /></ErrorBoundary>)} /></ErrorBoundary>);
   }
 })();

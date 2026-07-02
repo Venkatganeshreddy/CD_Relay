@@ -1746,7 +1746,7 @@
     '<path d="M38 80 Q24 88 26 104" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
     '<g class="arm-fire">' +
     '<path d="M82 80 Q98 70 102 54" stroke="#64748b" stroke-width="7" fill="none" stroke-linecap="round"/>' +
-    '<path d="M96 56 L112 40 L108 60 Z" fill="#f59e0b" stroke="#d97706" stroke-width="2"/>' +
+    '<path class="popper-cone" d="M96 56 L112 40 L108 60 Z" fill="#f59e0b" stroke="#d97706" stroke-width="2"/>' +
     '</g>' +
     // legs + feet
     '<rect x="44" y="114" width="10" height="18" rx="4" fill="#64748b"/><rect x="66" y="114" width="10" height="18" rx="4" fill="#64748b"/>' +
