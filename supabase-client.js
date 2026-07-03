@@ -247,7 +247,9 @@
     'anthropic/claude-sonnet-4-20250514':   { in: 3.00, out: 15.00 },
     'anthropic/claude-3-5-haiku-20241022':  { in: 0.80, out:  4.00 },
   };
-  const priceFor = (m) => MODEL_PRICES[m] || MODEL_PRICES.smart;
+  // Served model ids can be dated variants (e.g. anthropic/claude-4.5-haiku-20251001)
+  // that aren't literal keys in the table — classify by family before defaulting.
+  const priceFor = (m) => MODEL_PRICES[m] || (/haiku/i.test(m || '') ? MODEL_PRICES.fast : MODEL_PRICES.smart);
   const computeCost = (model, tokensIn, tokensOut) => {
     const p = priceFor(model);
     return ((tokensIn || 0) * p.in + (tokensOut || 0) * p.out) / 1_000_000;
@@ -724,15 +726,16 @@
       const t0 = Date.now();
       const mem = agent ? this.memoryFor(agent) : '';
       const msgs = mem ? [{ role: 'system', content: mem }, ...messages] : messages;
-      let content = '', usage = null, outcome = 'OK', errMsg = null;
+      let content = '', usage = null, outcome = 'OK', errMsg = null, servedModel = model || 'smart';
       try {
         if (!window.CDC.askAgent) throw new Error('agent endpoint unavailable');
         const r = await window.CDC.askAgent({ messages: msgs, model: model || 'smart', agent });
         content = r.content || ''; usage = r.usage || null;
+        servedModel = r.model || servedModel; // actual OpenRouter model, not the smart/fast alias
       } catch (e) { outcome = 'ERROR'; errMsg = e.message || String(e); }
 
       this.logRun({
-        agent, model: model || 'smart', latencyMs: Date.now() - t0, usage, outcome,
+        agent, model: servedModel, latencyMs: Date.now() - t0, usage, outcome,
         input: inputLabel || '', output: outcome === 'OK' ? content : errMsg || '',
       });
 

@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     if (!r.ok) return json({ error: data?.error?.message || "OpenRouter error", status: r.status }, 502);
     return json({
       content: data?.choices?.[0]?.message?.content || "",
-      model: slug,
+      model: data?.model || slug, // the model OpenRouter actually served, not just the requested slug
       usage: data?.usage || null,
     });
   } catch (e) {

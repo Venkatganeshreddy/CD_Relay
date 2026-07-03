@@ -1691,7 +1691,7 @@ function RunsView({ tweaks, currentUser }) {
               <tr key={r.id} onClick={() => setSelected(r)} style={{ cursor: 'default' }}>
                 <td className="mono">{r.id}</td>
                 <td>{r.agent}</td>
-                <td className="mono muted">{r.model}</td>
+                <td className="mono muted" title={r.model}>{(r.model || '').split('/').pop()}</td>
                 <td className="muted mono" style={{ fontSize: 11 }}>{r.ts}</td>
                 <td className="num">{r.latencyMs.toLocaleString()}<span className="muted"> ms</span></td>
                 <td className="num">{r.tokensIn.toLocaleString()} / {r.tokensOut.toLocaleString()}</td>
@@ -1724,6 +1724,8 @@ function RunsView({ tweaks, currentUser }) {
             <div>
               <div className="detail-section">Audit</div>
               <dl className="kv">
+                <dt>When</dt><dd className="mono">{selected.ts}</dd>
+                <dt>Model</dt><dd className="mono">{selected.model}</dd>
                 <dt>Scope hash</dt><dd className="mono">{selected.scopeHash}</dd>
                 <dt>Outcome</dt><dd><Pill tone={selected.outcome === 'OK' ? 'green' : 'amber'}>{selected.outcome}</Pill></dd>
                 <dt>Prompt version</dt><dd className="mono">{selected.agent.toLowerCase()}@v3</dd>
