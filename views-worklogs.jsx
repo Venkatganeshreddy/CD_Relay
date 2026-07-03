@@ -44,22 +44,26 @@ function WorklogsView({ tweaks, currentUser, nav }) {
     setWlTick((n) => n + 1);
   }
 
-  const filtered = useMWL(() => {
-    const cutoff = range === 'today' ? 0 : range === 'week' ? 6 : range === 'month' ? 30 : 999;
-    return all.filter((w) => {
-      if (w.daysAgo > cutoff) return false;
-      if (filterUser !== 'all' && w.userId !== filterUser) return false;
-      if (filterProduct !== 'all' && !(w.products || []).includes(filterProduct)) return false;
-      if (filterStack !== 'all' && !w.stacks.includes(filterStack)) return false;
-      if (filterCat !== 'all' && w.outputCategory !== filterCat) return false;
-      if (filterStatus !== 'all' && w.status !== filterStatus) return false;
-      if (search.trim()) {
-        const blob = (w.userName + ' ' + w.outputCategory + ' ' + w.products.join(' ') + ' ' + Object.values(w.template || {}).join(' ')).toLowerCase();
-        if (!blob.includes(search.toLowerCase())) return false;
-      }
-      return true;
-    });
-  }, [all, range, filterUser, filterProduct, filterStack, filterCat, filterStatus, search]);
+  // Single predicate for both the table and the dropdown option pools. `skip`
+  // names one dimension to ignore, so each dropdown can list the values that
+  // co-occur with all the OTHER active filters (cascading options).
+  const cutoff = range === 'today' ? 0 : range === 'week' ? 6 : range === 'month' ? 30 : 999;
+  const matches = (w, skip) => {
+    if (w.daysAgo > cutoff) return false;
+    if (skip !== 'user' && filterUser !== 'all' && w.userId !== filterUser) return false;
+    if (skip !== 'product' && filterProduct !== 'all' && !(w.products || []).includes(filterProduct)) return false;
+    if (skip !== 'stack' && filterStack !== 'all' && !w.stacks.includes(filterStack)) return false;
+    if (skip !== 'cat' && filterCat !== 'all' && w.outputCategory !== filterCat) return false;
+    if (skip !== 'status' && filterStatus !== 'all' && w.status !== filterStatus) return false;
+    if (search.trim()) {
+      const blob = (w.userName + ' ' + w.outputCategory + ' ' + w.products.join(' ') + ' ' + Object.values(w.template || {}).join(' ')).toLowerCase();
+      if (!blob.includes(search.toLowerCase())) return false;
+    }
+    return true;
+  };
+
+  const filtered = useMWL(() => all.filter((w) => matches(w)),
+    [all, range, filterUser, filterProduct, filterStack, filterCat, filterStatus, search]);
 
   // Aggregates
   const totalHrs = filtered.reduce((s, w) => s + (w.hours || 0), 0);
@@ -75,19 +79,22 @@ function WorklogsView({ tweaks, currentUser, nav }) {
   // AI insights computed from data
   const insights = useMWL(() => computeInsights(filtered, all), [filtered, all]);
 
-  // Available filter options
-  const users = useMWL(() => {
-    const ids = [...new Set(all.map((w) => w.userId))];
-    return ids.map((id) => CDC.lookup.user(id)).filter(Boolean);
-  }, [all]);
+  // Available filter options — each list cascades from the range + the other
+  // active filters, so dropdowns only offer values that yield results. The
+  // current selection is kept in its list even if it no longer matches, so the
+  // <select> never shows a value missing from its options.
+  const keepSel = (list, sel) => (sel !== 'all' && !list.includes(sel) ? [...list, sel] : list);
+  const expectedCount = new Set(all.map((w) => w.userId)).size; // KPI denominator: full scope, not cascaded
+  const users = keepSel([...new Set(all.filter((w) => matches(w, 'user')).map((w) => w.userId))], filterUser)
+    .map((id) => CDC.lookup.user(id)).filter(Boolean);
   // Full product catalog (Product-Audience), so every product is selectable even
   // before it has a logged worklog. Falls back to products present in the data.
   const products = useMWL(() => {
     const cat = (window.CDC.TASK_CATALOG || {}).PRODUCTS || [];
     return cat.length ? cat : [...new Set(all.flatMap((w) => w.products || []))].sort();
   }, [all]);
-  const stacks = useMWL(() => [...new Set(all.flatMap((w) => w.stacks))], [all]);
-  const categories = useMWL(() => [...new Set(all.map((w) => w.outputCategory))].sort(), [all]);
+  const stacks = keepSel([...new Set(all.filter((w) => matches(w, 'stack')).flatMap((w) => w.stacks))], filterStack);
+  const categories = keepSel([...new Set(all.filter((w) => matches(w, 'cat')).map((w) => w.outputCategory))], filterCat).sort();
 
   // Group filtered worklogs for the table
   const grouped = useMWL(() => groupWorklogs(filtered, groupBy), [filtered, groupBy]);
@@ -166,7 +173,7 @@ function WorklogsView({ tweaks, currentUser, nav }) {
         <div className="kpi-tile">
           <div className="kpi-name">Contributors</div>
           <div className="kpi-value">{contributors}</div>
-          <div className="kpi-meta"><span>of {users.length} expected</span></div>
+          <div className="kpi-meta"><span>of {expectedCount} expected</span></div>
         </div>
         <div className="kpi-tile" data-tone={blocked > 0 ? 'amber' : undefined}>
           <div className="kpi-name">Blocked / overdue</div>
