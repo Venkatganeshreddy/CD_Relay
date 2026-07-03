@@ -46,6 +46,38 @@ async function insertRecs(rows: any[]) {
   return r.ok;
 }
 
+// Log the inline model call to ai_runs + activity, mirroring the shape the
+// client (logRun) and Modal (common.py _log) write, so scheduled Advisor runs
+// show on the AI runs page. Best-effort: logging must never fail the cron.
+// (The Modal path logs its own runs Python-side — this covers the fallback.)
+const PRICES: Record<string, [number, number]> = { // $/M tokens, in/out — keep aligned with supabase-client.js MODEL_PRICES
+  "anthropic/claude-sonnet-4.6": [3, 15],
+  "anthropic/claude-haiku-4.5": [1, 5],
+};
+function nowIst(): string {
+  return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 16).replace("T", " ") + " IST";
+}
+async function logAiRun(tin: number, tout: number, latencyMs: number, output: string) {
+  const [pin, pout] = PRICES[MODEL] || [3, 15];
+  const id = "run-" + crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+  const run = {
+    id, agent: "Advisor", model: MODEL, latencyMs, tokensIn: tin, tokensOut: tout,
+    costUsd: (tin * pin + tout * pout) / 1e6, outcome: "OK", ts: nowIst(), scopeHash: "live",
+    via: "cron", input: "Weekly cron", output: output.slice(0, 240),
+  };
+  const actId = "act-" + crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+  const act = { id: actId, kind: "agent", ts: run.ts, text: "Advisor ran · Weekly cron", icon: "⚙" };
+  const post = (table: string, body: unknown) => fetch(`${URL_}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify([body]),
+  });
+  await Promise.all([
+    post("ai_runs", { id: run.id, agent: "Advisor", data: run }),
+    post("activity", { id: actId, data: act }),
+  ]).catch(() => {});
+}
+
 function buildBrief(d: {
   depts: any[]; emps: any[]; logs: any[]; flags: any[]; kpis: any[]; digest: any | null; moms: any[];
 }): string {
@@ -168,6 +200,7 @@ Deno.serve(async (req) => {
 
     // Trace through Helicone when configured (tag: advisor); else direct.
     const HELI = Deno.env.get("HELICONE_API_KEY");
+    const t0 = Date.now();
     const ai = await fetch(
       HELI ? "https://openrouter.helicone.ai/api/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -179,6 +212,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ model: MODEL, messages: [{ role: "user", content: prompt }], max_tokens: 2048, temperature: 0.3 }),
     });
     const aj = await ai.json();
+    const latencyMs = Date.now() - t0;
     if (!ai.ok) return json({ error: aj?.error?.message || "OpenRouter error" }, 502);
     // OpenRouter can soft-fail: HTTP 200 with an {error} body. Surface it
     // instead of silently returning ok:true with 0 cards (cron would never know).
@@ -189,6 +223,8 @@ Deno.serve(async (req) => {
     try { items = JSON.parse((content.match(/\{[\s\S]*\}/) || ["{}"])[0]).items || []; } catch (_) { /* ignore */ }
 
     const r = await persist(items);
+    const u = aj?.usage || {};
+    await logAiRun(u.prompt_tokens || 0, u.completion_tokens || 0, latencyMs, `${r.count} recommendations generated`);
     return json({ ok: r.ok, generated: r.count, model: MODEL, path: "inline" });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);

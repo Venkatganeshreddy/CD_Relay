@@ -78,31 +78,43 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
     setStreamText('');
 
     const sys = buildSystemPrompt(corpus, currentUser);
-    let answer = '';
+    let answer = '', run = null; // run = { content, model, usage, path } from the tier chain
     const t0 = Date.now();
     try {
-      answer = await window.claude.complete({
+      run = await window.claude.complete({
         messages: [
           { role: 'user', content: `${sys}\n\nUser question: ${q}\n\nRespond now.` },
         ],
       });
+      answer = run.content;
     } catch (e) {
       answer = `[error] Could not reach the model right now (${e.message}). Try again in a moment, or ask your L3 if it keeps failing.`;
     }
     const latencyMs = Date.now() - t0;
     // Split any proposed write-actions out of the visible answer.
     const { text: clean, actions } = parseActions(answer);
+
+    // Real model call (not the offline shim) → log it to AI runs like any agent.
+    if (run && (run.path === 'edge' || run.path === 'direct') && CDC.agents && CDC.agents.logRun) {
+      CDC.agents.logRun({
+        agent: 'Concierge', model: run.model, latencyMs, usage: run.usage,
+        input: `Q: ${q.slice(0, 120)}`, output: clean,
+      });
+    }
     await fakeStream(clean, (partial) => setStreamText(partial));
 
     setMessages((m) => [...m, {
       role: 'assistant', content: clean, actions,
       ts: timeNow(),
       meta: {
-        model: 'claude-sonnet-4-6',
+        model: (run && run.model) || 'claude-sonnet-4-6',
         latency: latencyMs,
         confidence: 0.82 + Math.random() * 0.12,
         scopeHash: scopeHashFor(currentUser),
-        tokens: { in: 1240, out: Math.round(answer.length / 4) },
+        tokens: {
+          in: (run && run.usage && run.usage.prompt_tokens) || 1240,
+          out: (run && run.usage && run.usage.completion_tokens) || Math.round(answer.length / 4),
+        },
       },
     }]);
     setStreamText('');

@@ -280,12 +280,14 @@
 
   const offlineShim = (window.claude && window.claude.complete) || null;
   window.claude = window.claude || {};
+  // Returns { content, model, usage, path } so callers can log/display real
+  // token usage. path: 'edge' | 'direct' | 'offline' | 'none'.
   window.claude.complete = async ({ messages }) => {
     // Tier 1: Edge Function
     if (window.CDC.askAgent) {
       try {
         const r = await window.CDC.askAgent({ messages, model: 'smart' });
-        if (r && r.content) return r.content;
+        if (r && r.content) return { content: r.content, model: r.model || 'smart', usage: r.usage || null, path: 'edge' };
       } catch (e) {
         console.warn('[Relay] askAgent failed, trying OpenRouter:', e.message || e);
       }
@@ -293,13 +295,13 @@
     // Tier 2: Direct OpenRouter
     try {
       const r = await directOpenRouter({ messages, model: 'smart' });
-      if (r && r.content) return r.content;
+      if (r && r.content) return { content: r.content, model: r.model || 'smart', usage: r.usage || null, path: 'direct' };
     } catch (e) {
       console.warn('[Relay] OpenRouter failed, falling back to offline shim:', e.message || e);
     }
     // Tier 3: Offline keyword shim
-    if (offlineShim) return offlineShim({ messages });
-    return '[error] No LLM backend available. Paste an OpenRouter API key in the Concierge header to enable real responses.';
+    if (offlineShim) return { content: await offlineShim({ messages }), model: 'offline-shim', usage: null, path: 'offline' };
+    return { content: '[error] No LLM backend available. Paste an OpenRouter API key in the Concierge header to enable real responses.', model: 'none', usage: null, path: 'none' };
   };
 
   // ── Writes (Phase 4): optimistic-local always; remote when signed in ──────
@@ -696,6 +698,27 @@
           rules.map((r) => `• ${r}`).join('\n')
         : '';
     },
+    // Log one model invocation as an ai_runs + activity entry (local + remote).
+    // Reused by run() below and by Concierge (views-copilot) which calls the
+    // model through the claude.complete tier chain instead of run().
+    logRun({ agent, model, latencyMs, usage, outcome = 'OK', input = '', output = '' }) {
+      const tokensIn = usage ? (usage.prompt_tokens || 0) : 0;
+      const tokensOut = usage ? (usage.completion_tokens || 0) : 0;
+      const run = {
+        id: rid('run-'), agent, model, latencyMs,
+        tokensIn, tokensOut,
+        costUsd: computeCost(model, tokensIn, tokensOut),
+        outcome, ts: nowStr(), scopeHash: 'live', input,
+        output: String(output || '').slice(0, 240),
+      };
+      const act = { id: rid('act-'), kind: 'agent', ts: nowStr(),
+        text: `${agent} ${outcome === 'OK' ? 'ran' : 'failed'}${input ? ' · ' + input : ''}`, icon: '⚙' };
+      if (Array.isArray(window.CDC.AI_RUNS)) window.CDC.AI_RUNS.unshift(run);
+      if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(act);
+      remote(() => sb.from('ai_runs').insert({ id: run.id, agent, data: run }));
+      remote(() => sb.from('activity').insert({ id: act.id, data: act }));
+      return run;
+    },
     // Generic run: calls the model, logs an ai_runs + activity entry.
     async run({ agent, model, messages, inputLabel }) {
       const t0 = Date.now();
@@ -708,22 +731,10 @@
         content = r.content || ''; usage = r.usage || null;
       } catch (e) { outcome = 'ERROR'; errMsg = e.message || String(e); }
 
-      const tokensIn = usage ? (usage.prompt_tokens || 0) : 0;
-      const tokensOut = usage ? (usage.completion_tokens || 0) : 0;
-      const usedModel = model || 'smart';
-      const run = {
-        id: rid('run-'), agent, model: usedModel, latencyMs: Date.now() - t0,
-        tokensIn, tokensOut,
-        costUsd: computeCost(usedModel, tokensIn, tokensOut),
-        outcome, ts: nowStr(), scopeHash: 'live', input: inputLabel || '',
-        output: (outcome === 'OK' ? content : errMsg || '').slice(0, 240),
-      };
-      const act = { id: rid('act-'), kind: 'agent', ts: nowStr(),
-        text: `${agent} ${outcome === 'OK' ? 'ran' : 'failed'}${inputLabel ? ' · ' + inputLabel : ''}`, icon: '⚙' };
-      if (Array.isArray(window.CDC.AI_RUNS)) window.CDC.AI_RUNS.unshift(run);
-      if (Array.isArray(window.CDC.ACTIVITY)) window.CDC.ACTIVITY.unshift(act);
-      remote(() => sb.from('ai_runs').insert({ id: run.id, agent, data: run }));
-      remote(() => sb.from('activity').insert({ id: act.id, data: act }));
+      this.logRun({
+        agent, model: model || 'smart', latencyMs: Date.now() - t0, usage, outcome,
+        input: inputLabel || '', output: outcome === 'OK' ? content : errMsg || '',
+      });
 
       if (outcome === 'ERROR') throw new Error(errMsg);
       return content;
