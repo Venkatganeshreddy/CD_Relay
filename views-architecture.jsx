@@ -1,337 +1,221 @@
-// CD-Copilot — Architecture / System Map.
-// One-page visualization of the platform: data flow, agents, loops, memory,
-// knowledge layer, tool/token expense — the "story of how it works" surface
-// the leadership team can review.
+// Relay — Codex / System architecture map.
+// One end-to-end diagram of the whole application: people → SPA → agents →
+// models → data → surfaces, plus the Engram learning loop, the knowledge
+// round-trip, MCP servers and the adjacent voice flow. Hover any node for
+// what/tech/flows; click an agent node for live stats from window.CDC.AI_RUNS.
 
 const { useState: useStA, useMemo: useMA, useEffect: useEA, useRef: useRA } = React;
 
-// ── Architecture spec ─────────────────────────────────────────────────
-// Nodes laid out on a virtual grid (x,y in px from top-left).
+// ── Diagram spec ────────────────────────────────────────────────────────
+// Absolute px coords on a 1080×1600 stage. Nodes default to 200×76.
+// Groups are dashed containers and are also valid edge endpoints.
+const ARCH_GROUPS = [
+  { id: 'g-voice',     label: 'Voice check-ins — adjacent',          x: 8,   y: 4,    w: 224, h: 232 },
+  { id: 'g-ui',        label: 'Relay SPA — GitHub Pages · Vercel',   x: 396, y: 180,  w: 248, h: 242 },
+  { id: 'g-client',    label: 'In-browser agents',                   x: 284, y: 470,  w: 472, h: 132 },
+  { id: 'g-knowledge', label: 'Knowledge — Obsidian round-trip',     x: 838, y: 430,  w: 224, h: 232 },
+  { id: 'g-edge',      label: 'Supabase Edge Functions',             x: 284, y: 640,  w: 472, h: 132 },
+  { id: 'g-engram',    label: 'Engram — learning loop',              x: 8,   y: 740,  w: 224, h: 232 },
+  { id: 'g-modal',     label: 'Modal — Python LangGraph (agents/)',  x: 284, y: 810,  w: 472, h: 332 },
+  { id: 'g-data',      label: 'Supabase — Postgres · RLS · Auth',    x: 284, y: 1200, w: 472, h: 132 },
+  { id: 'g-mcp',       label: 'MCP servers — read-only (mcp/)',      x: 838, y: 1090, w: 224, h: 332 },
+  { id: 'g-surfaces',  label: 'Surfaces — rendered back in the SPA', x: 156, y: 1440, w: 728, h: 132 },
+];
+
 const ARCH_NODES = [
-  // Data sources (left column)
-  { id: 'submit',   kind: 'source', x: 30,  y: 30,  title: 'Submit flow',   sub: 'Chat-based EOD daily report', icon: 'edit' },
-  { id: 'mom',      kind: 'source', x: 30,  y: 130, title: 'MOM upload', sub: 'Meeting transcripts → action items', icon: 'weekly' },
-  { id: 'teams',    kind: 'external', x: 30, y: 230, title: 'Microsoft Teams', sub: 'Nudge chases · notifications', icon: 'plug' },
-  { id: 'mcp-in',   kind: 'external', x: 30, y: 330, title: 'External MCPs', sub: 'JIRA · Drive · HRMS (Phase 4)', icon: 'plug' },
-
-  // Storage middle column
-  { id: 'pg',       kind: 'storage', x: 290, y: 30, title: 'Supabase', sub: 'Postgres + RLS · employees · reports · tasks', icon: 'admin' },
-  { id: 'redis',    kind: 'storage', x: 290, y: 130, title: 'Edge Function', sub: 'relay-agent · OpenRouter proxy (JWT)', icon: 'refresh' },
-  { id: 'knowledge',kind: 'storage', x: 290, y: 230, title: 'Knowledge layer', sub: 'knowledge_docs · Obsidian vault round-trip', icon: 'admin' },
-  { id: 'memory',   kind: 'storage', x: 290, y: 330, title: 'Memory graph', sub: 'Engram interactions · Cartographer', icon: 'admin' },
-
-  // Agents (third column, vertically arranged)
-  { id: 'a-intake', kind: 'agent', x: 560, y: 10,  title: 'Scribe', sub: 'Extract action items from MOM', icon: 'sparkles' },
-  { id: 'a-dq',     kind: 'agent', x: 560, y: 100, title: 'Sentry', sub: 'Surface blocked + overdue tasks', icon: 'flag' },
-  { id: 'a-cop',    kind: 'agent', x: 560, y: 190, title: 'Concierge', sub: 'Grounded chat — how-to, Q&A, feedback', icon: 'copilot' },
-  { id: 'a-week',   kind: 'agent', x: 560, y: 280, title: 'Rollup', sub: 'Per-dept weekly report draft', icon: 'weekly' },
-  { id: 'a-month',  kind: 'agent', x: 560, y: 370, title: 'Ledger', sub: 'Monthly worklog compile', icon: 'weekly' },
-  { id: 'a-esc',    kind: 'agent', x: 560, y: 460, title: 'Dispatcher', sub: 'Match items → people, draft tasks', icon: 'sparkles' },
-
-  // Output surfaces (right column)
-  { id: 'o-dash',   kind: 'ui',     x: 830, y: 30,  title: 'Dashboard', sub: 'Pavan G · per-dept health' },
-  { id: 'o-draft',  kind: 'output', x: 830, y: 130, title: 'Weekly drafts', sub: 'Approve · edit · publish' },
-  { id: 'o-tasks',  kind: 'output', x: 830, y: 230, title: 'Suggested tasks', sub: 'Triage queue' },
-  { id: 'o-copilot',kind: 'ui',     x: 830, y: 330, title: 'Copilot UI / MCP', sub: 'Web + Claude Desktop' },
-  { id: 'o-notif',  kind: 'output', x: 830, y: 430, title: 'Notifications', sub: 'Teams · email · in-app (Phase 3)' },
+  { id: 'users',        kind: 'source',   x: 420, y: 44,   title: 'L1 · L2 · L3 · Admin',    sub: 'Browser sign-in — RBAC-scoped everything', ico: '👥' },
+  { id: 'voice',        kind: 'external', x: 20,  y: 44,   title: 'Hooman Labs + Make.com',  sub: 'Daily check-in calls to the team', ico: '📞' },
+  { id: 'gsheet',       kind: 'external', x: 20,  y: 144,  title: 'Google Sheet',            sub: 'Call responses land here (not Supabase)', ico: '📄' },
+  { id: 'spa',          kind: 'ui',       x: 420, y: 220,  title: 'Relay UI — React + Babel', sub: 'CD-Copilot.html · views-*.jsx · no build step', ico: '🖥️' },
+  { id: 'sbclient',     kind: 'service',  x: 420, y: 330,  title: 'supabase-client.js',      sub: 'Paged RLS reads · auth · optimistic writes · agent funnel', ico: '🔌' },
+  { id: 'dispatcher',   kind: 'agent',    x: 300, y: 510,  title: 'Dispatcher',              sub: 'Deterministic routing of MoM action items — no LLM', ico: '🧭' },
+  { id: 'concierge',    kind: 'agent',    x: 540, y: 510,  title: 'Concierge',               sub: 'Grounded RBAC chat · citation chips · logs runs', ico: '💬' },
+  { id: 'obsidian',     kind: 'source',   x: 850, y: 470,  title: 'Obsidian vault',          sub: 'agents · guidelines · people · org docs', ico: '📚' },
+  { id: 'kdocs',        kind: 'storage',  x: 850, y: 570,  title: 'knowledge_docs',          sub: 'Supabase table — grounds Concierge', ico: '📖' },
+  { id: 'advisor-cron', kind: 'service',  x: 300, y: 680,  title: 'advisor-cron',            sub: 'Weekly digest — Modal-first, inline fallback · logs ai_runs', ico: '⏰' },
+  { id: 'relay',        kind: 'service',  x: 540, y: 680,  title: 'relay-agent',             sub: 'JWT-verified OpenRouter proxy · Modal forwarder · exact spend', ico: '⚡' },
+  { id: 'openrouter',   kind: 'external', x: 850, y: 730,  title: 'OpenRouter',              sub: 'Sonnet 4.6 smart · Haiku 4.5 fast · usage + spend API', ico: '🧠' },
+  { id: 'engram-store', kind: 'storage',  x: 20,  y: 780,  title: 'engram_interactions',     sub: 'Human corrections + eval sets — edits/rejects teach', ico: '🧬' },
+  { id: 'agent-memory', kind: 'storage',  x: 20,  y: 880,  title: 'relay_agents.memory',     sub: 'Curator-distilled rules per agent', ico: '💾' },
+  { id: 'scribe',       kind: 'agent',    x: 300, y: 850,  title: 'Scribe',                  sub: 'MoM transcript → structured action items', ico: '✍️' },
+  { id: 'rollup',       kind: 'agent',    x: 540, y: 850,  title: 'Rollup',                  sub: 'Week of reports → cited weekly digest', ico: '📋' },
+  { id: 'curator',      kind: 'agent',    x: 300, y: 950,  title: 'Curator',                 sub: 'Distills corrections into 3–7 rules', ico: '🎓' },
+  { id: 'sentry',       kind: 'agent',    x: 540, y: 950,  title: 'Sentry',                  sub: 'Blocked/overdue task → escalation line', ico: '🚨' },
+  { id: 'advisor',      kind: 'agent',    x: 420, y: 1050, title: 'Advisor',                 sub: 'Knowledge + captures → recommendation cards', ico: '💡' },
+  { id: 'postgres',     kind: 'storage',  x: 300, y: 1240, title: 'Postgres + RLS + Auth',   sub: 'worklogs · reports · digests · tasks · flags · kpis · moms …', ico: '🗄️' },
+  { id: 'telemetry',    kind: 'storage',  x: 540, y: 1240, title: 'Run telemetry',           sub: 'ai_runs · activity — model · tokens · cost per call', ico: '📈' },
+  { id: 'claude-mcp',   kind: 'external', x: 850, y: 1130, title: 'Claude Desktop / Code',   sub: 'MCP clients', ico: '🤖' },
+  { id: 'mcp-local',    kind: 'service',  x: 850, y: 1230, title: 'server.mjs',              sub: 'Local stdio transport', ico: '🔗' },
+  { id: 'mcp-remote',   kind: 'service',  x: 850, y: 1330, title: 'remote-server.mjs',       sub: 'Render HTTP · bearer CONNECTOR_TOKEN', ico: '🌐' },
+  { id: 's-ops',        kind: 'ui',       x: 180, y: 1480, title: 'Team surfaces',           sub: 'Dashboard · Worklogs · Weekly · Goals → Deliverables', ico: '📊' },
+  { id: 's-review',     kind: 'output',   x: 420, y: 1480, title: 'Review queues',           sub: 'Digest approvals · MoM tasks · recs → owning L2 · escalations', ico: '✅' },
+  { id: 's-observ',     kind: 'ui',       x: 660, y: 1480, title: 'AI observability',        sub: 'AI runs + exact spend · Engram · Agent Farm · Feedback', ico: '👁️' },
 ];
 
+// kind: data (solid) · memory (blue dashed) · loop (accent dashed) · approval (amber).
+// viaX routes an orthogonal elbow through a reserved vertical corridor.
 const ARCH_EDGES = [
-  // Sources → Storage
-  { from: 'submit', to: 'pg', label: 'write', kind: 'data' },
-  { from: 'mom', to: 'pg', label: 'upload', kind: 'data' },
-  { from: 'teams', to: 'pg', label: 'sync', kind: 'data' },
-  { from: 'mcp-in', to: 'pg', label: '(Phase 4)', kind: 'data' },
-
-  // Agents run via Edge Function (OpenRouter)
-  { from: 'pg', to: 'redis', kind: 'data', label: 'invoke' },
-
-  // Storage → Agents (RBAC scoped)
-  { from: 'pg', to: 'a-intake', kind: 'data', label: 'rows' },
-  { from: 'pg', to: 'a-dq', kind: 'data' },
-  { from: 'pg', to: 'a-cop', kind: 'data', label: 'scoped' },
-  { from: 'pg', to: 'a-week', kind: 'data' },
-  { from: 'pg', to: 'a-month', kind: 'data' },
-  { from: 'pg', to: 'a-esc', kind: 'data' },
-
-  // Knowledge feed
-  { from: 'knowledge', to: 'a-intake', kind: 'memory' },
-  { from: 'knowledge', to: 'a-cop', kind: 'memory' },
-  { from: 'knowledge', to: 'a-week', kind: 'memory' },
-
-  // Memory loops
-  { from: 'memory', to: 'a-cop', kind: 'memory', label: 'recall' },
-  { from: 'a-cop', to: 'memory', kind: 'memory', label: 'write' },
-  { from: 'a-week', to: 'memory', kind: 'memory' },
-
-  // Agents → UI/Output
-  { from: 'pg', to: 'o-dash', label: 'dept health' },
-  { from: 'a-intake', to: 'o-tasks' },
-  { from: 'a-dq', to: 'o-tasks' },
-  { from: 'a-week', to: 'o-draft' },
-  { from: 'a-month', to: 'o-draft' },
-  { from: 'a-esc', to: 'o-tasks' },
-  { from: 'a-cop', to: 'o-copilot' },
-  { from: 'a-dq', to: 'o-notif' },
-
-  // Approval loop back
-  { from: 'o-draft', to: 'a-week', kind: 'approval', label: 'edit → re-run' },
-  { from: 'o-tasks', to: 'a-esc', kind: 'approval', label: 'approve' },
+  // Spine
+  { from: 'users',        to: 'spa',          label: 'sign in · submit · review' },
+  { from: 'spa',          to: 'sbclient',     label: 'all reads · writes · agent calls' },
+  { from: 'sbclient',     to: 'dispatcher',   label: 'MoM action items' },
+  { from: 'sbclient',     to: 'concierge',    label: 'chat turns' },
+  { from: 'concierge',    to: 'relay',        label: 'claude.complete — tier 1' },
+  { from: 'sbclient',     to: 'relay',        label: 'agents.run() · JWT', viaX: 800, toDy: -14 },
+  { from: 'relay',        to: 'openrouter',   label: 'chat proxy · spend API' },
+  { from: 'relay',        to: 'g-modal',      label: 'forward: MODAL_<agent>_URL' },
+  { from: 'advisor-cron', to: 'g-modal',      label: 'Modal-first' },
+  { from: 'g-modal',      to: 'openrouter',   label: 'llm.py — retry · tier fallback' },
+  { from: 'g-modal',      to: 'postgres',     label: 'structured output → tables' },
+  { from: 'g-modal',      to: 'telemetry',    label: 'ai_runs · activity — every run' },
+  { from: 'sbclient',     to: 'postgres',     label: 'CRUD — paged RLS reads', viaX: 240, toDy: -18 },
+  { from: 'dispatcher',   to: 'postgres',     label: 'tasks · engram writes', viaX: 252, toDy: 18 },
+  { from: 'postgres',     to: 's-ops',        label: 'RLS-scoped rows' },
+  { from: 'postgres',     to: 's-review',     label: 'drafts · suggestions' },
+  { from: 'telemetry',    to: 's-observ',     label: 'runs · exact cost' },
+  // Side flows
+  { from: 'voice',        to: 'users',        label: 'daily check-in call' },
+  { from: 'voice',        to: 'gsheet',       label: 'responses' },
+  { from: 'obsidian',     to: 'kdocs',        label: 'scripts/import · export', kind: 'memory' },
+  { from: 'kdocs',        to: 'concierge',    label: 'grounds answers · cites', kind: 'memory' },
+  { from: 'claude-mcp',   to: 'mcp-local',    label: 'stdio', kind: 'memory' },
+  { from: 'claude-mcp',   to: 'mcp-remote',   label: 'HTTP · bearer', kind: 'memory', viaX: 1066 },
+  { from: 'mcp-local',    to: 'g-data',       label: 'read-only tools', kind: 'memory' },
+  { from: 'mcp-remote',   to: 'g-data',       kind: 'memory' },
+  // Loops
+  { from: 'g-surfaces',   to: 'g-engram',     label: 'approve · edit · reject', kind: 'approval' },
+  { from: 'engram-store', to: 'curator',      label: '5+ corrections → distill', kind: 'loop' },
+  { from: 'curator',      to: 'agent-memory', label: '3–7 rules', kind: 'loop', viaX: 264 },
+  { from: 'agent-memory', to: 'g-modal',      label: 'memoryFor() → every run', kind: 'loop' },
+  { from: 'postgres',     to: 'advisor-cron', label: 'pg_cron Mon 06:30 IST · x-cron-secret', kind: 'loop', viaX: 276 },
 ];
 
-// Agents catalog with deployment links + tool list + costs
-const AGENTS = [
-  {
-    id: 'a-intake', name: 'Scribe', status: 'ok',
-    purpose: 'Extracts decisions + action items from an uploaded MOM transcript into structured items.',
-    model: 'claude-sonnet-4-6', trigger: 'new MOM uploaded',
-    lastRun: '2026-05-26 11:14', avgLatency: 4100, costPerRun: 0.024, runsToday: 7,
-    deployUrl: 'edge:relay-agent',
-    tools: ['mom.read', 'items.extract', 'knowledge.lookup'],
-  },
-  {
-    id: 'a-dq', name: 'Sentry', status: 'ok',
-    purpose: 'Continuous scan surfacing blocked + overdue tasks. Deterministic, no LLM call.',
-    model: 'deterministic', trigger: 'continuous (5-min)',
-    lastRun: '2026-05-26 11:30', avgLatency: 142, costPerRun: 0, runsToday: 288,
-    deployUrl: 'edge:relay-agent',
-    tools: ['pg.scan', 'flags.emit', 'tasks.suggest'],
-  },
-  {
-    id: 'a-cop', name: 'Concierge', status: 'ok',
-    purpose: 'Permission-scoped grounded chat — how-to, feedback, cited Q&A over reports / KPIs / tasks / vault.',
-    model: 'claude-sonnet-4-6', trigger: 'user opens chat (web + MCP)',
-    lastRun: '2026-05-26 11:32', avgLatency: 2310, costPerRun: 0.018, runsToday: 43,
-    deployUrl: 'edge:relay-agent',
-    tools: ['pg.scoped-read', 'knowledge.search', 'cite.builder'],
-  },
-  {
-    id: 'a-week', name: 'Rollup', status: 'warning',
-    purpose: 'Per-dept weekly draft (highlights/risks/asks) from last 7 days of reports. Human approval required.',
-    model: 'claude-sonnet-4-6', trigger: 'cron Mon 06:00 IST · manual',
-    lastRun: '2026-05-25 06:02', avgLatency: 9120, costPerRun: 0.078, runsToday: 0,
-    deployUrl: 'edge:relay-agent',
-    tools: ['pg.dept-window', 'kpi.compute', 'cite.builder'],
-    note: 'DS&Algo draft confidence 0.62 — flagged for review.',
-  },
-  {
-    id: 'a-month', name: 'Ledger', status: 'idle',
-    purpose: 'Compiles monthly worklogs + carryforward task suggestions on first of month.',
-    model: 'claude-sonnet-4-6', trigger: 'cron 1st 07:00 IST · manual',
-    lastRun: '2026-05-01 07:00', avgLatency: 14200, costPerRun: 0.14, runsToday: 0,
-    deployUrl: 'edge:relay-agent',
-    tools: ['pg.month-window', 'worklog.compile', 'cite.builder'],
-  },
-  {
-    id: 'a-esc', name: 'Dispatcher', status: 'warning',
-    purpose: 'Matches Scribe action items to people, drafts tasks with owner + reason.',
-    model: 'claude-haiku-4-5', trigger: 'after Scribe',
-    lastRun: '2026-05-26 11:15', avgLatency: 1100, costPerRun: 0.012, runsToday: 7,
-    deployUrl: 'edge:relay-agent',
-    tools: ['pg.scoped-read', 'owner.infer', 'tasks.draft'],
-    note: 'Owner inference accuracy below threshold this week.',
-  },
-];
+// Hover popover content. In/out flows are derived from ARCH_EDGES, not authored.
+const ARCH_DETAILS = {
+  users:          { what: 'Everyone in CD signs into the same SPA; roles (L1/L2/L3/Admin) scope every read and write through Supabase RLS — the same query returns different rows per person.', tech: ['views-auth.jsx', 'Supabase Auth', 'RLS policies'] },
+  voice:          { what: 'Semi-detached daily check-in voice agent: Hooman Labs places the calls, a Make.com scenario orchestrates; results do not enter Supabase.', tech: ['voice-agent/hooman-config.md'] },
+  gsheet:         { what: 'Ledger for voice call outcomes — timestamp, tasks done, blockers, status, summary.', tech: ['Google Sheets via Make.com'] },
+  spa:            { what: 'Static single-page app — React 18 + in-browser Babel, no build step. Deployed from main to GitHub Pages, mirrored on Vercel. One view module per screen.', tech: ['CD-Copilot.html', 'app.jsx · views-*.jsx', 'vercel.json'] },
+  sbclient:       { what: 'The data spine: paged RLS-scoped loads into window.CDC, auth session, optimistic local+remote writes, the agents funnel (run → logRun), and the claude.complete 3-tier chain (Edge Function → direct OpenRouter → offline shim).', tech: ['supabase-client.js', 'window.CDC.db · CDC.agents', 'computeCost · fetchOpenRouterSpend'] },
+  dispatcher:     { what: 'Deterministic JS — routes each Scribe action item to an owner via tiered name matching and drafts tasks. Code, not an LLM; that is why it has no run cost.', tech: ['views-relay.jsx (MoM loader)', 'CDC.db.addTask'] },
+  concierge:      { what: 'Permission-scoped grounded chat over reports, KPIs, tasks and knowledge docs; answers carry citation chips; every real model turn is logged to ai_runs.', tech: ['views-copilot.jsx', 'claude.complete tier chain', 'agents.logRun'] },
+  obsidian:       { what: 'Knowledge source of truth, edited in Obsidian; round-trips to the knowledge_docs table via import/export scripts.', tech: ['obsidian-vault/', 'scripts/import · export_obsidian.cjs'] },
+  kdocs:          { what: 'Imported knowledge layer that grounds Concierge answers — how-tos, SOPs, agent docs, people and org pages, all citable.', tech: ['knowledge_docs table'] },
+  'advisor-cron': { what: 'Weekly recommendations job — pg_cron fires it Mon 06:30 IST with x-cron-secret; tries the Modal Advisor first, falls back to an inline prompt; logs its run to ai_runs either way.', tech: ['supabase/functions/advisor-cron', 'scripts/setup_advisor_cron.cjs'] },
+  relay:          { what: 'JWT-verified Edge Function: OpenRouter chat proxy (the key never reaches the browser), forwarder to Modal agents, and action:"spend" returning the exact OpenRouter cost. Optional Helicone tracing.', tech: ['supabase/functions/relay-agent/index.ts', 'OPENROUTER_API_KEY · MODAL_<AGENT>_URL secrets'] },
+  openrouter:     { what: 'Model gateway: Claude Sonnet 4.6 (smart) and Haiku 4.5 (fast). The served model id and token usage flow back into every logged run; usage buckets power the exact-cost tile on AI runs.', tech: ['anthropic/claude-sonnet-4.6', 'anthropic/claude-haiku-4.5', 'auth/key spend API'] },
+  'engram-store': { what: 'The correction signal: AI draft vs what the human kept, plus the reason. Only edits and rejects teach — accepts are ignored. Corrections also become eval sets.', tech: ['engram interactions · eval sets', 'views-engram.jsx'] },
+  'agent-memory': { what: 'Where Curator writes its distilled rules; memoryFor() injects them into each agent’s next system prompt — the step that closes the learning loop.', tech: ['relay_agents.data.memory', 'CDC.agents.memoryFor'] },
+  scribe:         { what: 'Extracts agenda, attendees, summary and action items from committed MoM transcripts. Pydantic-structured output, prompt-injection fencing, retry with model-tier fallback.', tech: ['agents/graphs/scribe.py', 'Modal · LangGraph'] },
+  rollup:         { what: 'Consolidates a week of daily reports into a manager-ready digest with citations, ground-checked and retried if weak. Also writes per-sub weekly digest lines.', tech: ['agents/graphs/rollup.py', 'Modal · LangGraph'] },
+  curator:        { what: 'Reads accumulated human corrections, groups them per agent, distills 3–7 standing rules and persists them to relay_agents.memory.', tech: ['agents/graphs/curator.py', 'Modal · LangGraph'] },
+  sentry:         { what: 'Turns a blocked or overdue task event into a crisp one-line escalation brief for the right level, with length enforcement.', tech: ['agents/graphs/sentry.py', 'Modal · LangGraph'] },
+  advisor:        { what: 'Reads the org brief (roster, load, flags, KPIs, digest, MoMs) and proposes grounded recommendation cards by kind: operational, process, priorities, people.', tech: ['agents/graphs/advisor.py', 'Modal · LangGraph'] },
+  postgres:       { what: 'System of record behind RLS: worklogs, reports, weekly digests, tasks, flags, KPIs, MoMs, recommendations, knowledge docs, agent memory, catalog, feedback.', tech: ['supabase/ schema + policies'] },
+  telemetry:      { what: 'Every model call logged: agent, served model, tokens in/out, cost, latency, outcome, scope. Written by the client funnel, the Modal agents and advisor-cron alike.', tech: ['ai_runs · activity tables', 'agents.logRun'] },
+  'claude-mcp':   { what: 'Claude Desktop and Claude Code connect as MCP clients to browse Relay data read-only — ask questions about worklogs, runs or tasks from outside the app.', tech: ['Model Context Protocol'] },
+  'mcp-local':    { what: 'Local stdio MCP server wrapping the Supabase tables as read tools. One generic query tool covers every JSONB table.', tech: ['mcp/server.mjs'] },
+  'mcp-remote':   { what: 'Same tools over Streamable HTTP hosted on Render, gated by a bearer CONNECTOR_TOKEN — reachable from claude.ai.', tech: ['mcp/remote-server.mjs', 'render.yaml → cd-relay-mcp'] },
+  's-ops':        { what: 'Day-to-day team surfaces rendered from RLS-scoped rows: dashboard health, department worklogs with cascading filters, weekly summaries, goals → deliverables.', tech: ['views-dashboard · worklogs · relay · goals'] },
+  's-review':     { what: 'Human-in-the-loop queues: approve/edit/publish weekly digests, triage MoM-suggested tasks, Second-Brain recommendations routed to the owning L2, tiered escalations.', tech: ['views-ops.jsx · views-relay.jsx'] },
+  's-observ':     { what: 'Cost and quality observability: AI runs with exact OpenRouter spend and range filters, Engram corrections, the Agent Farm leaderboard, app feedback.', tech: ['RunsView · views-engram · views-farm'] },
+};
 
-// Loops to surface explicitly
-const LOOPS = [
-  {
-    id: 'l-approval',
-    title: 'Approval loop (writes)',
-    icon: 'check',
-    sub: 'Any AI-drafted write goes through a human approve / edit / reject before persisting.',
-    steps: [
-      'Agent emits draft (e.g. weekly summary).',
-      'Surfaces in approval inbox with confidence + citations.',
-      'Human approves, edits, or rejects.',
-      'On approve → published; on edit → diff saved + re-cited; on reject → drop with reason.',
-      'Decision logged to AIAgentRun for replay.',
-    ],
-  },
-  {
-    id: 'l-escalation',
-    title: 'Escalation loop',
-    icon: 'flag',
-    sub: 'How a blocker becomes a task becomes a notification becomes resolved.',
-    steps: [
-      'Blocker mentioned in report → tagged on item (deterministic).',
-      'Escalation agent scans: > 72h old? cited 3+ times? owner missing?',
-      'Emits Task with status=SUGGESTED + reason + citations.',
-      'Pavan G or lead approves → status=ACTIVE.',
-      'Notifications fire (Slack + email) if still open at 24h.',
-    ],
-  },
-  {
-    id: 'l-mom',
-    title: 'MOM / meeting loop',
-    icon: 'weekly',
-    sub: 'Recorded meetings flow back as Action Items and feed weekly drafts.',
-    steps: [
-      'Meeting recorded → transcript ingested (Phase 4 via Drive MCP).',
-      'Intake agent extracts decisions + action items.',
-      'Action items appear as suggested tasks; decisions feed weekly Highlights.',
-      'Owners get a Slack DM with their items.',
-    ],
-  },
-  {
-    id: 'l-tool-expense',
-    title: 'Tool & token expense loop',
-    icon: 'runs',
-    sub: 'Every agent run records model, tokens, cost, scopeHash. Aggregates feed cost dashboard.',
-    steps: [
-      'Agent invocation starts → AIAgentRun row created.',
-      'Provider call returns tokens_in / tokens_out / model.',
-      'Cost computed server-side from a versioned price table.',
-      'Daily rollup → cost-by-agent, cost-by-user. Alert if budget > 80%.',
-      'Per-token-budget caps stop runaway agents.',
-    ],
-  },
-  {
-    id: 'l-memory',
-    title: 'Memory loop (episodic ↔ semantic)',
-    icon: 'sparkles',
-    sub: 'Each Copilot answer writes back a compressed episodic memory; weekly distills semantic facts.',
-    steps: [
-      'Copilot answer → episodic write (Q, citations, scope, ts).',
-      'Nightly: cluster recent episodes by topic.',
-      'Weekly distillation extracts stable semantic facts ("DS&Algo blocker pattern").',
-      'Future questions retrieve from semantic first, episodic for novelty.',
-      'Archive episodes > 90d unless cited.',
-    ],
-  },
-];
+// Clickable agent nodes → live-stats modal. `agent` matches ai_runs rows.
+const AGENT_META = {
+  scribe:     { agent: 'Scribe',     runtime: 'Modal · LangGraph',       trigger: 'MoM transcript committed',        source: 'agents/graphs/scribe.py' },
+  rollup:     { agent: 'Rollup',     runtime: 'Modal · LangGraph',       trigger: 'Weekly view · generate draft',    source: 'agents/graphs/rollup.py' },
+  sentry:     { agent: 'Sentry',     runtime: 'Modal · LangGraph',       trigger: 'task blocked / escalated',        source: 'agents/graphs/sentry.py' },
+  curator:    { agent: 'Curator',    runtime: 'Modal · LangGraph',       trigger: '5+ corrections · manual pass',    source: 'agents/graphs/curator.py' },
+  advisor:    { agent: 'Advisor',    runtime: 'Modal · LangGraph',       trigger: 'Run now (L2+) · weekly cron',     source: 'agents/graphs/advisor.py' },
+  concierge:  { agent: 'Concierge',  runtime: 'Client JS · tier chain',  trigger: 'user opens chat',                 source: 'views-copilot.jsx' },
+  dispatcher: { agent: 'Dispatcher', runtime: 'Deterministic client JS — no LLM runs', trigger: 'after Scribe extract', source: 'views-relay.jsx' },
+};
 
-const KNOWLEDGE = [
-  { label: 'Hierarchy', count: '1 BD · 4 depts · 8 subs', children: [
-    { label: 'Business Direction', count: 'CD' },
-    { label: 'Products', count: 'Content (sole)' },
-    { label: 'Departments', count: '4' },
-    { label: 'Sub-teams', count: '8' },
-  ]},
-  { label: 'People', count: '10 users · 5 roles · 10 EmpIDs', children: [
-    { label: 'L3', count: 'Pavan G' },
-    { label: 'L2s', count: 'Rushikesh · Pavan Teja' },
-    { label: 'L2 · Sub Departments', count: '6' },
-  ]},
-  { label: 'Catalog', count: '10 KPIs · 21 output cats · 11 task templates', children: [
-    { label: 'Stacks', count: '8' },
-    { label: 'Products', count: '15' },
-    { label: 'Status types', count: '4' },
-  ]},
-  { label: 'Process artifacts', count: '8 worklogs/day avg · 4 weekly drafts', children: [
-    { label: 'Daily reports', count: '10' },
-    { label: 'Worklogs', count: '57' },
-    { label: 'Weekly summaries', count: '4' },
-    { label: 'Tasks (active+suggested)', count: '8' },
-    { label: 'Feedback flags', count: '6' },
-  ]},
-];
-
-const MEMORY_TYPES = [
-  {
-    kind: 'episodic',
-    title: 'Episodic',
-    sub: 'Time-stamped, indexed by user + scope. Q&A turns, approval decisions, blocker mentions.',
-    size: '1,408 entries', retention: '90 days',
-    example: 'Q "What blockers are over 3 days old?" → ans + cites → ts 2026-05-21 22:14',
-  },
-  {
-    kind: 'semantic',
-    title: 'Semantic',
-    sub: 'Distilled facts extracted weekly. Stable. Backed by citations.',
-    size: '127 facts', retention: 'until contradicted',
-    example: '"DS&Algo has had Central Ops heap-allocation blocker since 2026-05-19"',
-  },
-  {
-    kind: 'working',
-    title: 'Working',
-    sub: 'Per-request transient — citation slate, scope hash, retrieval results.',
-    size: 'request-scoped', retention: 'TTL 5 min',
-    example: 'Within one Copilot turn: pulled 14 reports, 6 KPIs into context.',
-  },
-  {
-    kind: 'archived',
-    title: 'Archived',
-    sub: 'Cold storage for episodic past retention, kept for compliance audit.',
-    size: '21,422 entries', retention: '5 years (compliance)',
-    example: 'Compressed by month; rehydratable on legal hold.',
-  },
-];
+const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+// Live stats from the runs log; ts is 'YYYY-MM-DD HH:MM IST' so it sorts lexicographically.
+function agentLive(name) {
+  const runs = ((window.CDC && window.CDC.AI_RUNS) || []).filter((r) => r.agent === name)
+    .sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+  const today = runs.filter((r) => String(r.ts || '').startsWith(istToday()));
+  return {
+    lastRun: (runs[0] && runs[0].ts) || '—',
+    runsToday: today.length,
+    costToday: today.reduce((s, r) => s + (r.costUsd || 0), 0),
+    model: (runs[0] && runs[0].model) || '—',
+    total: runs.length,
+  };
+}
 
 function ArchitectureView({ tweaks, currentUser, nav, embedded }) {
-  const [selectedAgent, setSelectedAgent] = useStA(null);
-  const stageRef = useRA(null);
+  const [selected, setSelected] = useStA(null); // agent node id → live-stats modal
+  const [hov, setHov] = useStA(null);           // { id, x, y } → hover popover
 
-  // Total cost / token visibility
-  const dailyCost = AGENTS.reduce((s, a) => s + (a.costPerRun || 0) * (a.runsToday || 0), 0);
-  const projectedMonthly = (dailyCost * 30).toFixed(2);
+  const titleOf = (id) => {
+    const n = ARCH_NODES.find((x) => x.id === id);
+    if (n) return n.title;
+    const g = ARCH_GROUPS.find((x) => x.id === id);
+    return g ? g.label.split(' — ')[0] : id;
+  };
+  const hovNode = hov ? ARCH_NODES.find((n) => n.id === hov.id) : null;
+  const det = hov ? ARCH_DETAILS[hov.id] : null;
+  const flowsIn = hov ? ARCH_EDGES.filter((e) => e.to === hov.id) : [];
+  const flowsOut = hov ? ARCH_EDGES.filter((e) => e.from === hov.id) : [];
+  const meta = selected ? AGENT_META[selected] : null;
+  const live = meta ? agentLive(meta.agent) : null;
+
+  const legend = (
+    <div className="arch-legend">
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--panel)', border: '1px dashed var(--border-strong)' }} />source</span>
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--blue-soft)' }} />storage</span>
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--surface)', borderTop: '3px solid var(--accent)' }} />agent</span>
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--surface)', borderLeft: '3px solid var(--blue)' }} />service</span>
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--accent-soft)' }} />UI</span>
+      <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--green-soft)' }} />external</span>
+      <span className="arch-legend-item"><span style={{ width: 16, borderTop: '2px solid var(--text-faint)', display: 'inline-block' }} />data</span>
+      <span className="arch-legend-item"><span style={{ width: 16, borderTop: '2px dashed var(--blue)', display: 'inline-block' }} />knowledge</span>
+      <span className="arch-legend-item"><span style={{ width: 16, borderTop: '2px dashed var(--accent)', display: 'inline-block' }} />loop</span>
+      <span className="arch-legend-item"><span style={{ width: 16, borderTop: '2px dashed var(--amber)', display: 'inline-block' }} />approval</span>
+    </div>
+  );
 
   return (
     <div className="fadein">
       {!embedded && (
         <SectionHeader
           title="System architecture"
-          subtitle="Visibility into agents, loops, memory, and tool expense. Updated continuously from runtime."
+          subtitle="End to end: people → SPA → agents → models → data → surfaces. Hover any node; click an agent for live runs."
           actions={
-            <>
-              <button className="btn" data-size="sm"><Icon name="sheet" size={12} /> Export PNG</button>
-              <button className="btn" data-size="sm"><Icon name="edit" size={12} /> Open in docs</button>
-              <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('runs')}><Icon name="runs" size={12} /> AI runs</button>
-            </>
+            <button className="btn" data-size="sm" data-variant="primary" onClick={() => nav.go('runs')}>
+              <Icon name="runs" size={12} /> AI runs
+            </button>
           }
         />
       )}
-      {/* High-level numbers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 18 }}>
-        <div className="kpi-tile">
-          <div className="kpi-name">Active agents</div>
-          <div className="kpi-value">{AGENTS.length}</div>
-          <div className="kpi-meta">
-            <span>{AGENTS.filter((a) => a.status === 'ok').length} healthy · {AGENTS.filter((a) => a.status === 'warning').length} warning · {AGENTS.filter((a) => a.status === 'idle').length} idle</span>
-          </div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-name">Runs today</div>
-          <div className="kpi-value">{AGENTS.reduce((s, a) => s + a.runsToday, 0)}</div>
-          <div className="kpi-meta"><span>across 6 agents</span></div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-name">Daily LLM cost</div>
-          <div className="kpi-value">${dailyCost.toFixed(2)}</div>
-          <div className="kpi-meta"><span>~${projectedMonthly}/mo at this rate</span></div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-name">Loops</div>
-          <div className="kpi-value">{LOOPS.length}</div>
-          <div className="kpi-meta"><span>approval · escalation · MOM · expense · memory</span></div>
-        </div>
-      </div>
 
-      {/* Workflow canvas */}
-      <Card title="Workflow map" meta="data → agents → surfaces" actions={
-        <div className="arch-legend">
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--panel)', border: '1px dashed var(--border-strong)' }} />sources</span>
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--blue-soft)' }} />storage</span>
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--surface)', borderTop: '3px solid var(--accent)' }} />agent</span>
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--accent-soft)' }} />UI</span>
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--panel-2)' }} />output</span>
-          <span className="arch-legend-item"><span className="arch-legend-swatch" style={{ background: 'var(--green-soft)' }} />external</span>
-        </div>
-      } pad={false}>
-        <div className="arch-canvas" ref={stageRef} style={{ height: 600 }}>
-          <div className="arch-stage" style={{ width: 1080, height: 560 }}>
-            <ArchEdges nodes={ARCH_NODES} edges={ARCH_EDGES} />
+      <Card title="System map" meta="hover a node · click an agent for live stats" actions={legend} pad={false}>
+        <div className="arch-canvas" style={{ height: 'calc(100vh - 240px)', minHeight: 520 }}>
+          <div className="arch-stage" style={{ width: 1080, height: 1600 }}>
+            {ARCH_GROUPS.map((g) => (
+              <div key={g.id} className="arch-group" style={{ left: g.x, top: g.y, width: g.w, height: g.h }}>
+                <div className="arch-group-label">{g.label}</div>
+              </div>
+            ))}
+            <ArchEdges nodes={ARCH_NODES} groups={ARCH_GROUPS} edges={ARCH_EDGES} />
             {ARCH_NODES.map((n) => (
               <div key={n.id}
                 className="arch-node"
                 data-kind={n.kind}
+                data-agent={AGENT_META[n.id] ? 'true' : undefined}
                 style={{ left: n.x, top: n.y }}
-                onClick={() => {
-                  if (n.kind === 'agent') setSelectedAgent(AGENTS.find((a) => a.id === n.id));
+                onMouseEnter={(ev) => {
+                  const r = ev.currentTarget.getBoundingClientRect();
+                  setHov({ id: n.id, x: r.right + 380 < window.innerWidth ? r.right + 10 : r.left - 390, y: Math.min(r.top, window.innerHeight - 320) });
                 }}
+                onMouseLeave={() => setHov(null)}
+                onClick={() => { if (AGENT_META[n.id]) setSelected(n.id); }}
               >
-                <div className="node-kind">{n.kind}</div>
-                <div className="node-title">{n.title}</div>
+                <div className="node-head"><span className="node-ico">{n.ico}</span><div className="node-title">{n.title}</div></div>
                 <div className="node-sub">{n.sub}</div>
               </div>
             ))}
@@ -339,242 +223,73 @@ function ArchitectureView({ tweaks, currentUser, nav, embedded }) {
         </div>
       </Card>
 
-      {/* Agents grid */}
-      <h2 className="h-section">Agents · deployable</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-        {AGENTS.map((a) => (
-          <div key={a.id} className="agent-card" data-status={a.status}>
-            <div className="agent-head">
-              <div>
-                <div className="agent-name">{a.name}</div>
-                <div className="muted" style={{ fontSize: 10.5 }}>{a.trigger}</div>
+      {/* Hover popover — portal to body, same pattern as Cite */}
+      {hov && det && ReactDOM.createPortal(
+        <div className="cite-pop arch-pop" style={{ left: hov.x, top: hov.y }}>
+          <div className="pop-sec" style={{ margin: 0 }}>{hovNode ? hovNode.kind : ''}</div>
+          <div style={{ fontWeight: 600, fontSize: 13, margin: '2px 0 5px' }}>{hovNode ? `${hovNode.ico} ${hovNode.title}` : hov.id}</div>
+          <div style={{ fontSize: 11.5, lineHeight: 1.45 }}>{det.what}</div>
+          {det.tech && det.tech.length > 0 && (
+            <>
+              <div className="pop-sec">Tech</div>
+              {det.tech.map((t) => <div key={t} className="pop-tech">{t}</div>)}
+            </>
+          )}
+          {flowsIn.length > 0 && (
+            <>
+              <div className="pop-sec">In</div>
+              <div className="agent-tools">
+                {flowsIn.map((e, i) => <span key={i} className="agent-tool">{titleOf(e.from)}{e.label ? ` — ${e.label}` : ''}</span>)}
               </div>
-              <Pill tone={a.status === 'ok' ? 'green' : a.status === 'warning' ? 'amber' : a.status === 'error' ? 'red' : 'outline'} dot>{a.status}</Pill>
-            </div>
-            <div className="agent-purpose">{a.purpose}</div>
-            {a.note && (
-              <div style={{ fontSize: 11.5, color: 'var(--amber)', background: 'var(--amber-soft)', padding: '4px 8px', borderRadius: 4 }}>
-                {a.note}
+            </>
+          )}
+          {flowsOut.length > 0 && (
+            <>
+              <div className="pop-sec">Out</div>
+              <div className="agent-tools">
+                {flowsOut.map((e, i) => <span key={i} className="agent-tool">{titleOf(e.to)}{e.label ? ` — ${e.label}` : ''}</span>)}
               </div>
-            )}
-            <div className="agent-stats">
-              <div>
-                <div className="agent-stat-label">Model</div>
-                <div className="agent-stat-value mono" style={{ fontSize: 11 }}>{a.model.replace('claude-', '')}</div>
-              </div>
-              <div>
-                <div className="agent-stat-label">Latency</div>
-                <div className="agent-stat-value">{a.avgLatency.toLocaleString()} ms</div>
-              </div>
-              <div>
-                <div className="agent-stat-label">Cost / run</div>
-                <div className="agent-stat-value">${a.costPerRun.toFixed(4)}</div>
-              </div>
-            </div>
-            <div className="agent-tools">
-              {a.tools.map((t) => <span key={t} className="agent-tool">{t}</span>)}
-            </div>
-            <div className="agent-actions">
-              <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setSelectedAgent(a)}><Icon name="eye" size={11} /> Inspect</button>
-              <button className="btn" data-size="sm" data-variant="ghost"><Icon name="refresh" size={11} /> Run now</button>
-              <span style={{ flex: 1 }} />
-              <span className="mono faint" style={{ fontSize: 10, alignSelf: 'center' }}>{a.runsToday}× today</span>
-            </div>
-          </div>
-        ))}
-      </div>
+            </>
+          )}
+          {AGENT_META[hov.id] && <div className="pop-sec" style={{ marginTop: 8 }}>click for live runs</div>}
+        </div>,
+        document.body
+      )}
 
-      {/* Loops */}
-      <h2 className="h-section">Loops & flow visibility</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-        {LOOPS.map((l) => (
-          <div key={l.id} className="loop-card">
-            <div className="loop-title"><Icon name={l.icon} size={14} /> {l.title}</div>
-            <div className="loop-sub">{l.sub}</div>
-            <div className="loop-steps">
-              {l.steps.map((step, i) => (
-                <React.Fragment key={i}>
-                  <div className="loop-step">
-                    <span className="step-num">{i + 1}</span>
-                    <span style={{ flex: 1 }}>{step}</span>
-                  </div>
-                  {i < l.steps.length - 1 && <div className="loop-arrow"><Icon name="chev-down" size={10} /></div>}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Memory & Knowledge */}
-      <h2 className="h-section">Memory & knowledge layer</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            {MEMORY_TYPES.map((m) => (
-              <div key={m.kind} className="memory-tile" data-kind={m.kind}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{m.title}</div>
-                  <span className="mono faint" style={{ fontSize: 10 }}>{m.size}</span>
-                </div>
-                <div className="muted" style={{ fontSize: 11.5 }}>{m.sub}</div>
-                <div className="row" style={{ gap: 8, marginTop: 4 }}>
-                  <Pill tone="outline">retention: {m.retention}</Pill>
-                </div>
-                <div className="code" style={{ fontSize: 10.5, padding: 6, marginTop: 4 }}>{m.example}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <Card title="Knowledge layer" meta="stable context shared across agents">
-          <div className="knowledge-graph">
-            {KNOWLEDGE.map((root) => (
-              <React.Fragment key={root.label}>
-                <div className="kg-node">
-                  <Icon name="admin" size={12} />
-                  <strong>{root.label}</strong>
-                  <span className="kg-count">{root.count}</span>
-                </div>
-                {root.children?.map((c) => (
-                  <div key={c.label} className="kg-node" data-depth="1">
-                    <Icon name="chev-right" size={9} />
-                    <span>{c.label}</span>
-                    <span className="kg-count">{c.count}</span>
-                  </div>
-                ))}
-              </React.Fragment>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* Tool & token expense */}
-      <h2 className="h-section">Tool & token expense</h2>
-      <Card title="Cost-of-day by agent" meta={`Total $${dailyCost.toFixed(2)} today · projected $${projectedMonthly}/mo`}>
-        <CostBar agents={AGENTS} total={dailyCost} />
-        <table className="tbl" style={{ marginTop: 12 }}>
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Model</th>
-              <th>Runs (today)</th>
-              <th>Cost/run</th>
-              <th>Day total</th>
-              <th>Projected /mo</th>
-              <th>Budget</th>
-            </tr>
-          </thead>
-          <tbody>
-            {AGENTS.map((a) => {
-              const today = a.costPerRun * a.runsToday;
-              const monthly = today * 30;
-              const budget = a.id === 'a-cop' ? 60 : a.id === 'a-week' ? 8 : a.id === 'a-month' ? 5 : 4;
-              const pct = budget > 0 ? Math.min(100, (monthly / budget) * 100) : 0;
-              return (
-                <tr key={a.id}>
-                  <td><strong>{a.name}</strong></td>
-                  <td className="mono muted" style={{ fontSize: 11.5 }}>{a.model.replace('claude-', '')}</td>
-                  <td className="num">{a.runsToday}</td>
-                  <td className="num">${a.costPerRun.toFixed(4)}</td>
-                  <td className="num">${today.toFixed(2)}</td>
-                  <td className="num">${monthly.toFixed(2)}</td>
-                  <td style={{ width: 160 }}>
-                    <div className="row" style={{ gap: 6 }}>
-                      <div style={{ flex: 1, height: 6, background: 'var(--panel-2)', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--amber)' : 'var(--green)' }} />
-                      </div>
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)', minWidth: 50, textAlign: 'right' }}>
-                        ${monthly.toFixed(0)} / ${budget}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
-
-      {/* Hierarchy snapshot */}
-      <h2 className="h-section">Permission hierarchy</h2>
-      <Card title="RBAC scope tree">
-        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-          Every agent invocation carries a <span className="code">permissionScopeHash</span> derived from the caller's role. The same query returns different rows for Pavan G vs Pavan Teja vs Chanakya.
-        </div>
-        <div className="knowledge-graph">
-          <div className="kg-node">
-            <Icon name="admin" size={12} />
-            <strong>L3</strong>
-            <span className="muted" style={{ fontSize: 11.5 }}>scope: all</span>
-            <span className="kg-count">1 user</span>
-          </div>
-          <div className="kg-node" data-depth="1">
-            <Icon name="dashboard" size={11} />
-            <span>L2 · DS&ML</span>
-            <span className="muted" style={{ fontSize: 11 }}>scope: d-dsml</span>
-            <span className="kg-count">Rushikesh</span>
-          </div>
-          <div className="kg-node" data-depth="1">
-            <Icon name="dashboard" size={11} />
-            <span>L2 · DS&Algo</span>
-            <span className="muted" style={{ fontSize: 11 }}>scope: d-dsalgo</span>
-            <span className="kg-count">Pavan Teja</span>
-          </div>
-          <div className="kg-node" data-depth="1">
-            <Icon name="dashboard" size={11} />
-            <span>L2 · FS, GenAI, CSI & CO</span>
-            <span className="muted" style={{ fontSize: 11 }}>scope: d-fsgci</span>
-            <span className="kg-count">— vacant</span>
-          </div>
-          {['Chanakya / Fullstack', 'Pushpa / GenAI', 'Vijay / Central Ops', 'Pavan / Central Ops'].map((s) => (
-            <div key={s} className="kg-node" data-depth="2">
-              <Icon name="chev-right" size={9} />
-              <span>L1 · {s}</span>
-            </div>
-          ))}
-          <div className="kg-node" data-depth="1">
-            <Icon name="dashboard" size={11} />
-            <span>L2 · Aptitude & English</span>
-            <span className="muted" style={{ fontSize: 11 }}>scope: d-aptenglish</span>
-            <span className="kg-count">— vacant</span>
-          </div>
-          {['Prudvi / Aptitude', 'Tejaswini / English'].map((s) => (
-            <div key={s} className="kg-node" data-depth="2">
-              <Icon name="chev-right" size={9} />
-              <span>L1 · {s}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Agent inspector modal */}
-      <Modal open={!!selectedAgent} onClose={() => setSelectedAgent(null)} title={selectedAgent?.name || ''} width={680}>
-        {selectedAgent && (
+      {/* Agent inspector — live stats from ai_runs */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={meta ? meta.agent : ''} width={560}>
+        {meta && live && (
           <div className="col" style={{ gap: 14 }}>
-            <div>
-              <Pill tone={selectedAgent.status === 'ok' ? 'green' : 'amber'} dot>{selectedAgent.status}</Pill>
-              <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13 }}>{selectedAgent.purpose}</p>
-            </div>
+            <p style={{ margin: 0, fontSize: 13 }}>{(ARCH_DETAILS[selected] || {}).what}</p>
             <dl className="kv">
-              <dt>Model</dt><dd className="mono">{selectedAgent.model}</dd>
-              <dt>Trigger</dt><dd>{selectedAgent.trigger}</dd>
-              <dt>Last run</dt><dd className="mono">{selectedAgent.lastRun}</dd>
-              <dt>Avg latency</dt><dd className="mono">{selectedAgent.avgLatency.toLocaleString()} ms</dd>
-              <dt>Cost / run</dt><dd className="mono">${selectedAgent.costPerRun.toFixed(4)}</dd>
-              <dt>Runs today</dt><dd className="mono">{selectedAgent.runsToday}</dd>
-              <dt>Deploy URL</dt><dd className="mono code">{selectedAgent.deployUrl}</dd>
-              <dt>Tools</dt>
-              <dd>
-                <div className="agent-tools">
-                  {selectedAgent.tools.map((t) => <span key={t} className="agent-tool">{t}</span>)}
-                </div>
-              </dd>
+              <dt>Runtime</dt><dd>{meta.runtime}</dd>
+              <dt>Trigger</dt><dd>{meta.trigger}</dd>
+              <dt>Source</dt><dd className="mono">{meta.source}</dd>
             </dl>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              <div className="kpi-tile" style={{ padding: 10 }}>
+                <div className="kpi-name" style={{ fontSize: 10 }}>Last run</div>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 600 }}>{live.lastRun}</div>
+              </div>
+              <div className="kpi-tile" style={{ padding: 10 }}>
+                <div className="kpi-name" style={{ fontSize: 10 }}>Runs today</div>
+                <div className="kpi-value" style={{ fontSize: 18 }}>{live.runsToday}</div>
+              </div>
+              <div className="kpi-tile" style={{ padding: 10 }}>
+                <div className="kpi-name" style={{ fontSize: 10 }}>Cost today</div>
+                <div className="kpi-value" style={{ fontSize: 18 }}>${live.costToday.toFixed(4)}</div>
+              </div>
+              <div className="kpi-tile" style={{ padding: 10 }}>
+                <div className="kpi-name" style={{ fontSize: 10 }}>Served model</div>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 600 }}>{String(live.model).replace('anthropic/', '')}</div>
+              </div>
+            </div>
             <div className="row" style={{ gap: 8, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-              <button className="btn" data-size="sm"><Icon name="refresh" size={11} /> Run now</button>
-              <button className="btn" data-size="sm"><Icon name="runs" size={11} /> View runs</button>
+              <span className="muted" style={{ fontSize: 11 }}>{live.total} run{live.total === 1 ? '' : 's'} logged in your scope</span>
               <span style={{ flex: 1 }} />
-              <button className="btn" data-size="sm" data-variant="ghost"><Icon name="edit" size={11} /> Edit prompt</button>
+              <button className="btn" data-size="sm" data-variant="primary" onClick={() => { setSelected(null); nav.go('runs'); }}>
+                <Icon name="runs" size={11} /> View runs
+              </button>
             </div>
           </div>
         )}
@@ -584,81 +299,76 @@ function ArchitectureView({ tweaks, currentUser, nav, embedded }) {
 }
 window.ArchitectureView = ArchitectureView;
 
-// ── Edges renderer ──────────────────────────────────────────────────────
-function ArchEdges({ nodes, edges }) {
-  const NODE_W = 200; const NODE_H = 76;
-  const byId = useMA(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes]);
+// ── Edge router ─────────────────────────────────────────────────────────
+// Three route shapes: orthogonal elbow via a reserved corridor (viaX),
+// horizontal bezier between facing sides, vertical bezier bottom→top.
+function ArchEdges({ nodes, groups, edges }) {
+  const byId = useMA(() => {
+    const m = {};
+    (groups || []).forEach((g) => { m[g.id] = { x: g.x, y: g.y, w: g.w, h: g.h }; });
+    nodes.forEach((n) => { m[n.id] = { x: n.x, y: n.y, w: n.w || 200, h: n.h || 76 }; });
+    return m;
+  }, [nodes, groups]);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const bezMid = (p) => [(p[0] + 3 * p[2] + 3 * p[4] + p[6]) / 8, (p[1] + 3 * p[3] + 3 * p[5] + p[7]) / 8];
 
-  function path(from, to, kind) {
-    const A = byId[from]; const B = byId[to];
-    if (!A || !B) return '';
-    // Always connect from right edge of A to left edge of B
-    let ax = A.x + NODE_W; let ay = A.y + NODE_H / 2;
-    let bx = B.x; let by = B.y + NODE_H / 2;
-    // For approval/memory loops going right-to-left, route them differently
-    if (B.x < A.x) {
-      ax = A.x; ay = A.y + NODE_H / 2;
-      bx = B.x + NODE_W; by = B.y + NODE_H / 2;
-      // bow up to avoid overlap
-      const midY = Math.min(ay, by) - 28;
-      return `M ${ax},${ay} C ${ax - 30},${midY} ${bx + 30},${midY} ${bx},${by}`;
+  function route(e) {
+    const A = byId[e.from], B = byId[e.to];
+    if (!A || !B) return null;
+    const acx = A.x + A.w / 2, acy = A.y + A.h / 2;
+    const bcx = B.x + B.w / 2, bcy = B.y + B.h / 2;
+    if (e.viaX != null) {
+      const v = e.viaX;
+      const ay = acy + (e.fromDy || 0), by = bcy + (e.toDy || 0);
+      const ax = v < acx ? A.x : A.x + A.w;
+      const bx = v < bcx ? B.x : B.x + B.w;
+      const dir = by > ay ? 1 : -1;
+      const r = Math.min(20, Math.abs(by - ay) / 2 || 1);
+      const sA = ax > v ? r : -r;
+      const sB = bx > v ? r : -r;
+      return {
+        d: `M ${ax},${ay} L ${v + sA},${ay} Q ${v},${ay} ${v},${ay + dir * r} L ${v},${by - dir * r} Q ${v},${by} ${v + sB},${by} L ${bx},${by}`,
+        lx: v + 6, ly: (ay + by) / 2,
+      };
     }
-    const dx = (bx - ax) / 2;
-    return `M ${ax},${ay} C ${ax + dx},${ay} ${bx - dx},${by} ${bx},${by}`;
+    if (Math.abs(bcx - acx) > Math.abs(bcy - acy)) {
+      const ltr = bcx > acx;
+      const ax = ltr ? A.x + A.w : A.x, bx = ltr ? B.x : B.x + B.w;
+      const ay = acy + (e.fromDy || 0), by = bcy + (e.toDy || 0);
+      const h = clamp(Math.abs(bx - ax) / 2, 30, 120) * (ltr ? 1 : -1);
+      const p = [ax, ay, ax + h, ay, bx - h, by, bx, by];
+      const m = bezMid(p);
+      return { d: `M ${ax},${ay} C ${ax + h},${ay} ${bx - h},${by} ${bx},${by}`, lx: m[0], ly: m[1] };
+    }
+    const down = bcy > acy;
+    const ax = clamp(bcx, A.x + 24, A.x + A.w - 24), ay = down ? A.y + A.h : A.y;
+    const bx = clamp(acx, B.x + 24, B.x + B.w - 24), by = down ? B.y : B.y + B.h;
+    const k = clamp(Math.abs(by - ay) / 2, 24, 90) * (down ? 1 : -1);
+    const p = [ax, ay, ax, ay + k, bx, by - k, bx, by];
+    const m = bezMid(p);
+    return { d: `M ${ax},${ay} C ${ax},${ay + k} ${bx},${by - k} ${bx},${by}`, lx: m[0], ly: m[1] };
   }
 
   return (
-    <svg className="arch-edges" width="100%" height="100%" style={{ minWidth: 1080, minHeight: 560 }}>
+    <svg className="arch-edges" width="1080" height="1600" style={{ minWidth: 1080, minHeight: 1600 }}>
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
         </marker>
       </defs>
       {edges.map((e, i) => {
-        const A = byId[e.from]; const B = byId[e.to];
-        if (!A || !B) return null;
-        const d = path(e.from, e.to, e.kind);
-        // Label position — midpoint
-        const midX = (A.x + B.x + NODE_W) / 2;
-        const midY = (A.y + B.y + NODE_H) / 2;
+        const r = route(e);
+        if (!r) return null;
+        const kind = e.kind || 'data';
+        const color = kind === 'memory' ? 'var(--blue)' : kind === 'approval' ? 'var(--amber)' : kind === 'loop' ? 'var(--accent)' : 'var(--text-faint)';
         return (
-          <g key={i} style={{ color: e.kind === 'memory' ? 'var(--blue)' : e.kind === 'approval' ? 'var(--amber)' : 'var(--text-faint)' }}>
-            <path d={d} data-kind={e.kind === 'memory' ? 'memory' : e.kind === 'approval' ? 'approval' : 'data'} />
-            {e.label && <text x={midX} y={midY - 4}>{e.label}</text>}
+          <g key={i} style={{ color }}>
+            <path d={r.d} data-kind={kind} />
+            {e.label && <text x={r.lx} y={r.ly - 4}>{e.label}</text>}
           </g>
         );
       })}
     </svg>
-  );
-}
-
-// ── Cost bar component ─────────────────────────────────────────────────
-function CostBar({ agents, total }) {
-  const palette = ['var(--accent)', 'var(--green)', 'var(--amber)', 'var(--blue)', 'var(--red)', 'var(--text-faint)'];
-  return (
-    <div>
-      <div className="cost-bar">
-        {agents.map((a, i) => {
-          const today = a.costPerRun * a.runsToday;
-          const pct = total > 0 ? (today / total) * 100 : 0;
-          if (pct === 0) return null;
-          return (
-            <div key={a.id} className="cost-seg" style={{ width: `${pct}%`, background: palette[i % palette.length] }} title={`${a.name}: $${today.toFixed(2)}`} />
-          );
-        })}
-      </div>
-      <div className="row" style={{ gap: 12, marginTop: 8, flexWrap: 'wrap', fontSize: 11 }}>
-        {agents.map((a, i) => {
-          const today = a.costPerRun * a.runsToday;
-          return (
-            <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: palette[i % palette.length], display: 'inline-block' }} />
-              {a.name} · <span className="mono">${today.toFixed(2)}</span>
-            </span>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 

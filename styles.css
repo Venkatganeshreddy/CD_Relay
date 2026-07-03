@@ -917,6 +917,35 @@ input, select, textarea, .tbl tr td {
   width: 22px; height: 8px; border-radius: 2px;
 }
 
+/* Dashed stage-group containers on the architecture map */
+.arch-group {
+  position: absolute;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--panel) 35%, transparent);
+}
+.arch-group-label {
+  position: absolute; top: 8px; left: 12px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+
+/* service nodes (client lib, Edge Functions, MCP servers) + emoji icon row */
+.arch-node[data-kind="service"] { background: var(--surface); border-left: 3px solid var(--blue); }
+.arch-node .node-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.arch-node .node-ico { font-size: 15px; line-height: 1; flex-shrink: 0; }
+.arch-node[data-agent="true"] { cursor: pointer; }
+
+/* Architecture hover popover — extends .cite-pop, but viewport-fixed */
+.arch-pop { position: fixed; max-width: 380px; z-index: 80; }
+.arch-pop .pop-sec {
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--text-faint); margin: 8px 0 3px;
+}
+.arch-pop .pop-tech { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+
 /* Loop cards */
 .loop-card {
   background: var(--surface);
