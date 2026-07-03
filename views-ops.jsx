@@ -1590,17 +1590,40 @@ function RunsView({ tweaks, currentUser }) {
   const runs = CDC.AI_RUNS;
   const [agentFilter, setAgentFilter] = useState_o('All');
   const [selected, setSelected] = useState_o(null);
+  const [rangeDays, setRangeDays] = useState_o(7);       // 1 | 7 | 30 | null = all time
+  const [refreshing, setRefreshing] = useState_o(false);
   const [orSpend, setOrSpend] = useState_o(null); // exact spend from OpenRouter auth/key
-  useEffect_o(() => {
-    let on = true;
+  const alive = useRef_o(true);
+  useEffect_o(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  function fetchSpend() {
     (CDC.fetchOpenRouterSpend ? CDC.fetchOpenRouterSpend() : Promise.reject())
-      .then((d) => { if (on && d && typeof d.usage === 'number') setOrSpend(d); })
+      .then((d) => { if (alive.current && d && typeof d.usage === 'number') setOrSpend(d); })
       .catch(() => {}); // offline/seed mode → tile keeps the computed sum
-    return () => { on = false; };
-  }, []);
+  }
+  useEffect_o(() => { fetchSpend(); }, []);
+  // Manual refresh: re-pull all scoped rows from Supabase (same loader the
+  // background poll uses) + re-fetch the exact spend. Failures keep current rows.
+  async function refresh() {
+    setRefreshing(true);
+    try { if (CDC.loadFromSupabase) await CDC.loadFromSupabase(); } catch (_) { /* keep current rows */ }
+    fetchSpend();
+    if (alive.current) setRefreshing(false);
+  }
 
-  const agents = ['All', ...new Set(runs.map((r) => r.agent))];
-  const list = agentFilter === 'All' ? runs : runs.filter((r) => r.agent === agentFilter);
+  // `ts` is "YYYY-MM-DD HH:MM IST" — parse as IST (UTC+5:30) so the range is
+  // correct regardless of the viewer's timezone.
+  const tsMs = (r) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/.exec(r.ts || '');
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 5, +m[5] - 30) : NaN;
+  };
+  // Date-range filter (the "Last 7 days" control, now real). Rows with an
+  // unparseable ts stay visible rather than silently vanishing.
+  const inRange = rangeDays == null ? runs
+    : runs.filter((r) => { const t = tsMs(r); return isNaN(t) || Date.now() - t <= rangeDays * 86400000; });
+
+  // Keep the active agent chip even if it has no rows in the current range.
+  const agents = ['All', ...new Set([...inRange.map((r) => r.agent), ...(agentFilter !== 'All' ? [agentFilter] : [])])];
+  const list = agentFilter === 'All' ? inRange : inRange.filter((r) => r.agent === agentFilter);
 
   // aggregate
   const totalCost = list.reduce((s, r) => s + (r.costUsd || 0), 0);
@@ -1611,13 +1634,7 @@ function RunsView({ tweaks, currentUser }) {
   // Falls back to "—" when there's not enough data for a meaningful rate.
   const projectedMonthly = (() => {
     if (list.length < 2 || totalCost <= 0) return null;
-    const times = list.map((r) => {
-      // `ts` is "YYYY-MM-DD HH:MM IST" — strip the suffix and parse as IST.
-      const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/.exec(r.ts || '');
-      if (!m) return NaN;
-      // Treat the stamp as IST (UTC+5:30) so the span is correct regardless of viewer TZ.
-      return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 5, +m[5] - 30);
-    }).filter((n) => !isNaN(n));
+    const times = list.map(tsMs).filter((n) => !isNaN(n));
     if (times.length < 2) return null;
     const spanDays = Math.max(1 / 24, (Math.max(...times) - Math.min(...times)) / 86_400_000);
     return (totalCost / spanDays) * 30;
@@ -1630,14 +1647,21 @@ function RunsView({ tweaks, currentUser }) {
         subtitle="Every agent invocation. Inputs, outputs, model, latency, cost, scope hash."
         actions={
           <>
-            <button className="btn" data-size="sm"><Icon name="filter" size={12} /> Last 7 days</button>
+            {[{ d: 1, l: 'Today' }, { d: 7, l: '7 days' }, { d: 30, l: '30 days' }, { d: null, l: 'All' }].map((o) => (
+              <button key={o.l} className="btn" data-size="sm" data-variant={rangeDays === o.d ? 'primary' : 'ghost'}
+                onClick={() => setRangeDays(o.d)}>{o.l}</button>
+            ))}
+            <button className="btn" data-size="sm" onClick={refresh} disabled={refreshing}
+              title="Re-pull runs from the database and the exact spend from OpenRouter">
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
           </>
         }
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
         <div className="kpi-tile">
-          <div className="kpi-name">Total runs (7d)</div>
+          <div className="kpi-name">Total runs ({rangeDays == null ? 'all' : rangeDays === 1 ? 'today' : rangeDays + 'd'})</div>
           <div className="kpi-value">{list.length}</div>
           <div className="kpi-meta">{list.filter((r) => r.outcome === 'OK').length} OK · {list.filter((r) => r.outcome !== 'OK').length} other</div>
         </div>
@@ -1665,7 +1689,7 @@ function RunsView({ tweaks, currentUser }) {
           <button key={a} className="btn" data-size="sm" data-variant={agentFilter === a ? 'primary' : 'ghost'} onClick={() => setAgentFilter(a)}>
             {a}
             <span className="mono muted" style={{ marginLeft: 6 }}>
-              {a === 'All' ? runs.length : runs.filter((r) => r.agent === a).length}
+              {a === 'All' ? inRange.length : inRange.filter((r) => r.agent === a).length}
             </span>
           </button>
         ))}
