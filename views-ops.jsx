@@ -1640,6 +1640,17 @@ function RunsView({ tweaks, currentUser }) {
     return (totalCost / spanDays) * 30;
   })();
 
+  // Exact spend follows the range chips via OpenRouter's usage buckets. Note
+  // these are calendar-period-to-date (UTC) — today / this week / this month —
+  // not rolling windows like the row filter; the meta label says which.
+  const num = (x) => (typeof x === 'number' ? x : null);
+  const orExact = orSpend == null ? null
+    : rangeDays === 1 ? num(orSpend.usage_daily)
+    : rangeDays === 7 ? num(orSpend.usage_weekly)
+    : rangeDays === 30 ? num(orSpend.usage_monthly)
+    : num(orSpend.usage);
+  const orExactLabel = rangeDays === 1 ? 'today' : rangeDays === 7 ? 'this week' : rangeDays === 30 ? 'this month' : 'all-time';
+
   return (
     <div className="fadein">
       <SectionHeader
@@ -1675,10 +1686,10 @@ function RunsView({ tweaks, currentUser }) {
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Total cost</div>
-          <div className="kpi-value">${orSpend ? orSpend.usage.toFixed(4) : totalCost.toFixed(3)}</div>
+          <div className="kpi-value">${orExact != null ? orExact.toFixed(4) : totalCost.toFixed(3)}</div>
           <div className="kpi-meta">
-            {orSpend
-              ? `Exact (all-time)${typeof orSpend.usage_weekly === 'number' ? ` · wk $${orSpend.usage_weekly.toFixed(4)}` : ''}${orSpend.limit != null ? ` · $${Number(orSpend.limit_remaining ?? 0).toFixed(2)} left` : ''} · runs $${totalCost.toFixed(3)}`
+            {orExact != null
+              ? `Exact · OpenRouter ${orExactLabel}${orSpend.limit != null ? ` · $${Number(orSpend.limit_remaining ?? 0).toFixed(2)} left` : ''} · runs $${totalCost.toFixed(3)}`
               : (projectedMonthly != null ? `Projected $${projectedMonthly.toFixed(2)}/mo at this rate` : 'Projection pending — need ≥ 2 runs')}
           </div>
         </div>
