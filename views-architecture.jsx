@@ -10,16 +10,16 @@ const { useState: useStA, useMemo: useMA, useEffect: useEA, useRef: useRA } = Re
 // Absolute px coords on a 1080×1600 stage. Nodes default to 200×76.
 // Groups are dashed containers and are also valid edge endpoints.
 const ARCH_GROUPS = [
-  { id: 'g-voice',     label: 'Voice check-ins — adjacent',          x: 8,   y: 4,    w: 224, h: 232 },
-  { id: 'g-ui',        label: 'Relay SPA — GitHub Pages · Vercel',   x: 396, y: 180,  w: 248, h: 242 },
-  { id: 'g-client',    label: 'In-browser agents',                   x: 284, y: 470,  w: 472, h: 132 },
-  { id: 'g-knowledge', label: 'Knowledge — Obsidian round-trip',     x: 838, y: 430,  w: 224, h: 232 },
-  { id: 'g-edge',      label: 'Supabase Edge Functions',             x: 284, y: 640,  w: 472, h: 132 },
-  { id: 'g-engram',    label: 'Engram — learning loop',              x: 8,   y: 740,  w: 224, h: 232 },
-  { id: 'g-modal',     label: 'Modal — Python LangGraph (agents/)',  x: 284, y: 810,  w: 472, h: 332 },
-  { id: 'g-data',      label: 'Supabase — Postgres · RLS · Auth',    x: 284, y: 1200, w: 472, h: 132 },
-  { id: 'g-mcp',       label: 'MCP servers — read-only (mcp/)',      x: 838, y: 1090, w: 224, h: 332 },
-  { id: 'g-surfaces',  label: 'Surfaces — rendered back in the SPA', x: 156, y: 1440, w: 728, h: 132 },
+  { id: 'g-voice',     label: 'Voice check-ins',           x: 8,   y: 4,    w: 224, h: 232, tone: '--green-soft' },
+  { id: 'g-ui',        label: 'Relay SPA',                 x: 396, y: 180,  w: 248, h: 242 },
+  { id: 'g-client',    label: 'In-browser agents',         x: 284, y: 470,  w: 472, h: 132 },
+  { id: 'g-knowledge', label: 'Knowledge',                 x: 838, y: 430,  w: 224, h: 232, tone: '--blue-soft' },
+  { id: 'g-edge',      label: 'Edge Functions',            x: 284, y: 640,  w: 472, h: 132 },
+  { id: 'g-engram',    label: 'Engram — learning loop',    x: 8,   y: 740,  w: 224, h: 232, tone: '--accent-soft' },
+  { id: 'g-modal',     label: 'Modal — LangGraph agents',  x: 284, y: 810,  w: 472, h: 332 },
+  { id: 'g-data',      label: 'Supabase — Postgres · RLS', x: 284, y: 1200, w: 472, h: 132 },
+  { id: 'g-mcp',       label: 'MCP — read-only',           x: 838, y: 1090, w: 224, h: 332, tone: '--blue-soft' },
+  { id: 'g-surfaces',  label: 'Surfaces',                  x: 156, y: 1440, w: 728, h: 132 },
 ];
 
 const ARCH_NODES = [
@@ -53,41 +53,41 @@ const ARCH_NODES = [
 ];
 
 // kind: data (solid) · memory (blue dashed) · loop (accent dashed) · approval (amber).
-// viaX routes an orthogonal elbow through a reserved vertical corridor.
+// viaX routes an orthogonal elbow through a reserved vertical corridor;
+// labelAt places an elbow's label on its 'start' or 'end' stub instead of mid-corridor.
 const ARCH_EDGES = [
   // Spine
   { from: 'users',        to: 'spa',          label: 'sign in · submit · review' },
-  { from: 'spa',          to: 'sbclient',     label: 'all reads · writes · agent calls' },
+  { from: 'spa',          to: 'sbclient',     label: 'reads · writes · agent calls' },
   { from: 'sbclient',     to: 'dispatcher',   label: 'MoM action items' },
   { from: 'sbclient',     to: 'concierge',    label: 'chat turns' },
-  { from: 'concierge',    to: 'relay',        label: 'claude.complete — tier 1' },
-  { from: 'sbclient',     to: 'relay',        label: 'agents.run() · JWT', viaX: 800, toDy: -14 },
-  { from: 'relay',        to: 'openrouter',   label: 'chat proxy · spend API' },
-  { from: 'relay',        to: 'g-modal',      label: 'forward: MODAL_<agent>_URL' },
+  { from: 'concierge',    to: 'relay',        label: 'claude.complete' },
+  { from: 'sbclient',     to: 'relay',        label: 'agents.run() · JWT', viaX: 800, toDy: -14, labelAt: 'start' },
+  { from: 'relay',        to: 'openrouter',   label: 'chat + spend API' },
+  { from: 'relay',        to: 'g-modal',      label: 'forward → Modal' },
   { from: 'advisor-cron', to: 'g-modal',      label: 'Modal-first' },
-  { from: 'g-modal',      to: 'openrouter',   label: 'llm.py — retry · tier fallback' },
-  { from: 'g-modal',      to: 'postgres',     label: 'structured output → tables' },
-  { from: 'g-modal',      to: 'telemetry',    label: 'ai_runs · activity — every run' },
-  { from: 'sbclient',     to: 'postgres',     label: 'CRUD — paged RLS reads', viaX: 240, toDy: -18 },
-  { from: 'dispatcher',   to: 'postgres',     label: 'tasks · engram writes', viaX: 252, toDy: 18 },
+  { from: 'g-modal',      to: 'openrouter',   label: 'retry · tier fallback' },
+  { from: 'g-modal',      to: 'postgres',     label: 'structured writes' },
+  { from: 'g-modal',      to: 'telemetry',    label: 'logs every run' },
+  { from: 'sbclient',     to: 'postgres',     label: 'CRUD', viaX: 240, toDy: -18, labelAt: 'end' },
   { from: 'postgres',     to: 's-ops',        label: 'RLS-scoped rows' },
   { from: 'postgres',     to: 's-review',     label: 'drafts · suggestions' },
   { from: 'telemetry',    to: 's-observ',     label: 'runs · exact cost' },
   // Side flows
-  { from: 'voice',        to: 'users',        label: 'daily check-in call' },
+  { from: 'voice',        to: 'users',        label: 'daily call' },
   { from: 'voice',        to: 'gsheet',       label: 'responses' },
-  { from: 'obsidian',     to: 'kdocs',        label: 'scripts/import · export', kind: 'memory' },
-  { from: 'kdocs',        to: 'concierge',    label: 'grounds answers · cites', kind: 'memory' },
+  { from: 'obsidian',     to: 'kdocs',        label: 'import · export', kind: 'memory' },
+  { from: 'kdocs',        to: 'concierge',    label: 'grounds · cites', kind: 'memory' },
   { from: 'claude-mcp',   to: 'mcp-local',    label: 'stdio', kind: 'memory' },
-  { from: 'claude-mcp',   to: 'mcp-remote',   label: 'HTTP · bearer', kind: 'memory', viaX: 1066 },
+  { from: 'claude-mcp',   to: 'mcp-remote',   kind: 'memory', viaX: 1066 },
   { from: 'mcp-local',    to: 'g-data',       label: 'read-only tools', kind: 'memory' },
   { from: 'mcp-remote',   to: 'g-data',       kind: 'memory' },
   // Loops
   { from: 'g-surfaces',   to: 'g-engram',     label: 'approve · edit · reject', kind: 'approval' },
-  { from: 'engram-store', to: 'curator',      label: '5+ corrections → distill', kind: 'loop' },
-  { from: 'curator',      to: 'agent-memory', label: '3–7 rules', kind: 'loop', viaX: 264 },
-  { from: 'agent-memory', to: 'g-modal',      label: 'memoryFor() → every run', kind: 'loop' },
-  { from: 'postgres',     to: 'advisor-cron', label: 'pg_cron Mon 06:30 IST · x-cron-secret', kind: 'loop', viaX: 276 },
+  { from: 'engram-store', to: 'curator',      kind: 'loop' },
+  { from: 'curator',      to: 'agent-memory', kind: 'loop', viaX: 264 },
+  { from: 'agent-memory', to: 'g-modal',      label: 'memoryFor()', kind: 'loop' },
+  { from: 'postgres',     to: 'advisor-cron', label: 'pg_cron', kind: 'loop', viaX: 276 },
 ];
 
 // Hover popover content. In/out flows are derived from ARCH_EDGES, not authored.
@@ -197,7 +197,9 @@ function ArchitectureView({ tweaks, currentUser, nav, embedded }) {
         <div className="arch-canvas" style={{ height: 'calc(100vh - 240px)', minHeight: 520 }}>
           <div className="arch-stage" style={{ width: 1080, height: 1600 }}>
             {ARCH_GROUPS.map((g) => (
-              <div key={g.id} className="arch-group" style={{ left: g.x, top: g.y, width: g.w, height: g.h }}>
+              <div key={g.id} className="arch-group"
+                style={{ left: g.x, top: g.y, width: g.w, height: g.h,
+                  ...(g.tone ? { background: `color-mix(in oklch, var(${g.tone}) 45%, transparent)` } : {}) }}>
                 <div className="arch-group-label">{g.label}</div>
               </div>
             ))}
@@ -238,16 +240,16 @@ function ArchitectureView({ tweaks, currentUser, nav, embedded }) {
           {flowsIn.length > 0 && (
             <>
               <div className="pop-sec">In</div>
-              <div className="agent-tools">
-                {flowsIn.map((e, i) => <span key={i} className="agent-tool">{titleOf(e.from)}{e.label ? ` — ${e.label}` : ''}</span>)}
+              <div className="pop-flow">
+                {flowsIn.map((e, i) => <span key={i}>{titleOf(e.from)}{e.label ? ` — ${e.label}` : ''}</span>)}
               </div>
             </>
           )}
           {flowsOut.length > 0 && (
             <>
               <div className="pop-sec">Out</div>
-              <div className="agent-tools">
-                {flowsOut.map((e, i) => <span key={i} className="agent-tool">{titleOf(e.to)}{e.label ? ` — ${e.label}` : ''}</span>)}
+              <div className="pop-flow">
+                {flowsOut.map((e, i) => <span key={i}>{titleOf(e.to)}{e.label ? ` — ${e.label}` : ''}</span>)}
               </div>
             </>
           )}
@@ -326,9 +328,12 @@ function ArchEdges({ nodes, groups, edges }) {
       const r = Math.min(20, Math.abs(by - ay) / 2 || 1);
       const sA = ax > v ? r : -r;
       const sB = bx > v ? r : -r;
+      let lx = v, ly = (ay + by) / 2;
+      if (e.labelAt === 'start') { lx = (ax + v) / 2; ly = ay; }
+      if (e.labelAt === 'end') { lx = (v + bx) / 2; ly = by; }
       return {
         d: `M ${ax},${ay} L ${v + sA},${ay} Q ${v},${ay} ${v},${ay + dir * r} L ${v},${by - dir * r} Q ${v},${by} ${v + sB},${by} L ${bx},${by}`,
-        lx: v + 6, ly: (ay + by) / 2,
+        lx, ly,
       };
     }
     if (Math.abs(bcx - acx) > Math.abs(bcy - acy)) {

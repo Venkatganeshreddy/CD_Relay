@@ -917,6 +917,9 @@ input, select, textarea, .tbl tr td {
   width: 22px; height: 8px; border-radius: 2px;
 }
 
+/* Centered edge labels — anchors sit on the path, halo keeps them readable */
+.arch-edges text { text-anchor: middle; }
+
 /* Dashed stage-group containers on the architecture map */
 .arch-group {
   position: absolute;
@@ -945,6 +948,11 @@ input, select, textarea, .tbl tr td {
   color: var(--text-faint); margin: 8px 0 3px;
 }
 .arch-pop .pop-tech { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+.arch-pop .pop-flow { display: flex; flex-wrap: wrap; gap: 4px; }
+.arch-pop .pop-flow span {
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px;
+  font-size: 10px; color: var(--text-muted); background: var(--panel); white-space: nowrap;
+}
 
 /* Loop cards */
 .loop-card {
