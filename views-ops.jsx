@@ -1590,6 +1590,14 @@ function RunsView({ tweaks, currentUser }) {
   const runs = CDC.AI_RUNS;
   const [agentFilter, setAgentFilter] = useState_o('All');
   const [selected, setSelected] = useState_o(null);
+  const [orSpend, setOrSpend] = useState_o(null); // exact spend from OpenRouter auth/key
+  useEffect_o(() => {
+    let on = true;
+    (CDC.fetchOpenRouterSpend ? CDC.fetchOpenRouterSpend() : Promise.reject())
+      .then((d) => { if (on && d && typeof d.usage === 'number') setOrSpend(d); })
+      .catch(() => {}); // offline/seed mode → tile keeps the computed sum
+    return () => { on = false; };
+  }, []);
 
   const agents = ['All', ...new Set(runs.map((r) => r.agent))];
   const list = agentFilter === 'All' ? runs : runs.filter((r) => r.agent === agentFilter);
@@ -1643,8 +1651,12 @@ function RunsView({ tweaks, currentUser }) {
         </div>
         <div className="kpi-tile">
           <div className="kpi-name">Total cost</div>
-          <div className="kpi-value">${totalCost.toFixed(3)}</div>
-          <div className="kpi-meta">{projectedMonthly != null ? `Projected $${projectedMonthly.toFixed(2)}/mo at this rate` : 'Projection pending — need ≥ 2 runs'}</div>
+          <div className="kpi-value">${orSpend ? orSpend.usage.toFixed(4) : totalCost.toFixed(3)}</div>
+          <div className="kpi-meta">
+            {orSpend
+              ? `Exact (all-time)${typeof orSpend.usage_weekly === 'number' ? ` · wk $${orSpend.usage_weekly.toFixed(4)}` : ''}${orSpend.limit != null ? ` · $${Number(orSpend.limit_remaining ?? 0).toFixed(2)} left` : ''} · runs $${totalCost.toFixed(3)}`
+              : (projectedMonthly != null ? `Projected $${projectedMonthly.toFixed(2)}/mo at this rate` : 'Projection pending — need ≥ 2 runs')}
+          </div>
         </div>
       </div>
 

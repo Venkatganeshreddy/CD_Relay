@@ -27,7 +27,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
-    const { messages, model, max_tokens, temperature, agent, modal: modalAgent, payload } = await req.json();
+    const { messages, model, max_tokens, temperature, agent, modal: modalAgent, payload, action } = await req.json();
+
+    // ── Exact spend: proxy OpenRouter's auth/key so the browser never sees the key.
+    if (action === "spend") {
+      const key = Deno.env.get("OPENROUTER_API_KEY");
+      if (!key) return json({ error: "OPENROUTER_API_KEY not set on the function" }, 500);
+      const r = await fetch("https://openrouter.ai/api/v1/auth/key", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      const data = await r.json();
+      if (!r.ok) return json({ error: data?.error?.message || "OpenRouter error", status: r.status }, 502);
+      return json(data.data); // { label, usage, limit, limit_remaining, is_free_tier, rate_limit }
+    }
 
     // ── Modal forward: delegate to a Python LangGraph agent on Modal when wired.
     // Supabase verifies the browser's JWT before invoking this function (verify_jwt

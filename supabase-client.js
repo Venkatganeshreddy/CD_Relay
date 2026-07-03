@@ -200,6 +200,13 @@
       if (data && data.error) throw new Error(data.error);
       return data; // { content, model, usage }
     };
+    // Exact key spend from OpenRouter (proxied server-side; key never reaches the browser).
+    window.CDC.fetchOpenRouterSpend = async () => {
+      const { data, error } = await sb.functions.invoke('relay-agent', { body: { action: 'spend' } });
+      if (error) throw error;
+      if (data && data.error) throw new Error(data.error);
+      return data; // { usage, limit, limit_remaining, ... }
+    };
   }
 
   // ── Direct OpenRouter fallback (tier 2) — works without Supabase ────
