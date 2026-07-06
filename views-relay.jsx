@@ -947,10 +947,11 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [attendeeQuery, setAttendeeQuery] = useStP('');         // current live-search input
   const [summaryApproved, setSummaryApproved] = useStP(false);  // explicit approve toggle
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
-  const [inputTab, setInputTab] = useStP('paste');              // paste | upload | record
 
   // ── Live mic recording (Web Speech API — Chrome/Edge only) ──────────────
   const speechSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  // Record leads when the browser can do it; otherwise land on Paste.
+  const [inputTab, setInputTab] = useStP(speechSupported ? 'record' : 'paste');
   const [recording, setRecording] = useStP(false);
   const [interim, setInterim] = useStP('');       // live not-yet-final text, display only
   const [recError, setRecError] = useStP('');
@@ -1006,6 +1007,8 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         const chunk = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
           const t = chunk.trim();
+          // ponytail: also swallows a genuinely repeated identical utterance
+          // ("Okay." twice in a row) — acceptable vs re-appending restart dupes.
           if (t && t !== lastFinalRef.current) {
             lastFinalRef.current = t;
             // Append, never replace — recording resumes cleanly after manual edits.
@@ -1019,16 +1022,28 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         setRecError('Microphone access denied — allow the mic in the address bar, or use Paste / Upload.');
         stopRecording();
+      } else if (e.error === 'audio-capture') {
+        // Mic gone (e.g. external mic unplugged) — restarting would capture silence
+        // behind a live-looking console.
+        setRecError('Microphone lost — check it\'s connected, then hit the record button to resume.');
+        stopRecording();
       }
       // no-speech / network / aborted are transient — onend restarts.
     };
     // Chrome self-stops after ~60s of audio or on silence; restart while intent
     // holds. Immediate start() can throw mid-teardown — retry once shortly after,
-    // so a 3-hour meeting survives hundreds of restart cycles.
+    // so a 3-hour meeting survives hundreds of restart cycles. If the retry also
+    // fails, stop and say so — never leave a dead console blinking REC.
     rec.onend = () => {
       if (!recOnRef.current) { setRecording(false); return; }
       try { rec.start(); } catch (_) {
-        setTimeout(() => { if (recOnRef.current) { try { rec.start(); } catch (_) {} } }, 300);
+        setTimeout(() => {
+          if (!recOnRef.current) return;
+          try { rec.start(); } catch (_) {
+            setRecError('Recording stopped unexpectedly — hit the record button to resume. Everything captured so far is safe below.');
+            stopRecording();
+          }
+        }, 300);
       }
     };
     try { rec.start(); } catch (_) { return; }
@@ -1055,6 +1070,8 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   async function startMeter() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // The user may have hit Stop while we awaited the mic — don't leave it hot.
+      if (!recOnRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
       const actx = new (window.AudioContext || window.webkitAudioContext)();
       const an = actx.createAnalyser(); an.fftSize = 128;
       actx.createMediaStreamSource(stream).connect(an);
@@ -1101,15 +1118,20 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   // ── Long-meeting hardening ────────────────────────────────────────────────
   // The transcript autosaves to localStorage on every change, so a crash or
   // accidental refresh three hours in loses nothing. Cleared on commit.
+  // Restore is declared FIRST: effects run in declaration order, and the
+  // autosave effect wipes the key when the transcript is empty (as it is on
+  // mount) — the draft must be read before that wipe.
   React.useEffect(() => {
-    if (step !== 'paste') return;
-    if (transcript) localStorage.setItem(MOM_DRAFT_KEY, transcript);
-    else localStorage.removeItem(MOM_DRAFT_KEY);
-  }, [transcript, step]);
-  React.useEffect(() => {
-    const d = localStorage.getItem(MOM_DRAFT_KEY);
+    let d = null; try { d = localStorage.getItem(MOM_DRAFT_KEY); } catch (_) {}
     if (d) { setTranscript((prev) => prev || d); setDraftNote(true); }
   }, []);
+  React.useEffect(() => {
+    if (step !== 'paste') return;
+    try {
+      if (transcript) localStorage.setItem(MOM_DRAFT_KEY, transcript);
+      else localStorage.removeItem(MOM_DRAFT_KEY);
+    } catch (_) {} // storage full/blocked — autosave is best-effort, never a crash
+  }, [transcript, step]);
   // Warn before closing the tab mid-recording.
   React.useEffect(() => {
     if (!recording) return;
@@ -1334,7 +1356,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       })),
     };
     CDC.db && CDC.db.addMom(mom);
-    localStorage.removeItem(MOM_DRAFT_KEY);  // committed — drop the crash-safety draft
+    try { localStorage.removeItem(MOM_DRAFT_KEY); } catch (_) {}  // committed — drop the crash-safety draft
     setStep('done');
     setTimeout(() => { onClose(); resetState(); nav.go('second-brain'); }, 1200);
   }
@@ -1353,9 +1375,9 @@ function MomLoader({ open, onClose, currentUser, nav }) {
             <>
               <div className="row" style={{ gap: 6 }}>
                 {[
-                  { id: 'paste', label: 'Paste text' },
-                  { id: 'upload', label: 'Upload .vtt / .txt' },
                   { id: 'record', label: 'Record via mic' },
+                  { id: 'upload', label: 'Upload .vtt / .txt' },
+                  { id: 'paste', label: 'Paste text' },
                 ].map((t) => (
                   <button key={t.id} className="btn" data-size="sm"
                     data-variant={inputTab === t.id ? 'primary' : 'ghost'}
