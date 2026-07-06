@@ -931,6 +931,7 @@ function MomCardModal({ mom, onClose }) {
 window.MomCardModal = MomCardModal;
 
 // ── MOM Loader ─────────────────────────────────────────────────────────
+const MOM_DRAFT_KEY = 'relay_mom_draft'; // crash-safe transcript autosave
 function MomLoader({ open, onClose, currentUser, nav }) {
   const [step, setStep] = useStP('paste');  // paste → scribe → dispatcher → review → done
   const [transcript, setTranscript] = useStP('');
@@ -946,6 +947,24 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const [attendeeQuery, setAttendeeQuery] = useStP('');         // current live-search input
   const [summaryApproved, setSummaryApproved] = useStP(false);  // explicit approve toggle
   const [momTab, setMomTab] = useStP('summary');                // summary | actions | pipeline
+  const [inputTab, setInputTab] = useStP('paste');              // paste | upload | record
+
+  // ── Live mic recording (Web Speech API — Chrome/Edge only) ──────────────
+  const speechSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const [recording, setRecording] = useStP(false);
+  const [interim, setInterim] = useStP('');       // live not-yet-final text, display only
+  const [recError, setRecError] = useStP('');
+  const [, recTick] = useStP(0);                  // 1s re-render driver for the elapsed timer
+  const recRef = React.useRef(null);              // SpeechRecognition instance
+  const recOnRef = React.useRef(false);           // user intent — read by onend to auto-restart
+  const recStartRef = React.useRef(0);
+  const lastFinalRef = React.useRef('');          // guard against duplicated finals after restart
+  const timerRef = React.useRef(null);
+  const wakeRef = React.useRef(null);
+  const taRef = React.useRef(null);               // transcript textarea — autoscrolled while recording
+  const waveRef = React.useRef(null);             // canvas for the live mic waveform
+  const meterRef = React.useRef(null);            // { stream, ctx, raf } — Web Audio level meter
+  const [draftNote, setDraftNote] = useStP(false); // "restored unsaved draft" banner
 
   // Resolve a name (from transcript / user input) to a roster user id, or null.
   function resolveAttendee(name) {
@@ -973,6 +992,144 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     reader.onload = (e) => setTranscript(String(e.target.result || ''));
     reader.readAsText(file);
   }
+
+  function startRecording() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR || recOnRef.current) return;
+    setRecError('');
+    lastFinalRef.current = '';
+    const rec = new SR();
+    rec.lang = 'en-IN'; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e) => {
+      let live = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const chunk = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          const t = chunk.trim();
+          if (t && t !== lastFinalRef.current) {
+            lastFinalRef.current = t;
+            // Append, never replace — recording resumes cleanly after manual edits.
+            setTranscript((prev) => (prev ? prev.replace(/\s*$/, ' ') + t : t));
+          }
+        } else live += chunk;
+      }
+      setInterim(live);
+    };
+    rec.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setRecError('Microphone access denied — allow the mic in the address bar, or use Paste / Upload.');
+        stopRecording();
+      }
+      // no-speech / network / aborted are transient — onend restarts.
+    };
+    // Chrome self-stops after ~60s of audio or on silence; restart while intent
+    // holds. Immediate start() can throw mid-teardown — retry once shortly after,
+    // so a 3-hour meeting survives hundreds of restart cycles.
+    rec.onend = () => {
+      if (!recOnRef.current) { setRecording(false); return; }
+      try { rec.start(); } catch (_) {
+        setTimeout(() => { if (recOnRef.current) { try { rec.start(); } catch (_) {} } }, 300);
+      }
+    };
+    try { rec.start(); } catch (_) { return; }
+    recRef.current = rec; recOnRef.current = true;
+    recStartRef.current = Date.now();
+    setRecording(true); setInterim(''); setDraftNote(false);
+    timerRef.current = setInterval(() => recTick((n) => n + 1), 1000);
+    startMeter();
+    // Best-effort: keep the screen awake through a long meeting.
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { wakeRef.current = l; }).catch(() => {});
+  }
+  function stopRecording() {
+    recOnRef.current = false;
+    try { recRef.current && recRef.current.stop(); } catch (_) {}
+    clearInterval(timerRef.current);
+    stopMeter();
+    if (wakeRef.current) { wakeRef.current.release().catch(() => {}); wakeRef.current = null; }
+    setRecording(false); setInterim('');
+  }
+  React.useEffect(() => () => stopRecording(), []);  // modal closed mid-recording → mic off
+
+  // Live waveform — real mic levels via Web Audio, drawn as centered bars.
+  // Purely visual "it can hear us" feedback; recording works if this fails.
+  async function startMeter() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const actx = new (window.AudioContext || window.webkitAudioContext)();
+      const an = actx.createAnalyser(); an.fftSize = 128;
+      actx.createMediaStreamSource(stream).connect(an);
+      const data = new Uint8Array(an.frequencyBinCount);
+      const m = { stream, ctx: actx, raf: 0 };
+      meterRef.current = m;
+      const draw = () => {
+        const c = waveRef.current;
+        if (c) {
+          const g = c.getContext('2d');
+          const W = (c.width = c.clientWidth * 2), H = (c.height = c.clientHeight * 2);
+          an.getByteFrequencyData(data);
+          g.clearRect(0, 0, W, H);
+          g.fillStyle = getComputedStyle(c).color;
+          const n = 36, colw = W / n, bw = Math.max(2, colw * 0.55);
+          for (let i = 0; i < n; i++) {
+            const v = data[Math.floor((i / n) * data.length)] / 255;
+            const bh = Math.max(H * 0.06, v * H * 0.9);
+            const x = i * colw + (colw - bw) / 2, y = (H - bh) / 2;
+            if (g.roundRect) { g.beginPath(); g.roundRect(x, y, bw, bh, bw / 2); g.fill(); }
+            else g.fillRect(x, y, bw, bh);
+          }
+        }
+        m.raf = requestAnimationFrame(draw);
+      };
+      m.raf = requestAnimationFrame(draw);
+    } catch (_) {}
+  }
+  function stopMeter() {
+    const m = meterRef.current;
+    if (!m) return;
+    cancelAnimationFrame(m.raf);
+    try { m.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    try { m.ctx.close(); } catch (_) {}
+    meterRef.current = null;
+  }
+
+  function recClock() {
+    const s = Math.max(0, Math.floor((Date.now() - recStartRef.current) / 1000));
+    const h = Math.floor(s / 3600), mn = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(mn).padStart(2, '0')}:${ss}` : `${mn}:${ss}`;
+  }
+
+  // ── Long-meeting hardening ────────────────────────────────────────────────
+  // The transcript autosaves to localStorage on every change, so a crash or
+  // accidental refresh three hours in loses nothing. Cleared on commit.
+  React.useEffect(() => {
+    if (step !== 'paste') return;
+    if (transcript) localStorage.setItem(MOM_DRAFT_KEY, transcript);
+    else localStorage.removeItem(MOM_DRAFT_KEY);
+  }, [transcript, step]);
+  React.useEffect(() => {
+    const d = localStorage.getItem(MOM_DRAFT_KEY);
+    if (d) { setTranscript((prev) => prev || d); setDraftNote(true); }
+  }, []);
+  // Warn before closing the tab mid-recording.
+  React.useEffect(() => {
+    if (!recording) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [recording]);
+  // The wake lock auto-releases when the tab is hidden — re-acquire on return.
+  React.useEffect(() => {
+    if (!recording || !navigator.wakeLock) return;
+    const reacquire = () => {
+      if (document.visibilityState === 'visible') navigator.wakeLock.request('screen').then((l) => { wakeRef.current = l; }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', reacquire);
+    return () => document.removeEventListener('visibilitychange', reacquire);
+  }, [recording]);
+  // Keep the newest speech in view while the mic fills the box.
+  React.useEffect(() => {
+    if (recording && taRef.current) taRef.current.scrollTop = taRef.current.scrollHeight;
+  }, [transcript, recording]);
 
   // Dispatcher — route Scribe's assignee hint to a real employee using the
   // people graph: person → sub-team lead → dept lead → role, then triage fallback.
@@ -1034,6 +1191,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   function dueIn(days) { const CDC = window.CDC; const d = CDC.daysAgo ? CDC.daysAgo(-days) : new Date(Date.now() + days * 864e5); return CDC.fmt ? CDC.fmt(d) : d.toISOString().slice(0, 10); }
 
   async function runPipeline() {
+    if (recOnRef.current) stopRecording();
     setStep('scribe');
     let items = null;
     let derivedAgenda = '';
@@ -1176,6 +1334,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       })),
     };
     CDC.db && CDC.db.addMom(mom);
+    localStorage.removeItem(MOM_DRAFT_KEY);  // committed — drop the crash-safety draft
     setStep('done');
     setTimeout(() => { onClose(); resetState(); nav.go('second-brain'); }, 1200);
   }
@@ -1192,23 +1351,81 @@ function MomLoader({ open, onClose, currentUser, nav }) {
         <div className="mom-paste">
           {step === 'paste' && (
             <>
-              <div className="muted" style={{ fontSize: 12.5 }}>
-                Paste a meeting transcript. <strong>Scribe</strong> extracts action items; <strong>Dispatcher</strong> proposes owners + due dates using the people knowledge base. You review and approve.
+              <div className="row" style={{ gap: 6 }}>
+                {[
+                  { id: 'paste', label: 'Paste text' },
+                  { id: 'upload', label: 'Upload .vtt / .txt' },
+                  { id: 'record', label: 'Record via mic' },
+                ].map((t) => (
+                  <button key={t.id} className="btn" data-size="sm"
+                    data-variant={inputTab === t.id ? 'primary' : 'ghost'}
+                    onClick={() => setInputTab(t.id)}>
+                    {t.id === 'record' && <span className="dot" data-tone="red" data-pulse={recording ? 'true' : undefined} />}
+                    {t.label}
+                  </button>
+                ))}
               </div>
+              <div className="muted" style={{ fontSize: 12.5 }}>
+                {inputTab === 'paste' && <>Paste a meeting transcript. <strong>Scribe</strong> extracts action items; <strong>Dispatcher</strong> proposes owners + due dates using the people knowledge base. You review and approve.</>}
+                {inputTab === 'upload' && <>Upload a <strong>.vtt</strong> or <strong>.txt</strong> transcript export — it loads into the box below for review before running the pipeline.</>}
+                {inputTab === 'record' && (speechSupported
+                  ? <>Record the meeting live — speech lands in the transcript as you talk. Keep this tab visible during the meeting.</>
+                  : <>Live recording isn't supported in this browser — use Paste or Upload.</>)}
+              </div>
+              {inputTab === 'record' && speechSupported && (
+                <div className="mom-rec-console" data-live={recording ? 'true' : undefined}>
+                  <button className="mom-rec-btn" onClick={recording ? stopRecording : startRecording}
+                    title={recording ? 'Stop recording' : 'Start recording'}>
+                    <span />
+                  </button>
+                  <div className="mom-rec-meta">
+                    {recording ? (
+                      <>
+                        <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+                          <span className="mom-rec-live mono">REC</span>
+                          <span className="mom-rec-clock mono">{recClock()}</span>
+                          <span className="muted mono" style={{ fontSize: 11 }}>{transcript.split(/\s+/).filter(Boolean).length} words</span>
+                        </div>
+                        <div className="mom-rec-interim">{interim || 'Listening…'}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mom-rec-title">{transcript ? 'Resume recording' : 'Start recording'}</div>
+                        <div className="muted" style={{ fontSize: 11.5 }}>Autosaves as it goes — safe for multi-hour meetings. Stop any time, edit, then run the pipeline.</div>
+                      </>
+                    )}
+                  </div>
+                  {recording && <canvas className="mom-rec-wave" ref={waveRef} />}
+                </div>
+              )}
+              {draftNote && !recording && !!transcript && (
+                <div className="muted" style={{ fontSize: 11.5 }}>
+                  Restored your unsaved transcript from last time.
+                  <a onClick={() => { setTranscript(''); setDraftNote(false); }} style={{ marginLeft: 8, cursor: 'pointer', color: 'var(--red)' }}>Discard</a>
+                  <a onClick={() => setDraftNote(false)} style={{ marginLeft: 8, cursor: 'pointer' }}>Keep</a>
+                </div>
+              )}
               <textarea
+                ref={taRef}
                 placeholder="Paste transcript here…&#10;&#10;Example:&#10;Pavan G: We need to align on the Q3 mentor capacity. Rushikesh, can you take a look at the current ratio?&#10;Rushikesh: Yes — I'll draft an updated capacity model targeting 1:35.&#10;Pushpa: For GenAI we're going over the Pinecone free tier in 3 weeks — need approval to move to paid…"
                 value={transcript}
+                readOnly={recording}
                 onChange={(e) => setTranscript(e.target.value)}
               />
+              {inputTab === 'record' && recError && (
+                <div style={{ fontSize: 12, color: 'var(--red)' }}>{recError}</div>
+              )}
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="muted" style={{ fontSize: 11.5 }}>{transcript.length} chars · {transcript.split(/\s+/).filter(Boolean).length} words</div>
                 <div className="row" style={{ gap: 6 }}>
-                  <label className="btn" data-size="sm" data-variant="ghost" style={{ cursor: 'pointer' }}>
-                    <Icon name="sheet" size={11} /> Upload .vtt / .txt
-                    <input type="file" accept=".vtt,.txt,text/plain,text/vtt" style={{ display: 'none' }}
-                      onChange={(e) => { readFile(e.target.files[0]); e.target.value = ''; }} />
-                  </label>
-                  <button className="btn" data-size="sm" data-variant="primary" onClick={runPipeline}><Icon name="sparkles" size={11} /> Run pipeline</button>
+                  {inputTab === 'upload' && (
+                    <label className="btn" data-size="sm" data-variant="ghost" style={{ cursor: 'pointer' }}>
+                      <Icon name="sheet" size={11} /> Upload .vtt / .txt
+                      <input type="file" accept=".vtt,.txt,text/plain,text/vtt" style={{ display: 'none' }}
+                        onChange={(e) => { readFile(e.target.files[0]); e.target.value = ''; }} />
+                    </label>
+                  )}
+                  <button className="btn" data-size="sm" data-variant="primary" onClick={runPipeline} disabled={recording}><Icon name="sparkles" size={11} /> Run pipeline</button>
                 </div>
               </div>
             </>
@@ -1401,7 +1618,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
 
               {momTab === 'pipeline' && (() => {
                 const steps = [
-                  { id: 'paste', title: 'Paste transcript', sub: 'or upload .vtt / .txt' },
+                  { id: 'paste', title: 'Load transcript', sub: 'record, upload, or paste' },
                   { id: 'scribe', title: 'Scribe extracts', sub: 'claude-sonnet-4-6' },
                   { id: 'dispatcher', title: 'Dispatcher routes', sub: 'manager_id graph + role' },
                   { id: 'review', title: 'Human review', sub: 'edit, approve, reject' },
@@ -1446,7 +1663,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.06, color: 'var(--text-faint)' }}>Pipeline</div>
               {(() => {
                 const steps = [
-                  { id: 'paste', title: 'Paste transcript', sub: 'or upload .vtt / .txt' },
+                  { id: 'paste', title: 'Load transcript', sub: 'record, upload, or paste' },
                   { id: 'scribe', title: 'Scribe extracts', sub: 'claude-sonnet-4-6' },
                   { id: 'dispatcher', title: 'Dispatcher routes', sub: 'manager_id graph + role' },
                   { id: 'review', title: 'Human review', sub: 'edit, approve, reject' },
