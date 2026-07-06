@@ -41,9 +41,11 @@
     knowledge_docs: 'KNOWLEDGE', weekly_digests: 'WEEKLY_DIGESTS',
     recommendations: 'RECOMMENDATIONS', nonpayroll_expense: 'NONPAYROLL_EXPENSE',
     goals: 'GOALS',
+    roadmap_drafts: 'ROADMAP_DRAFTS',
     app_feedback: 'FEEDBACK',
   };
   if (!Array.isArray(window.CDC.GOALS)) window.CDC.GOALS = [];
+  if (!Array.isArray(window.CDC.ROADMAP_DRAFTS)) window.CDC.ROADMAP_DRAFTS = [];
   if (!Array.isArray(window.CDC.FEEDBACK)) window.CDC.FEEDBACK = [];
   if (!Array.isArray(window.CDC.NONPAYROLL_EXPENSE)) window.CDC.NONPAYROLL_EXPENSE = [];
   if (!Array.isArray(window.CDC.KNOWLEDGE)) window.CDC.KNOWLEDGE = [];
@@ -598,6 +600,17 @@
       if (i >= 0) arr.splice(i, 1);
       const remoteOk = await remote(() => sb.from('goals').delete().eq('id', id));
       return { remoteOk };
+    },
+    // Roadmap Planner drafts. Patch keys REPLACE (Concierge sends full arrays);
+    // the status column is kept in sync with data.status so RLS/agent skip
+    // logic (Planner never overwrites IN_REVIEW/FINAL) sees the L2's state.
+    async updateRoadmapDraft(id, patch) {
+      const d = (window.CDC.ROADMAP_DRAFTS || []).find((x) => x.id === id);
+      if (d) Object.assign(d, patch);
+      const row = d || { id, ...patch };
+      const remoteOk = await remote(() => sb.from('roadmap_drafts')
+        .update({ status: row.status || 'DRAFT', data: row }).eq('id', id));
+      return { item: row, remoteOk };
     },
     // Application feedback (idea / bug / praise / annoyance) — anyone can submit.
     // Refetch feedback on demand (the Feedback page mounts) so submitters see

@@ -22,6 +22,9 @@ output (with fail-soft fallback).
 ## Curator — corrections → learned rules (self-evolving loop)
 ![Curator flow](curator.png)
 
+## Planner — month-end execution diff → L2 conversation → next-month roadmap
+![Planner flow](planner.png)
+
 ---
 
 ### Legend

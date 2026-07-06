@@ -60,3 +60,26 @@ class DigestOut(BaseModel):
 
 class CuratorOut(BaseModel):
     rules: list[str] = Field(default_factory=list)
+
+
+class PlannerFinding(BaseModel):
+    kind: str = ""            # executionDiff: done|partial|missed · findings: strength|gap|risk|opportunity|anti-pattern
+    text: str = ""
+    consequence: str = ""     # doctrine D1: what happens if it repeats
+    decision: str = ""        # doctrine D1: what decision is being asked
+    cites: list[str] = Field(default_factory=list)
+
+
+class PlannerGoalDraft(BaseModel):
+    title: str = ""
+    deliverables: list[str] = Field(default_factory=list)
+    rationale: str = ""       # data-backed why
+    cites: list[str] = Field(default_factory=list)
+
+
+class PlannerOut(BaseModel):
+    headline: str = ""        # doctrine E1: why this cycle matters + headline metric trend
+    executionDiff: list[PlannerFinding] = Field(default_factory=list)
+    findings: list[PlannerFinding] = Field(default_factory=list)
+    questions: list[str] = Field(default_factory=list)
+    goals: list[PlannerGoalDraft] = Field(default_factory=list)

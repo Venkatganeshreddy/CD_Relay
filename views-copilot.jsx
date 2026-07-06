@@ -59,6 +59,13 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
     "What does the Rollup agent do?",
     "Walk me through the weekly rollup process",
   ];
+  // One-stop trigger categories — each rides the same grounded chat + confirm
+  // gate; a future category is one more entry here + its context block.
+  const categories = [
+    corpus.draft && { label: '🗺 Roadmap', prompt: `Let's review the ${String(corpus.draft.month || '').slice(0, 7)} roadmap draft for ${corpus.draft.sub}.` },
+    { label: '📊 Team performance', prompt: 'How did my team perform this month — hours logged, tasks done vs blocked, and KPI status?' },
+    { label: '🚧 Blockers', prompt: 'Any blockers or overdue tasks right now?' },
+  ].filter(Boolean);
   // Example write-commands — prefill the composer so the user edits the names /
   // numbers, then sends. Every change is still Confirm-gated before it runs.
   const actionExamples = [
@@ -167,6 +174,13 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             </div>
             <div className="muted" style={{ marginBottom: 24 }}>Every claim cites a report, KPI, task, or flag. Hover a citation to see the source.</div>
 
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {categories.map((c) => (
+                <span key={c.label} className="suggested-q" style={{ fontWeight: 600, borderColor: 'var(--accent-border)' }}
+                  onClick={() => ask(c.prompt)}>{c.label}</span>
+              ))}
+            </div>
+
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
               {suggested.map((q) => (
                 <span key={q} className="suggested-q" onClick={() => ask(q)}>{q}</span>
@@ -264,6 +278,8 @@ function describeAction(a) {
     case 'fill_task_numbers': return `Update numbers on ${tName(a.taskId)}: ${kv(a.fields)}`;
     case 'update_budget': return `Set budget ${a.id} planned → ₹${Number(a.planned).toLocaleString('en-IN')}`;
     case 'update_employee': return `Update ${uName(a.id)}: ${kv(a.patch)}`;
+    case 'update_roadmap_draft': return `Update roadmap draft ${a.draftId} (${Object.keys(a.patch || {}).join(', ') || 'no fields'})`;
+    case 'finalize_roadmap': return `Finalize roadmap ${a.draftId} → create next month's goals`;
     default: return `Unsupported action: ${a.type}`;
   }
 }
@@ -305,6 +321,41 @@ async function executeAction(a, user) {
     case 'update_employee': {
       await CDC.db.updateEmployee(a.id, a.patch || {});
       return { msg: 'Employee updated.' };
+    }
+    case 'update_roadmap_draft': {
+      const d = (CDC.ROADMAP_DRAFTS || []).find((x) => x.id === a.draftId);
+      if (!d) throw new Error(`draft ${a.draftId} not found`);
+      if (d.status === 'FINAL') throw new Error('draft already finalized');
+      const patch = { ...(a.patch || {}) };
+      if (patch.status && patch.status !== 'IN_REVIEW') delete patch.status;   // FINAL only via finalize_roadmap
+      if (!patch.status && (d.status || 'DRAFT') === 'DRAFT') patch.status = 'IN_REVIEW';
+      const r = await CDC.db.updateRoadmapDraft(a.draftId, patch);
+      if (!r.remoteOk) throw new Error('save failed — draft may be outside your scope');
+      // L2 edits feed Curator → Planner memory (the standing learning loop).
+      CDC.db.logInteraction({ agent: 'Planner', flow: 'roadmap', inputRef: a.draftId, action: 'edit',
+        final: JSON.stringify(a.patch || {}).slice(0, 500), userId: user.id });
+      return { msg: 'Draft updated.' };
+    }
+    case 'finalize_roadmap': {
+      const d = (CDC.ROADMAP_DRAFTS || []).find((x) => x.id === a.draftId);
+      if (!d) throw new Error(`draft ${a.draftId} not found`);
+      if (d.status === 'FINAL') throw new Error('already finalized');
+      const ym = String(d.month || '').slice(0, 7);
+      const base = a.draftId.replace(/^rd-/, 'goal-');
+      let n = 0;
+      for (let i = 0; i < (d.goals || []).length; i++) {
+        const g = d.goals[i];
+        if (!g || !g.title) continue;
+        const gid = `${base}-${i + 1}`;                                        // deterministic → re-confirm is idempotent
+        if ((CDC.GOALS || []).some((x) => x.id === gid)) continue;
+        await CDC.db.addGoal({ id: gid, sub: d.sub, dept: d.dept, title: g.title, month: ym,
+          deliverables: (g.deliverables || []).map((t, j) => ({ id: `${gid}-d${j + 1}`, text: String(t), assignees: [] })) });
+        n++;
+      }
+      const r = await CDC.db.updateRoadmapDraft(a.draftId, { status: 'FINAL', finalizedBy: user.id });
+      if (!r.remoteOk) throw new Error(`${n} goals created but the draft could not be marked FINAL — confirm finalize again`);
+      CDC.db.logInteraction({ agent: 'Planner', flow: 'roadmap', inputRef: a.draftId, action: 'accept', userId: user.id });
+      return { msg: `${n} goal${n === 1 ? '' : 's'} created for ${ym}; roadmap finalized.` };
     }
     default: throw new Error(`unknown action ${a.type}`);
   }
@@ -438,7 +489,18 @@ function buildCorpus(user) {
     reports, kpis, tasks, flags,
     reportCount: reports.length, kpiCount: kpis.length,
     taskCount: tasks.length, flagCount: flags.length,
+    draft: openDraftFor(user),
   };
+}
+
+// Newest open Roadmap Planner draft in the user's scope (none → no PLANNING
+// block, no roadmap actions, no Roadmap chip — zero token cost when idle).
+function openDraftFor(user) {
+  const s = window.CDC.scopeForUser(user.id);
+  return (window.CDC.ROADMAP_DRAFTS || [])
+    .filter((d) => ['DRAFT', 'IN_REVIEW'].includes(d.status || 'DRAFT'))
+    .filter((d) => s.kind === 'all' || (s.kind === 'dept' && d.dept === s.dept) || (s.kind === 'sub' && d.sub === s.sub))
+    .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')))[0] || null;
 }
 
 function scopeLabelFor(user) {
@@ -496,6 +558,29 @@ function buildSystemPrompt(corpus, user) {
   const wlRecent = wls.slice(0, 40).map((w) => `${w.date} · ${wlName(w)} · ${w.hours || 0}h · ${w.outputCategory || w.taskCategory || '—'} · ${w.status || ''}`).join('\n');
   const wlBlock = `Worklogs in scope: ${wls.length} total. Logged TODAY (${todayStr}): ${todayRoll}.\nRecent entries (date · person · hours · category · status):\n${wlRecent}`;
 
+  // Roadmap Planner — the structured month-end curation conversation, injected
+  // only while an open draft is in scope (tone per the department doctrine:
+  // context before ask, one question at a time, draft-don't-decide).
+  const d = corpus.draft;
+  const planningBlock = !d ? '' : `
+ROADMAP PLANNING — an open roadmap draft is in this user's scope. When the user wants to work on the roadmap, YOU drive the conversation.
+Draft ${d.id} · status=${d.status || 'DRAFT'} · plans ${String(d.month || '').slice(0, 7)} for ${d.sub} · analyzed ${d.analysisMonth || ''}${d.lowData ? ' · LOW-DATA month — findings lean on KPIs and meeting decisions; say so when relevant' : ''}
+HEADLINE: ${d.headline || '—'}
+EXECUTION DIFF (planned vs done):
+${(d.executionDiff || []).slice(0, 12).map((f) => `- (${f.kind}) ${f.text}`).join('\n') || '(none)'}
+FINDINGS:
+${(d.findings || []).slice(0, 12).map((f) => `- (${f.kind}) ${f.text}${f.consequence ? ` | if it repeats: ${f.consequence}` : ''}${f.decision ? ` | decision asked: ${f.decision}` : ''}`).join('\n') || '(none)'}
+OPEN QUESTIONS — ask ONE at a time, in order, skipping any already answered in the QA LOG:
+${(d.questions || []).slice(0, 6).map((q, i) => `${i + 1}. ${q}`).join('\n') || '(none)'}
+DRAFT GOALS for ${String(d.month || '').slice(0, 7)} (numbered — the user edits these):
+${(d.goals || []).slice(0, 12).map((g, i) => `${i + 1}. ${g.title} — ${(g.deliverables || []).join('; ') || '(no deliverables yet)'}${g.rationale ? ` (why: ${g.rationale})` : ''}`).join('\n') || '(none)'}
+QA LOG: ${(d.qaLog || []).map((x) => `Q: ${x.q} → A: ${x.a}`).join(' | ') || '(none yet)'}
+PLANNING RULES: open with the headline and a 2-3 sentence recap of the execution diff, then ask exactly ONE open question and stop — never dump the whole draft. Questions over instructions: make the lead articulate the plan. Direct but constructive; frame every risk as what happened → what happens if it repeats → the decision being asked. Refer to goals by their number/title, never raw ids. After each answer or goal edit, propose ONE update_roadmap_draft action recording it. You draft, the human decides — propose finalize_roadmap ONLY when the user explicitly says the plan is complete.
+ADDITIONAL actions supported while this draft is open (same confirm-gated rules as above):
+- {"type":"update_roadmap_draft","draftId":"${d.id}","patch":{"goals":[{"title":"..","deliverables":["..",".."],"rationale":".."}],"qaLog":[{"q":"..","a":".."}],"status":"IN_REVIEW"}} — patch keys REPLACE those keys on the draft, so ALWAYS send the FULL goals array / FULL qaLog. status may only be "IN_REVIEW".
+- {"type":"finalize_roadmap","draftId":"${d.id}"} — only on explicit confirmation that the plan is complete.
+`;
+
   return `You are Relay, an internal AI assistant for a department operating copilot.
 The current user is ${user.name} (role=${user.role}). Their RBAC scope is: ${scopeLabelFor(user)}.
 
@@ -531,7 +616,7 @@ ${wfLines}
 
 AGENTS:
 ${agLines}
-${noteLines ? `\nVAULT NOTES (human-authored, from Obsidian):\n${noteLines}\n` : ''}
+${noteLines ? `\nVAULT NOTES (human-authored, from Obsidian):\n${noteLines}\n` : ''}${planningBlock}
 ACTIONS — you can CHANGE data when the user explicitly asks (e.g. "mark X done", "create a task for Y", "set the budget…"). When (and only when) the user requests a change, write a one-line confirmation sentence, then append a fenced code block whose info string is exactly "action" containing a JSON array. Use EXACT ids from the data above. The app shows the user a Confirm button before anything runs, so NEVER say a change is already done. Supported actions:
 - {"type":"update_task_status","taskId":"task-..","status":"In-progress|Done|Blocked|Overdue|Backlog","reason":"required if Blocked/Overdue/Backlog"}
 - {"type":"create_task","owner":"NW....","title":"..","outputCategory":"<an output category>","due":"YYYY-MM-DD","status":"In-progress","details":".."}
