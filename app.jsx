@@ -151,6 +151,14 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
     return () => { alive = false; clearInterval(id); };
   }, [authMode]);
 
+  // Every pageview starts at the top. Without this, .content keeps the previous
+  // view's scroll offset (the container never remounts), so a new view opens
+  // mid-scroll and visibly shifts a beat later as its content settles.
+  const contentRef = React.useRef(null);
+  useEffect_a(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [route.name, route.params && route.params.id]);
+
   // Back/forward: restore the route the browser is navigating to.
   useEffect_a(() => {
     const onPop = (e) => setRoute((e.state && e.state.name) ? e.state : (routeFromHash() || { name: 'dashboard', params: {} }));
@@ -253,7 +261,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
           realName={realUser && realUser.name}
           openMom={() => setMomOpen(true)}
         />
-        <div className="content">
+        <div className="content" ref={contentRef}>
           <div className="content-inner">
             <RouteView route={route} tweaks={t} currentUser={currentUser} nav={nav} initialPrompt={copilotPrefill} />
           </div>
