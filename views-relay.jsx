@@ -849,6 +849,16 @@ function MomCardModal({ mom, onClose }) {
             {mom.duration && <span>· {mom.duration} min</span>}
             {mom.channel && <span>· {mom.channel}</span>}
           </div>
+          {Array.isArray(mom.contextMoms) && mom.contextMoms.length > 0 && (
+            <div className="row muted" style={{ gap: 6, fontSize: 11.5, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontWeight: 500 }}>Continues from</span>
+              {mom.contextMoms.map((c) => (
+                <span key={c.id} className="pill" data-tone="muted" style={{ fontSize: 10.5 }}>
+                  {c.title}{c.date ? ` · ${c.date}` : ''}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="col" style={{ gap: 6 }}>
@@ -966,6 +976,52 @@ function MomLoader({ open, onClose, currentUser, nav }) {
   const waveRef = React.useRef(null);             // canvas for the live mic waveform
   const meterRef = React.useRef(null);            // { stream, ctx, raf } — Web Audio level meter
   const [draftNote, setDraftNote] = useStP(false); // "restored unsaved draft" banner
+  const [ctxOff, setCtxOff] = useStP(() => new Set()); // Second Brain context chips toggled off
+
+  // Auto-picked Second Brain context: previous MoMs whose attendees are named
+  // in this transcript or whose title/agenda words it shares. Deterministic and
+  // pre-Scribe, so it matches on the raw transcript (attendees aren't known yet).
+  const ctxMoms = React.useMemo(() => {
+    const text = transcript.toLowerCase();
+    if (text.trim().length < 40) return [];
+    const users = window.CDC.USERS || [];
+    const named = new Set(users.filter((u) => {
+      const n = String(u.name || '').toLowerCase();
+      const first = n.split(' ')[0];
+      return (n && text.includes(n)) || (first.length >= 4 && text.includes(first));
+    }).map((u) => u.id));
+    const STOP = new Set(['meeting', 'review', 'sync', 'weekly', 'daily', 'call', 'discussion', 'with', 'this', 'that', 'the', 'and', 'for']);
+    const scored = (window.CDC.MOMS || []).map((m) => {
+      const ids = (m.attendees || []).concat(((m.attendeesAll || []).map((a) => a.userId)).filter(Boolean));
+      const people = [...new Set(ids)].filter((id) => named.has(id)).length;
+      const words = String((m.title || '') + ' ' + (m.agenda || '')).toLowerCase()
+        .split(/[^a-z0-9&]+/).filter((w) => w.length > 3 && !STOP.has(w));
+      const title = new Set(words.filter((w) => text.includes(w))).size;
+      return { m, score: people * 2 + title };
+    }).filter((x) => x.score >= 2);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 3).map((x) => x.m);
+  }, [transcript]);
+  const ctxSelected = ctxMoms.filter((m) => !ctxOff.has(m.id));
+
+  // Continuity context for Scribe, prepended to the transcript so it flows
+  // through every path (Modal graph + JS fallback) unchanged. Every line is
+  // bullet-prefixed so nothing can look like a "Name:" speaker line to the
+  // attendee-grounding regex; owner names are deliberately omitted.
+  function buildContextBlock() {
+    if (!ctxSelected.length) return '';
+    const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const lines = [];
+    for (const m of ctxSelected) {
+      const summ = typeof m.summary === 'string' ? m.summary : Object.values(m.summary || {}).join(' ');
+      lines.push(`• Prior meeting "${oneLine(m.title)}" (${m.date || 'earlier'}) — ${oneLine(summ).slice(0, 600)}`);
+      (m.actionItems || []).filter((it) => it.status !== 'done').slice(0, 5)
+        .forEach((it) => lines.push(`  • previously assigned, still open — ${oneLine(it.text)}`));
+    }
+    return 'BACKGROUND — notes from earlier related meetings, for continuity only. '
+      + 'Treat as read-only context: never list these as new action items, and never count their people as attendees.\n'
+      + lines.join('\n') + '\n\nTRANSCRIPT OF THIS MEETING\n';
+  }
 
   // Resolve a name (from transcript / user input) to a roster user id, or null.
   function resolveAttendee(name) {
@@ -1219,7 +1275,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     let derivedAgenda = '';
     try {
       if (window.CDC.agents && transcript.trim().length > 20) {
-        const raw = await window.CDC.agents.runScribe(transcript); // real Scribe via Edge Function
+        const raw = await window.CDC.agents.runScribe(buildContextBlock() + transcript); // real Scribe via Edge Function
         setStep('dispatcher');
         derivedAgenda = (raw && raw.agenda) || '';
         // Scribe returns the 3 lenses for structure; we display them as one
@@ -1347,6 +1403,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       loggedBy: currentUser.id,
       loggedByName,
       date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
+      contextMoms: ctxSelected.map((m) => ({ id: m.id, title: m.title || 'MOM', date: m.date || '' })), // Second Brain thread — which prior MoMs informed this one
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),
         changed: it.owner !== it.aiOwner || it.text !== it.aiText || it.due !== it.aiDue })),
@@ -1436,6 +1493,21 @@ function MomLoader({ open, onClose, currentUser, nav }) {
               />
               {inputTab === 'record' && recError && (
                 <div style={{ fontSize: 12, color: 'var(--red)' }}>{recError}</div>
+              )}
+              {ctxMoms.length > 0 && (
+                <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="muted" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.04 }}>Second Brain context</span>
+                  {ctxMoms.map((m) => {
+                    const on = !ctxOff.has(m.id);
+                    return (
+                      <button key={m.id} className="btn" data-size="sm" data-variant={on ? 'primary' : 'ghost'}
+                        title={on ? 'Included — Scribe sees this meeting\'s summary and open action items' : 'Excluded from context'}
+                        onClick={() => setCtxOff((s) => { const n = new Set(s); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; })}>
+                        {on ? '✓ ' : ''}{String(m.title || 'MOM').slice(0, 34)}{m.date ? ` · ${m.date}` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="muted" style={{ fontSize: 11.5 }}>{transcript.length} chars · {transcript.split(/\s+/).filter(Boolean).length} words</div>
