@@ -1489,6 +1489,9 @@
     'Vernacular Content': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
     'Testing & Learning Portal Configurations': { task: 'Content Creation & Review', activity: 'Planned Content Creation', metric: 'Content Velocity' },
     'Video Session': { task: 'Recording & Production', activity: 'Planned Content Creation', metric: 'Content Velocity' },
+    // Instructors' recording work — 'Video Session' alone read as "no recording
+    // task on Relay", so give recording its own explicit output category.
+    'Content Recording': { task: 'Recording & Production', activity: 'Planned Content Creation', metric: 'Content Velocity' },
     'Agentic Workflow Initiative, R&D, Tools': { task: 'Agentic Workflow', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
     'Feedback & Backpropagation': { task: 'Process & Tooling', activity: 'Initiatives / Upgrades', metric: 'Content Efficiency' },
     'Industry Upgrade': { task: 'Industry Review & Quality Check', activity: 'Initiatives / Upgrades', metric: 'Content Relevance' },
