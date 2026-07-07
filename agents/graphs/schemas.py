@@ -77,9 +77,14 @@ class PlannerGoalDraft(BaseModel):
     cites: list[str] = Field(default_factory=list)
 
 
+class PlannerQuestion(BaseModel):
+    text: str = ""
+    options: list[str] = Field(default_factory=list)   # 2-4 named alternatives (doctrine C2) — rendered as quick-answer buttons
+
+
 class PlannerOut(BaseModel):
     headline: str = ""        # doctrine E1: why this cycle matters + headline metric trend
     executionDiff: list[PlannerFinding] = Field(default_factory=list)
     findings: list[PlannerFinding] = Field(default_factory=list)
-    questions: list[str] = Field(default_factory=list)
+    questions: list[PlannerQuestion] = Field(default_factory=list)
     goals: list[PlannerGoalDraft] = Field(default_factory=list)

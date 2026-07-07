@@ -257,7 +257,9 @@ def analyze(state: S) -> S:
         "(deliverables with no date/owner, blockers recurring across weeks, duplicate builds, silent streams). "
         "For every gap/risk fill `consequence` (what happens if it repeats) and `decision` (the concrete decision being asked).\n"
         f"4. questions — at most 6 for the L2 conversation, consequence-first, each forcing the lead to articulate the "
-        "plan themselves; frame trade-offs between named alternatives, never bare yes/no.\n"
+        "plan themselves. Each question is {text, options}: `options` holds 2-4 SHORT named alternatives the lead "
+        "can pick between (e.g. \"Carry to next month\", \"Split into smaller deliverables\", \"Drop it\") — "
+        "trade-offs between named alternatives, never bare yes/no. The UI renders options as one-click buttons.\n"
         f"5. goals — 3 to 8 draft goals for {plan_ym}, each with concrete deliverables and a data-backed rationale.\n"
         "cites MUST contain ONLY ids that appear verbatim in square brackets in the DATA."
         f"{correction}{low}\n\nDATA:\n" + fence(state["brief"])

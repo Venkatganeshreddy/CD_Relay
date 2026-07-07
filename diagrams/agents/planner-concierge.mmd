@@ -1,0 +1,35 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart TD
+  s([25th of month · Planner writes the draft<br/>analysis + questions + draft goals]):::start
+
+  chip[L2 opens Concierge<br/>🗺 Roadmap chip appears]:::proc
+  s --> chip
+
+  subgraph CONV[The curation conversation]
+    open[Agent opens: headline +<br/>2-3 sentence recap of the month]:::model
+    q[Agent asks ONE question<br/>consequence-first, in order]:::model
+    ans[L2 answers / edits a goal]:::proc
+    card[Confirm card · update_roadmap_draft<br/>records the answer + goal changes]:::proc
+    open --> q --> ans --> card
+    card -- more questions open --> q
+  end
+  chip --> open
+
+  d{L2: plan is final?}:::dec
+  card --> d
+  d -- not yet --> q
+
+  fin[Confirm card · finalize_roadmap]:::proc
+  d -- yes --> fin
+
+  g[(Next month's goals land in Relay<br/>own team only · draft FINAL · chip gone)]:::store
+  fin --> g
+
+  learn([L2 edits feed Curator → Planner memory<br/>next cycle's draft starts sharper]):::start
+  g --> learn
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
+  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0

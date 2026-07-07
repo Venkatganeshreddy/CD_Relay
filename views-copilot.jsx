@@ -32,6 +32,9 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   // leaves the server; hide the personal-key fallback entirely (it only
   // exists for offline/demo use).
   const serverLLM = !!(window.__RELAY && window.__RELAY.authed && window.CDC.agents && window.CDC.agents.available());
+  // Roadmap review wizard (interactive question cards over the open draft).
+  const [rmOpen, setRmOpen] = useState_c(false);
+  const [corpusTick, setCorpusTick] = useState_c(0);   // bump to re-derive corpus (e.g. after finalize)
 
   function handleKeyChange(val) {
     setApiKey(val);
@@ -40,7 +43,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   }
 
   // Build the in-scope corpus (RBAC applied)
-  const corpus = useMemo_c(() => buildCorpus(currentUser), [currentUser]);
+  const corpus = useMemo_c(() => buildCorpus(currentUser), [currentUser, corpusTick]);
 
   useEffect_c(() => {
     if (initialPrompt && messages.length === 0) {
@@ -62,7 +65,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   // One-stop trigger categories — each rides the same grounded chat + confirm
   // gate; a future category is one more entry here + its context block.
   const categories = [
-    corpus.draft && { label: '🗺 Roadmap', prompt: `Let's review the ${String(corpus.draft.month || '').slice(0, 7)} roadmap draft for ${corpus.draft.sub}.` },
+    corpus.draft && { label: '🗺 Roadmap review', wizard: true },
     { label: '📊 Team performance', prompt: 'How did my team perform this month — hours logged, tasks done vs blocked, and KPI status?' },
     { label: '🚧 Blockers', prompt: 'Any blockers or overdue tasks right now?' },
   ].filter(Boolean);
@@ -166,7 +169,13 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
       )}
 
       <div className="chat" ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }}>
-        {messages.length === 0 && !pending && (
+        {rmOpen && corpus.draft && (
+          <RoadmapReview draft={corpus.draft} user={currentUser}
+            onClose={() => setRmOpen(false)}
+            onChanged={() => setCorpusTick((t) => t + 1)}
+            onDiscuss={(q) => { setRmOpen(false); setInput(q); if (composerRef.current) composerRef.current.focus(); }} />
+        )}
+        {messages.length === 0 && !pending && !rmOpen && (
           <div className="fadein" style={{ maxWidth: 720, alignSelf: 'center', width: '100%', padding: '40px 16px' }}>
             <div className="row" style={{ gap: 10, marginBottom: 4 }}>
               <Icon name="sparkles" size={20} />
@@ -177,7 +186,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
             <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               {categories.map((c) => (
                 <span key={c.label} className="suggested-q" style={{ fontWeight: 600, borderColor: 'var(--accent-border)' }}
-                  onClick={() => ask(c.prompt)}>{c.label}</span>
+                  onClick={() => (c.wizard ? setRmOpen(true) : ask(c.prompt))}>{c.label}</span>
               ))}
             </div>
 
@@ -382,6 +391,145 @@ function ActionCard({ action, state, onConfirm, onDismiss }) {
   );
 }
 
+// ── Roadmap review wizard — interactive question cards over the open draft ──
+// Deterministic UI driven by the draft data (no LLM in the loop): recap card →
+// one question card at a time (quick-answer buttons + free text) → wrap-up
+// with a two-click finalize. Answers persist to roadmap_drafts.qaLog through
+// the same db helper the chat actions use; blocked/escalated detail stays
+// collapsed to counts (the noise complaint this UI exists to fix).
+function RoadmapReview({ draft, user, onClose, onChanged, onDiscuss }) {
+  const d = draft;
+  const [started, setStarted] = useState_c(false);
+  const [text, setText] = useState_c('');
+  const [busy, setBusy] = useState_c(false);
+  const [err, setErr] = useState_c('');
+  const [armFinal, setArmFinal] = useState_c(false);
+  const [finMsg, setFinMsg] = useState_c('');
+  const [tick, setTick] = useState_c(0);          // re-render after in-place draft mutations
+
+  const qs = (d.questions || [])
+    .map((q) => (typeof q === 'string' ? { text: q, options: [] } : { text: q.text || '', options: q.options || [] }))
+    .filter((q) => q.text);
+  const answered = new Set((d.qaLog || []).map((x) => x.q));
+  const open = qs.filter((q) => !answered.has(q.text));
+  const q = open[0];
+  const diff = d.executionDiff || [];
+  const cnt = (k) => diff.filter((f) => String(f.kind || '').toLowerCase() === k).length;
+  const topFindings = (d.findings || []).slice(0, 3);
+  const month = String(d.month || '').slice(0, 7);
+
+  async function answer(a) {
+    const val = String(a || '').trim();
+    if (!val || busy || !q) return;
+    setBusy(true); setErr('');
+    const patch = { qaLog: [...(d.qaLog || []), { q: q.text, a: val }] };
+    if ((d.status || 'DRAFT') === 'DRAFT') patch.status = 'IN_REVIEW';
+    const r = await window.CDC.db.updateRoadmapDraft(d.id, patch);
+    if (!r.remoteOk) setErr('Could not save — the draft may be outside your scope.');
+    setText(''); setBusy(false); setTick(tick + 1);
+  }
+
+  async function finalize() {
+    setBusy(true); setErr('');
+    try {
+      const r = await executeAction({ type: 'finalize_roadmap', draftId: d.id }, user);
+      setFinMsg(r.msg);
+    } catch (e) { setErr(e.message || String(e)); setArmFinal(false); }
+    setBusy(false);
+  }
+
+  const chipBtn = { fontSize: 12.5, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--accent-border)', background: 'var(--accent-soft)', color: 'var(--accent)' };
+  const statPill = (label, n, tone) => <Pill key={label} tone={tone}>{label} {n}</Pill>;
+
+  return (
+    <div className="card card-pad fadein" style={{ margin: '14px 0', borderLeft: '3px solid var(--accent)', maxWidth: 720, alignSelf: 'center', width: '100%' }}>
+      <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 10 }}>
+        <Icon name="sparkles" size={14} />
+        <strong style={{ fontSize: 13.5, flex: 1 }}>Roadmap review — {month} · {d.sub}</strong>
+        <Pill tone={d.status === 'FINAL' ? 'green' : 'accent'} dot>{d.status || 'DRAFT'}</Pill>
+        <button className="btn" data-size="sm" data-variant="ghost" onClick={onClose}>Close</button>
+      </div>
+
+      {finMsg ? (
+        <div>
+          <div style={{ fontSize: 13, marginBottom: 10 }}>✅ {finMsg}</div>
+          <button className="btn" data-size="sm" data-variant="primary" onClick={() => { onChanged(); onClose(); }}>Done</button>
+        </div>
+      ) : !started ? (
+        <div>
+          {d.headline && <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>{d.headline}</div>}
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {statPill('✓ done', cnt('done'), 'green')}
+            {statPill('◐ partial', cnt('partial'), 'amber')}
+            {statPill('✗ missed', cnt('missed'), 'red')}
+            <Pill tone="outline">{open.length} question{open.length === 1 ? '' : 's'} to review</Pill>
+          </div>
+          {topFindings.length > 0 && (
+            <div className="col" style={{ gap: 5, marginBottom: 12 }}>
+              {topFindings.map((f, i) => (
+                <div key={i} className="row" style={{ gap: 7, alignItems: 'flex-start', fontSize: 12.5 }} title={f.consequence ? `If it repeats: ${f.consequence}` : ''}>
+                  <Pill tone={f.kind === 'strength' ? 'green' : f.kind === 'opportunity' ? 'accent' : 'amber'}>{f.kind || 'finding'}</Pill>
+                  <span style={{ flex: 1 }}>{String(f.text || '').slice(0, 160)}</span>
+                </div>
+              ))}
+              {(d.findings || []).length > 3 && <span className="muted" style={{ fontSize: 11.5 }}>+{(d.findings || []).length - 3} more findings — ask in chat for any of them</span>}
+            </div>
+          )}
+          <button className="btn" data-size="sm" data-variant="primary" onClick={() => setStarted(true)}>
+            {open.length ? 'Start review →' : 'Review draft goals →'}
+          </button>
+        </div>
+      ) : q ? (
+        <div>
+          <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Question {qs.length - open.length + 1} of {qs.length}</div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 12 }}>{q.text}</div>
+          {q.options.length > 0 && (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {q.options.map((o) => (
+                <span key={o} style={{ ...chipBtn, opacity: busy ? 0.5 : 1 }} onClick={() => answer(o)}>{o}</span>
+              ))}
+            </div>
+          )}
+          <div className="row" style={{ gap: 8 }}>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} disabled={busy}
+              placeholder={q.options.length ? 'or answer in your own words…' : 'Your answer…'}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); answer(text); } }}
+              style={{ flex: 1, fontSize: 12.5, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical' }} />
+            <button className="btn" data-size="sm" data-variant="primary" disabled={busy || !text.trim()} onClick={() => answer(text)}>Send</button>
+          </div>
+          <div className="row" style={{ gap: 10, marginTop: 8 }}>
+            <span className="muted" style={{ fontSize: 11.5, cursor: 'pointer' }} onClick={() => onDiscuss(`About this roadmap question: "${q.text}" — `)}>💬 discuss this one in chat instead</span>
+          </div>
+          {err && <div style={{ color: 'var(--red, #f85149)', fontSize: 12, marginTop: 8 }}>{err}</div>}
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 13, marginBottom: 10 }}>All questions answered. Draft goals for <strong>{month}</strong>:</div>
+          <div className="col" style={{ gap: 6, marginBottom: 12 }}>
+            {(d.goals || []).map((g, i) => (
+              <div key={i} style={{ fontSize: 12.5, lineHeight: 1.45 }}>
+                <strong>{i + 1}. {g.title}</strong>
+                {(g.deliverables || []).length > 0 && <span className="muted"> — {(g.deliverables || []).join('; ').slice(0, 140)}</span>}
+              </div>
+            ))}
+            {(d.goals || []).length === 0 && <span className="muted" style={{ fontSize: 12.5 }}>(no draft goals — add them in chat before finalizing)</span>}
+          </div>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            {!armFinal
+              ? <button className="btn" data-size="sm" data-variant="primary" onClick={() => setArmFinal(true)} disabled={busy}>Finalize roadmap…</button>
+              : <>
+                  <button className="btn" data-size="sm" data-variant="primary" onClick={finalize} disabled={busy}>{busy ? 'Finalizing…' : `Confirm — create ${(d.goals || []).length} goals for ${month}`}</button>
+                  <button className="btn" data-size="sm" data-variant="ghost" onClick={() => setArmFinal(false)} disabled={busy}>Back</button>
+                </>}
+            <span className="muted" style={{ fontSize: 11.5, cursor: 'pointer' }} onClick={() => onDiscuss('Before finalizing the roadmap, I want to change: ')}>💬 edit goals in chat first</span>
+          </div>
+          {err && <div style={{ color: 'var(--red, #f85149)', fontSize: 12, marginTop: 8 }}>{err}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Msg({ m, confidence }) {
   if (m.role === 'user') {
     return (
@@ -571,11 +719,11 @@ ${(d.executionDiff || []).slice(0, 12).map((f) => `- (${f.kind}) ${f.text}`).joi
 FINDINGS:
 ${(d.findings || []).slice(0, 12).map((f) => `- (${f.kind}) ${f.text}${f.consequence ? ` | if it repeats: ${f.consequence}` : ''}${f.decision ? ` | decision asked: ${f.decision}` : ''}`).join('\n') || '(none)'}
 OPEN QUESTIONS — ask ONE at a time, in order, skipping any already answered in the QA LOG:
-${(d.questions || []).slice(0, 6).map((q, i) => `${i + 1}. ${q}`).join('\n') || '(none)'}
+${(d.questions || []).slice(0, 6).map((q, i) => `${i + 1}. ${q.text || q}${(q.options || []).length ? ` [alternatives: ${q.options.join(' / ')}]` : ''}`).join('\n') || '(none)'}
 DRAFT GOALS for ${String(d.month || '').slice(0, 7)} (numbered — the user edits these):
 ${(d.goals || []).slice(0, 12).map((g, i) => `${i + 1}. ${g.title} — ${(g.deliverables || []).join('; ') || '(no deliverables yet)'}${g.rationale ? ` (why: ${g.rationale})` : ''}`).join('\n') || '(none)'}
 QA LOG: ${(d.qaLog || []).map((x) => `Q: ${x.q} → A: ${x.a}`).join(' | ') || '(none yet)'}
-PLANNING RULES: open with the headline and a 2-3 sentence recap of the execution diff, then ask exactly ONE open question and stop — never dump the whole draft. Questions over instructions: make the lead articulate the plan. Direct but constructive; frame every risk as what happened → what happens if it repeats → the decision being asked. Refer to goals by their number/title, never raw ids. After each answer or goal edit, propose ONE update_roadmap_draft action recording it. You draft, the human decides — propose finalize_roadmap ONLY when the user explicitly says the plan is complete.
+PLANNING RULES: open with the headline and a 2-3 sentence recap of the execution diff, then ask exactly ONE open question and stop — never dump the whole draft. Never enumerate blocked or escalated task lists — give counts plus the single most important item; the review cards carry the detail. Questions over instructions: make the lead articulate the plan. Direct but constructive; frame every risk as what happened → what happens if it repeats → the decision being asked. Refer to goals by their number/title, never raw ids. After each answer or goal edit, propose ONE update_roadmap_draft action recording it. You draft, the human decides — propose finalize_roadmap ONLY when the user explicitly says the plan is complete.
 ADDITIONAL actions supported while this draft is open (same confirm-gated rules as above):
 - {"type":"update_roadmap_draft","draftId":"${d.id}","patch":{"goals":[{"title":"..","deliverables":["..",".."],"rationale":".."}],"qaLog":[{"q":"..","a":".."}],"status":"IN_REVIEW"}} — patch keys REPLACE those keys on the draft, so ALWAYS send the FULL goals array / FULL qaLog. status may only be "IN_REVIEW".
 - {"type":"finalize_roadmap","draftId":"${d.id}"} — only on explicit confirmation that the plan is complete.
