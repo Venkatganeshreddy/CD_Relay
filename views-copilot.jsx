@@ -66,6 +66,7 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
   // gate; a future category is one more entry here + its context block.
   const categories = [
     corpus.draft && { label: '🗺 Roadmap review', wizard: true },
+    { label: '🧠 Meetings', prompt: 'What did we decide in recent meetings, and which action items are still open?' },
     { label: '📊 Team performance', prompt: 'How did my team perform this month — hours logged, tasks done vs blocked, and KPI status?' },
     { label: '🚧 Blockers', prompt: 'Any blockers or overdue tasks right now?' },
   ].filter(Boolean);
@@ -638,7 +639,18 @@ function buildCorpus(user) {
     reportCount: reports.length, kpiCount: kpis.length,
     taskCount: tasks.length, flagCount: flags.length,
     draft: openDraftFor(user),
+    moms: momsFor(user),
   };
+}
+
+// Meetings in the user's scope — mirrors sb_scopeFilter().mom in
+// views-relay.jsx (file-local there, so restated: dept match or leadership).
+function momsFor(user) {
+  const CDC = window.CDC;
+  const seesAll = ['L3', 'Admin'].includes(user.level)
+    || ['ADMIN', 'PRODUCT_OWNER'].includes(user.role) || user.crossDept;
+  const deptIds = new Set((CDC.filterDepartments(user.id) || []).map((d) => d.id));
+  return (CDC.MOMS || []).filter((m) => seesAll || !m.dept || deptIds.has(m.dept));
 }
 
 // Newest open Roadmap Planner draft in the user's scope (none → no PLANNING
@@ -706,6 +718,27 @@ function buildSystemPrompt(corpus, user) {
   const wlRecent = wls.slice(0, 40).map((w) => `${w.date} · ${wlName(w)} · ${w.hours || 0}h · ${w.outputCategory || w.taskCategory || '—'} · ${w.status || ''}`).join('\n');
   const wlBlock = `Worklogs in scope: ${wls.length} total. Logged TODAY (${todayStr}): ${todayRoll}.\nRecent entries (date · person · hours · category · status):\n${wlRecent}`;
 
+  // Meeting memory (Second Brain) — makes meetings queryable in chat:
+  // "what did we decide about X", "who owns Y", "what's still open from Z".
+  const momLines = (corpus.moms || []).slice(0, 20).map((m) => {
+    const summ = typeof m.summary === 'string' ? m.summary : Object.values(m.summary || {}).join(' ');
+    // Live shape: {text, status, owner, ownerName, due}. Open items matter most —
+    // list them first (up to 12), then compress done items to a count.
+    const ai = m.actionItems || [];
+    const fmt = (it) => {
+      const who = it.ownerName || (CDC.lookup.user(it.ownerId || it.owner) || {}).name || it.owner || '';
+      return `[open] ${String(it.text || '').slice(0, 90)}${who ? ` (${who}` : ''}${it.due ? `${who ? ', ' : ' ('}due ${it.due}` : ''}${who || it.due ? ')' : ''}`;
+    };
+    const openItems = ai.filter((it) => it.status !== 'done');
+    const doneCount = ai.length - openItems.length;
+    const items = openItems.slice(0, 12).map(fmt).join(' | ')
+      + (openItems.length > 12 ? ` | …+${openItems.length - 12} more open` : '')
+      + (doneCount ? ` | ${doneCount} done` : '');
+    const att = (m.attendeesAll || []).map((a) => a.name).filter(Boolean).join(', ')
+      || (m.attendees || []).map((id) => (CDC.lookup.user(id) || {}).name || id).join(', ');
+    return `- "${m.title}" (${m.date || '?'})${m.continuesFrom ? ' [continues an earlier thread]' : ''} — attendees: ${att || '—'}\n  summary: ${String(summ).replace(/\s+/g, ' ').slice(0, 350)}${ai.length ? `\n  action items (${openItems.length} open / ${ai.length} total): ${items}` : ''}`;
+  }).join('\n');
+
   // Roadmap Planner — the structured month-end curation conversation, injected
   // only while an open draft is in scope (tone per the department doctrine:
   // context before ask, one question at a time, draft-don't-decide).
@@ -754,6 +787,9 @@ ${wlBlock}
 
 NON-PAYROLL BUDGET:
 ${budgetLine}
+
+MEETING MEMORY (Second Brain — answer "what did we decide / who owns / what's still pending from meetings" from these; reference meetings by their title and date, never by id tokens):
+${momLines || '(no meetings recorded in scope yet)'}
 
 KNOWLEDGE BASE (Codex — use for how-to / process / "what does agent X do" / guideline questions; name the guideline/workflow/agent instead of a [id] token):
 GUIDELINES:
