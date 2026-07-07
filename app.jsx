@@ -621,6 +621,17 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
     }).slice(0, 6),
     tasks: tasks.filter((t) => t.title.toLowerCase().includes(lower)).slice(0, 4),
     kpis: kpis.filter((k) => k.name.toLowerCase().includes(lower)).slice(0, 4),
+    moms: (() => {
+      // Meetings (Second Brain) — same visibility rule as the SB page.
+      const seesAll = ['L3', 'Admin'].includes(currentUser.level) || ['ADMIN', 'PRODUCT_OWNER'].includes(currentUser.role) || currentUser.crossDept;
+      const deptIds = new Set(depts.map((d) => d.id));
+      return (CDC.MOMS || []).filter((m) => seesAll || !m.dept || deptIds.has(m.dept)).filter((m) => {
+        const att = (m.attendeesAll || []).map((a) => a.name).join(' ');
+        const summ = typeof m.summary === 'string' ? m.summary : Object.values(m.summary || {}).join(' ');
+        const items = (m.actionItems || []).map((i) => (i.text || '') + ' ' + (i.ownerName || '')).join(' ');
+        return `${m.title || ''} ${att} ${summ} ${items}`.toLowerCase().includes(lower);
+      }).slice(0, 4);
+    })(),
   };
 
   function pick(action) { onClose(); action(); }
@@ -629,7 +640,7 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
     <Modal open={true} onClose={onClose} title="Search" width={620}>
       <div className="row" style={{ gap: 8, marginBottom: 12, height: 38, padding: '0 12px', background: 'var(--panel)', borderRadius: 8, border: '1px solid var(--border)' }}>
         <Icon name="search" size={14} />
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reports, tasks, KPIs, departments…" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, color: 'var(--text)', fontFamily: 'inherit' }} />
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reports, tasks, KPIs, meetings…" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, color: 'var(--text)', fontFamily: 'inherit' }} />
       </div>
       {!matches && (
         <div className="muted" style={{ fontSize: 12 }}>
@@ -668,6 +679,21 @@ function SearchPalette({ open, onClose, nav, currentUser }) {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+          {matches.moms.length > 0 && (
+            <div>
+              <div className="detail-section" style={{ margin: '0 0 6px' }}>Meetings</div>
+              <div className="col" style={{ gap: 4 }}>
+                {matches.moms.map((m) => (
+                  <div key={m.id} className="list-row" onClick={() => pick(() => nav.go('second-brain'))}>
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <span>{m.title}</span>
+                      <span className="muted" style={{ fontSize: 11 }}>{m.date} · {(m.actionItems || []).filter((i) => i.status !== 'done').length} open</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
