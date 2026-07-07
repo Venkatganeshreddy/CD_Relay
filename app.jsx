@@ -545,14 +545,38 @@ function buildCrumbs(route, currentUser) {
 
 // ── Role switcher ───────────────────────────────────────────────────────
 function RoleSwitcher({ open, onClose, currentId, onPick }) {
+  const [fSub, setFSub] = useState_a('all');    // stack filter
+  const [fLvl, setFLvl] = useState_a('all');    // level filter (L1/L2/L3)
   if (!open) return null;
+  const subs = [...new Set((window.CDC.USERS || []).map((u) => u.sub).filter(Boolean))].sort();
+  const lvlOf = (u) => u.level || u.role;
+  const shown = (window.CDC.USERS || []).filter((u) =>
+    (fSub === 'all' || u.sub === fSub) && (fLvl === 'all' || lvlOf(u) === fLvl));
+  const chip = (active) => ({
+    fontSize: 11.5, padding: '3px 10px', borderRadius: 8, cursor: 'pointer',
+    border: '1px solid ' + (active ? 'var(--accent-border)' : 'var(--border)'),
+    background: active ? 'var(--accent-soft)' : 'var(--panel)',
+    color: active ? 'var(--accent)' : 'var(--text-muted)',
+  });
   return (
     <Modal open={true} onClose={onClose} title="Switch user — preview RBAC scope" width={560}>
-      <div className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+      <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
         Each role sees only data within its scope. The dashboard, Copilot context, and search results all change.
       </div>
-      <div className="col" style={{ gap: 6 }}>
-        {window.CDC.USERS.map((u) => {
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+        <span className="muted" style={{ fontSize: 11, width: 38 }}>Stack</span>
+        <span style={chip(fSub === 'all')} onClick={() => setFSub('all')}>All</span>
+        {subs.map((s) => <span key={s} style={chip(fSub === s)} onClick={() => setFSub(s)}>{s}</span>)}
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        <span className="muted" style={{ fontSize: 11, width: 38 }}>Level</span>
+        {['all', 'L1', 'L2', 'L3'].map((l) => (
+          <span key={l} style={chip(fLvl === l)} onClick={() => setFLvl(l)}>{l === 'all' ? 'All' : l}</span>
+        ))}
+      </div>
+      <div className="col" style={{ gap: 6, maxHeight: '55vh', overflowY: 'auto' }}>
+        {shown.length === 0 && <div className="muted" style={{ fontSize: 12.5, padding: '14px 4px' }}>Nobody matches these filters.</div>}
+        {shown.map((u) => {
           const scope = window.CDC.scopeForUser(u.id);
           const desc = scope.kind === 'all' ? 'All departments' :
                        scope.kind === 'dept' ? `Department: ${window.CDC.lookup.dept(scope.dept)?.name}` :
