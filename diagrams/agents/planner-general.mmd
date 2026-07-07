@@ -1,0 +1,23 @@
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'system-ui, sans-serif','fontSize':'15px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#e7eef7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
+flowchart LR
+  a([All month<br/>the team's work flows into Relay<br/>tasks · worklogs · meetings · KPIs]):::start
+
+  b[25th of the month<br/>AI reviews the month<br/>planned vs delivered · gaps · risks]:::model
+
+  c[Draft roadmap ready<br/>+ pointed questions<br/>for the team lead]:::proc
+
+  d[Lead reviews in chat<br/>one question at a time<br/>click an option or type]:::proc
+
+  e[One click to finalize]:::proc
+
+  f[(Next month's goals<br/>live in Relay)]:::store
+
+  g([Every answer teaches the AI<br/>next month's draft starts sharper]):::start
+
+  a --> b --> c --> d --> e --> f --> g
+  g -. the loop repeats every month .-> a
+
+  classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
+  classDef proc fill:#15324d,stroke:#2b6cb0,color:#e7eef7
+  classDef model fill:#10303a,stroke:#2bb0a8,color:#d8f6f2
+  classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0

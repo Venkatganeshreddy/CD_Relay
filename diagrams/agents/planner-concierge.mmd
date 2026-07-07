@@ -1,35 +1,34 @@
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'14px','lineColor':'#3d5a80','primaryColor':'#15324d','primaryTextColor':'#cfe3f7','primaryBorderColor':'#2b6cb0','clusterBkg':'#0e1b2c','clusterBorder':'#1f3a5f'}}}%%
 flowchart TD
-  s([25th of month · Planner writes the draft<br/>analysis + questions + draft goals]):::start
+  s([25th of month · Planner writes the draft<br/>analysis + questions with named alternatives + draft goals]):::start
 
-  chip[L2 opens Concierge<br/>🗺 Roadmap chip appears]:::proc
+  chip[L2 opens Concierge<br/>🗺 Roadmap review chip]:::proc
   s --> chip
 
-  subgraph CONV[The curation conversation]
-    open[Agent opens: headline +<br/>2-3 sentence recap of the month]:::model
-    q[Agent asks ONE question<br/>consequence-first, in order]:::model
-    ans[L2 answers / edits a goal]:::proc
-    card[Confirm card · update_roadmap_draft<br/>records the answer + goal changes]:::proc
-    open --> q --> ans --> card
-    card -- more questions open --> q
+  subgraph W[Interactive review — cards, not chat dump]
+    recap[RECAP CARD<br/>headline · ✓ done ◐ partial ✗ missed pills<br/>top-3 findings · blocked noise = counts only]:::proc
+    qcard[QUESTION CARD · one at a time<br/>Question 2 of 6 · quick-answer BUTTONS<br/>Carry / Split / Drop / … + free-text box]:::model
+    save[answer saves instantly<br/>qaLog + status IN_REVIEW]:::proc
+    recap -- Start review --> qcard
+    qcard -- click option or type --> save
+    save -- next question --> qcard
   end
-  chip --> open
+  chip --> recap
 
-  d{L2: plan is final?}:::dec
-  card --> d
-  d -- not yet --> q
+  chat[💬 discuss in chat<br/>LLM conversation, counts not lists]:::model
+  qcard -. any question .-> chat
+  chat -.-> qcard
 
-  fin[Confirm card · finalize_roadmap]:::proc
-  d -- yes --> fin
+  wrap[WRAP-UP CARD<br/>draft goals listed · two-click finalize<br/>or edit goals in chat first]:::proc
+  save -- all answered --> wrap
 
-  g[(Next month's goals land in Relay<br/>own team only · draft FINAL · chip gone)]:::store
-  fin --> g
+  g[(Finalize → next month's goals in Relay<br/>own team only · draft FINAL · chip gone)]:::store
+  wrap --> g
 
-  learn([L2 edits feed Curator → Planner memory<br/>next cycle's draft starts sharper]):::start
+  learn([L2 answers + edits feed Curator → Planner memory<br/>next cycle's draft starts sharper]):::start
   g --> learn
 
   classDef start fill:#15512f,stroke:#34d058,color:#eafff0,stroke-width:1.5px
   classDef proc fill:#15324d,stroke:#2b6cb0,color:#cfe3f7
-  classDef dec fill:#3a2f12,stroke:#caa53d,color:#f3e7c2
   classDef model fill:#10303a,stroke:#2bb0a8,color:#cdf3ee
   classDef store fill:#231a0e,stroke:#b8860b,color:#f0e6c0
