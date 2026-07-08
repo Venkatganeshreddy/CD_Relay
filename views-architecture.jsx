@@ -420,7 +420,7 @@ function FeedbackSubmit({ currentUser }) {
   const mine = (CDC.FEEDBACK || []).filter((f) => f.userId === currentUser.id);
   function submit() {
     const t = text.trim(); if (!t) return;
-    const fb = { id: `fb-${Date.now()}`, kind, text: t, page: 'feedback', userId: currentUser.id, userName: currentUser.name, status: 'open', ts: CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10) };
+    const fb = { id: `fb-${Date.now()}`, kind, text: t, page: 'feedback', userId: currentUser.id, userName: currentUser.name, status: 'open', ts: CDC.fmt(CDC.today) };
     if (CDC.db && CDC.db.addFeedback) CDC.db.addFeedback(fb); else (CDC.FEEDBACK = CDC.FEEDBACK || []).unshift(fb);
     setText(''); force((n) => n + 1);
     if (CDC.toast) CDC.toast('Thanks — your feedback was sent!', 'green');

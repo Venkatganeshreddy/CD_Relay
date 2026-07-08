@@ -1,7 +1,6 @@
 modal>=0.64
-fastapi[standard]>=0.115
+fastapi>=0.115
 langgraph>=0.2
-langchain-core>=0.3
 langchain-openai>=0.2
 httpx>=0.27
 pydantic>=2.7

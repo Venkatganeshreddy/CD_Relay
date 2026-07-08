@@ -14,7 +14,7 @@ import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import { registerReadTools } from './tools.mjs';
 
 const URL = process.env.SUPABASE_URL || 'https://fzwgdiphjehecsizvwyl.supabase.co';
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -25,26 +25,10 @@ if (!KEY) { console.error('Set SUPABASE_SERVICE_KEY'); process.exit(1); }
 if (!TOKEN) { console.error('Set CONNECTOR_TOKEN (the shared secret callers must send)'); process.exit(1); }
 const sb = createClient(URL, KEY, { auth: { persistSession: false } });
 
-const TABLES = [
-  'employees', 'departments', 'kpis', 'daily_reports', 'worklogs', 'tasks',
-  'flags', 'weekly_summaries', 'moms', 'nonpayroll_expense', 'recommendations',
-  'ai_runs', 'activity', 'engram_interactions',
-];
-
 // Build a fresh server per request (stateless transport wants no shared state).
 function makeServer() {
   const server = new McpServer({ name: 'cd-relay', version: '0.1.0' });
-  server.tool(
-    'query', 'Read rows from a CD_Relay table. Returns the JSONB `data` of each row.',
-    { table: z.enum(TABLES), limit: z.number().int().min(1).max(500).default(50) },
-    async ({ table, limit }) => {
-      const { data, error } = await sb.from(table).select('data').limit(limit);
-      if (error) return { isError: true, content: [{ type: 'text', text: error.message }] };
-      return { content: [{ type: 'text', text: JSON.stringify(data.map((r) => r.data), null, 2) }] };
-    },
-  );
-  server.tool('list_tables', 'List the CD_Relay tables you can query.', {},
-    async () => ({ content: [{ type: 'text', text: TABLES.join('\n') }] }));
+  registerReadTools(server, sb);
   return server;
 }
 

@@ -1375,7 +1375,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
     // 5. Fallback: triager.
     return { id: currentUser.id, reason: `No clear owner for "${hint}" — assigned to you for triage` };
   }
-  function dueIn(days) { const CDC = window.CDC; const d = CDC.daysAgo ? CDC.daysAgo(-days) : new Date(Date.now() + days * 864e5); return CDC.fmt ? CDC.fmt(d) : d.toISOString().slice(0, 10); }
+  function dueIn(days) { const CDC = window.CDC; const d = CDC.daysAgo ? CDC.daysAgo(-days) : new Date(Date.now() + days * 864e5); return CDC.fmt(d); }
 
   async function runPipeline() {
     if (recOnRef.current) stopRecording();
@@ -1478,7 +1478,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       CDC.db && CDC.db.addTask({
         id: `task-mom-${Date.now()}-${i}`, title: it.text, status: 'BACKLOG', reason: 'From MOM',
         sourceReports: [], owner: it.owner, dept: owner ? owner.dept : currentUser.dept,
-        created: CDC.fmt ? CDC.fmt(CDC.today) : '', confidence: it.confidence, source: 'mom', due: it.due,
+        created: CDC.fmt(CDC.today), confidence: it.confidence, source: 'mom', due: it.due,
         aiSuggestedOwner: it.aiOwner, ownerInferReason: it.ownerInferReason,
         uploadedBy: currentUser.id, momId,
       });
@@ -1511,7 +1511,7 @@ function MomLoader({ open, onClose, currentUser, nav }) {
       attendeesAll: attendees.map((a) => ({ name: a.name, userId: a.userId || null })),   // full list incl. externals
       loggedBy: currentUser.id,
       loggedByName,
-      date: CDC.fmt ? CDC.fmt(CDC.today) : '', by: currentUser.id, source: 'MOM Loader',
+      date: CDC.fmt(CDC.today), by: currentUser.id, source: 'MOM Loader',
       contextMoms: ctxSelected.map((m) => ({ id: m.id, title: m.title || 'MOM', date: m.date || '' })), // Second Brain thread — which prior MoMs informed this one
       suggested: actionItems.map((it) => ({ text: it.aiText, owner: it.aiOwner, ownerName: nm(it.aiOwner), reason: it.ownerInferReason, confidence: it.confidence })),
       concluded: approved.map((it) => ({ text: it.text, owner: it.owner, ownerName: nm(it.owner),

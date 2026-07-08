@@ -57,7 +57,7 @@
   // stored (creation-time) value can't keep an old entry looking like "today".
   function reAge(rows) {
     if (!Array.isArray(rows)) return;
-    const todayStr = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+    const todayStr = window.CDC.fmt(window.CDC.today);
     const t0 = new Date(todayStr).getTime();
     for (const r of rows) {
       const d = r.date || r.work_date;
@@ -463,7 +463,7 @@
         }
         if (patch.estHours !== undefined) {
           // Same rule as task creation: future-due work doesn't count today.
-          const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+          const today = window.CDC.fmt(window.CDC.today);
           const due = patch.due !== undefined ? patch.due : t.due;
           wl.estHours = Number(patch.estHours) || 0;
           wl.hours = (due && due > today) ? 0 : Number(patch.estHours) || 0;
@@ -519,7 +519,7 @@
     async acknowledgeTask(id, { status, note } = {}) {
       const STATUS_MAP = { 'In-progress': 'ACTIVE', 'Done': 'DONE', 'Blocked': 'BLOCKED', 'Overdue': 'ACTIVE', 'Backlog': 'BACKLOG' };
       const t = (window.CDC.TASKS || []).find((x) => x.id === id);
-      const today = window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10);
+      const today = window.CDC.fmt(window.CDC.today);
       const newStatus = status ? (STATUS_MAP[status] || 'ACTIVE') : (t ? t.status : 'ACTIVE');
       if (t) {
         t.lastAckDate = today; t.ackPending = false; t.lastAckStatus = status || null;

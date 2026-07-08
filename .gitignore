@@ -1,7 +1,9 @@
 node_modules/
 *.log
 .DS_Store
-obsidian-vault/.obsidian/
+obsidian-vault/
+*.zip
+supabase/.temp/
 *.bak
 .claude/
 __pycache__/

@@ -917,7 +917,7 @@ function TasksView({ tweaks, currentUser, initialFilter }) {
             {list.map((t) => {
               const decided = t._decision;
               const status = statusOv[t.id] || t.status;
-              const owner = CDC.USERS.find((u) => u.id === t.owner) || CDC.REPORT_AUTHORS.find((a) => a.id === t.owner);
+              const owner = CDC.USERS.find((u) => u.id === t.owner);
               const ownerName = owner?.name || 'Unassigned';
               const overdue = isOverdue({ ...t, status });
               const meta = statusMeta(status);
@@ -1436,124 +1436,6 @@ window.CreateTaskModal = CreateTaskModal;
 // ════════════════════════════════════════════════════════════════════════
 // DATA QUALITY (FLAGS) INBOX
 // ════════════════════════════════════════════════════════════════════════
-function QualityView({ tweaks, currentUser }) {
-  const CDC = window.CDC;
-  const flags = CDC.filterFlags(currentUser.id);
-  const [state, setState] = useState_o({}); // id -> 'resolved'|'snoozed'|'dismissed'
-  const [filter, setFilter] = useState_o('open');
-  const [selected, setSelected] = useState_o(flags[0]?.id || null);
-  function setFlag(id, st) {
-    setState((s) => { if (st === null) { const c = { ...s }; delete c[id]; return c; } return { ...s, [id]: st }; });
-    if (window.CDC.db) window.CDC.db.updateFlag(id, st === null ? 'open' : st);
-  }
-
-  const liveFlags = flags.map((f) => ({ ...f, state: state[f.id] || f.state }));
-  const list = liveFlags.filter((f) => filter === 'all' ? true : f.state === filter);
-  const sel = liveFlags.find((f) => f.id === selected);
-
-  return (
-    <div className="fadein">
-      <SectionHeader
-        title="Data quality"
-        subtitle="Flags raised by the DataQuality agent. Resolve, snooze, or dismiss."
-        actions={
-          <>
-            <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-scan</button>
-          </>
-        }
-      />
-
-      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        {['open', 'snoozed', 'resolved', 'all'].map((f) => (
-          <button key={f} className="btn" data-size="sm" data-variant={filter === f ? 'primary' : 'ghost'} onClick={() => setFilter(f)}>
-            {f} <span className="mono muted" style={{ marginLeft: 6 }}>{liveFlags.filter((x) => f === 'all' || x.state === f).length}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="split" style={{ height: 'calc(100vh - 250px)' }}>
-        <div className="split-list">
-          {list.map((f) => (
-            <div key={f.id} className="list-row" data-active={selected === f.id} onClick={() => setSelected(f.id)}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <Pill tone={f.severity === 'high' ? 'red' : f.severity === 'medium' ? 'amber' : 'outline'} dot>{f.severity}</Pill>
-                <span className="faint mono" style={{ fontSize: 10.5 }}>{f.created}</span>
-              </div>
-              <div style={{ fontWeight: 500, fontSize: 13, lineHeight: 1.35 }}>{f.title}</div>
-              <div className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.04, fontWeight: 500 }}>{f.kind.replace('_', ' ')}</div>
-            </div>
-          ))}
-          {list.length === 0 && <div className="empty">No flags.</div>}
-        </div>
-
-        <div className="split-pane">
-          {sel ? (
-            <>
-              <div className="detail-h">
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <div>
-                    <div className="row" style={{ gap: 8 }}>
-                      <Pill tone={sel.severity === 'high' ? 'red' : sel.severity === 'medium' ? 'amber' : 'outline'} dot>{sel.severity}</Pill>
-                      <Pill tone={sel.state === 'resolved' ? 'green' : sel.state === 'snoozed' ? 'outline' : 'amber'}>{sel.state}</Pill>
-                    </div>
-                    <h3 style={{ margin: '6px 0 0', fontSize: 15 }}>{sel.title}</h3>
-                    <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
-                      <span className="mono">{sel.id}</span> · {sel.kind.replace('_', ' ')} · raised {sel.created}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="detail-b">
-                <div className="detail-section">Detail</div>
-                <p style={{ fontSize: 13, margin: 0 }}>{sel.detail}</p>
-
-                <div className="detail-section">Target</div>
-                <div className="kv" style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '6px 12px', fontSize: 12.5 }}>
-                  <span className="muted">type</span><span className="mono">{sel.target.type}</span>
-                  {sel.target.id && (<><span className="muted">id</span><span className="mono">{sel.target.id}</span></>)}
-                  {sel.target.dept && (<><span className="muted">department</span><span>{CDC.lookup.dept(sel.target.dept)?.name}</span></>)}
-                </div>
-
-                <div className="detail-section">Suggested actions</div>
-                <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-                  {flagActions(sel).map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-
-                <div className="detail-section">Agent run</div>
-                <dl className="kv">
-                  <dt>Detected by</dt><dd>DataQuality agent</dd>
-                  <dt>Run</dt><dd className="mono">run-1099 · claude-haiku-4-5 · 1820 ms</dd>
-                  <dt>Confidence</dt><dd><ConfChip value={0.87} show={tweaks.confidence} /></dd>
-                </dl>
-              </div>
-              <div className="action-bar">
-                {sel.state === 'open' ? (
-                  <>
-                    <button className="btn" data-size="sm" onClick={() => setFlag(sel.id, 'snoozed')}>Snooze 24h</button>
-                    <span style={{ flex: 1 }} />
-                    <button className="btn" data-size="sm" data-variant="danger" onClick={() => setFlag(sel.id, 'dismissed')}>Dismiss</button>
-                    <button className="btn" data-size="sm" data-variant="primary" onClick={() => setFlag(sel.id, 'resolved')}><Icon name="check" size={11} /> Mark resolved</button>
-                  </>
-                ) : (
-                  <>
-                    <Pill tone={sel.state === 'resolved' ? 'green' : 'outline'} dot>{sel.state}</Pill>
-                    <span className="muted" style={{ fontSize: 12 }}>Action logged to audit.</span>
-                    <span style={{ flex: 1 }} />
-                    <button className="btn" data-size="sm" onClick={() => setFlag(sel.id, null)}>Reopen</button>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="empty">Select a flag.</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-window.QualityView = QualityView;
-
 function flagActions(f) {
   switch (f.kind) {
     case 'missing_reports': return [

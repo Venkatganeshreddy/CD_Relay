@@ -1324,10 +1324,6 @@
       summary: 'Baseline hours-per-unit by output category. Drives Agentic Gains math. Reviewed monthly.' },
   ];
 
-  // ── Back-compat alias: REPORT_AUTHORS is used by old code that looked up
-  // by author id; in v2 authors are users, so resolve via USERS too. ─────
-  const REPORT_AUTHORS = USERS;
-
   // ── Helpers ────────────────────────────────────────────────────────────
   function scopeForUser(userId) {
     const u = USERS.find((x) => x.id === userId);
@@ -1793,7 +1789,7 @@
     ROLES, USERS,
     TASK_CATALOG, applyTaskCatalog, fmtTs,
     BUSINESS_DIRECTIONS, DEPARTMENTS, DEPT_HEALTH,
-    KPIS, GOALS, REPORTS, REPORT_AUTHORS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
+    KPIS, GOALS, REPORTS, TASKS, FLAGS, WEEKLY, AI_RUNS, ACTIVITY,
     WORKLOGS, empIdForUser, WEEKLY_DIGESTS, RECOMMENDATIONS,
     ENGRAM, EVAL_SETS, PROPOSALS, FARM_AGENTS,
     RELAY_AGENTS, MOMS, WEEKLY_COMMENTS, EXPENSE, NONPAYROLL_EXPENSE, CODEX_WORKFLOWS, CODEX_GUIDELINES,

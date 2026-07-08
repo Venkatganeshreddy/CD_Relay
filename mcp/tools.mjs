@@ -27,13 +27,36 @@ export async function resolveEmployee(sb, authUserId, email) {
   return emp || null;
 }
 
-export const today = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10); // IST
+export const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD IST
 
 const compact = (t) => ({
   id: t.id, title: t.title, status: t.status, due: t.due || null, owner: t.owner,
   outputCategory: t.outputCategory || null, numbers: t.template || {},
   blockReason: t.blockReason || null, escalReason: t.escalReason || null,
 });
+
+// Read-only table tools shared by server.mjs (stdio admin) and
+// remote-server.mjs (hosted) — the collections the app exposes (ARRAY_MAP).
+const TABLES = [
+  'employees', 'departments', 'kpis', 'daily_reports', 'worklogs', 'tasks',
+  'flags', 'weekly_summaries', 'moms', 'nonpayroll_expense', 'recommendations',
+  'ai_runs', 'activity', 'engram_interactions',
+];
+
+export function registerReadTools(server, sb) {
+  server.tool(
+    'query',
+    'Read rows from a CD_Relay table. Returns the JSONB `data` of each row.',
+    { table: z.enum(TABLES), limit: z.number().int().min(1).max(500).default(50) },
+    async ({ table, limit }) => {
+      const { data, error } = await sb.from(table).select('data').limit(limit);
+      if (error) return { isError: true, content: [{ type: 'text', text: error.message }] };
+      return { content: [{ type: 'text', text: JSON.stringify(data.map((r) => r.data), null, 2) }] };
+    },
+  );
+  server.tool('list_tables', 'List the CD_Relay tables you can query.', {},
+    async () => ({ content: [{ type: 'text', text: TABLES.join('\n') }] }));
+}
 
 // Register the task tools on an McpServer, bound to one signed-in user.
 export function registerTeamTools(server, sb, emp) {

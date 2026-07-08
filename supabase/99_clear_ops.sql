@@ -1,3 +1,4 @@
+
 -- 99_clear_ops.sql — wipe all operational data so the app shows a clean slate.
 --
 -- KEEPS: employees, business_directions, departments, dept_health,

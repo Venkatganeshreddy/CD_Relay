@@ -293,12 +293,10 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'goals': return <GoalsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'feedback': return <FeedbackView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'second-brain': return <SecondBrainView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'quality': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'runs': return <RunsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'admin': return <AdminView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'submit': return <GlanceView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'worklogs': return <WorklogsView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'architecture': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} initialTab="architecture" />;
     case 'knowledge': return <KnowledgeView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'codex': return <CodexView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'expense': return <ExpenseView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
@@ -306,7 +304,6 @@ function RouteView({ route, tweaks, currentUser, nav, initialPrompt }) {
     case 'engram': return <EngramView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'farm': return <FarmView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     case 'guideline': return <GuidelineView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
-    case 'team': return <ManagerView tweaks={tweaks} currentUser={currentUser} nav={nav} />;
     default: return <Dashboard tweaks={tweaks} currentUser={currentUser} nav={nav} />;
   }
 }
@@ -518,12 +515,10 @@ function buildCrumbs(route, currentUser) {
     case 'codex': return ['System', 'Codex'];
     case 'catalog': return ['System', 'Admin', 'Task catalog'];
     case 'knowledge': return ['System', 'Admin', 'Knowledge'];
-    case 'architecture': return ['System', 'Codex', 'Architecture'];
     case 'expense': return ['System', 'Tool Expense Tracker'];
     case 'nonpayroll': return ['Department', 'Non-Payroll Expense'];
     case 'engram': return ['System', 'Engram'];
     case 'guideline': return ['System', 'Guideline'];
-    case 'team': return ['Department', 'Sub Department'];
     case 'farm': return ['Intelligence', 'Agent Farm'];
     case 'copilot': return ['Intelligence', 'Concierge'];
     case 'missing': return ['Department', 'Missing reports'];
@@ -531,7 +526,6 @@ function buildCrumbs(route, currentUser) {
     case 'monthly': return ['Department', 'Monthly worklogs'];
     case 'tasks': return ['Department', 'Tasks board'];
     case 'second-brain': return ['Department', 'Second Brain'];
-    case 'quality': return ['System', 'Engram'];
     case 'runs': return ['System', 'AI runs'];
     case 'admin': return ['System', 'Admin'];
     case 'department': {
@@ -1198,7 +1192,7 @@ function AdminMcpTokens({ CDC, me, onBack }) {
   const save = (list) => { localStorage.setItem(KEY, JSON.stringify(list)); setTokens(list); };
   const rand = () => 'relay_pat_' + Array.from({ length: 32 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
   function create() {
-    const t = { id: rand().slice(0, 12), label: label.trim() || 'Claude Desktop', token: rand(), owner: me.id, created: (window.CDC.fmt ? window.CDC.fmt(window.CDC.today) : new Date().toISOString().slice(0, 10)) };
+    const t = { id: rand().slice(0, 12), label: label.trim() || 'Claude Desktop', token: rand(), owner: me.id, created: (window.CDC.fmt(window.CDC.today)) };
     save([t, ...tokens]); setLabel('');
   }
   const revoke = (id) => save(tokens.filter((t) => t.id !== id));

@@ -127,27 +127,6 @@ function ConfChip({ value, show = true }) {
 window.ConfChip = ConfChip;
 
 // ── RAG indicator — renders per the chosen treatment ────────────────────
-function RAG({ score, status, trend = 0, treatment = 'numeric' }) {
-  const tone = status; // 'green' | 'amber' | 'red'
-  if (treatment === 'dot') {
-    return (
-      <span className="rag" data-tone={tone}>
-        <span className="dot" data-tone={tone} />
-        <span className="rag-num">{score}</span>
-        {trend !== 0 && <span className="rag-trend">{trend > 0 ? '↑' : '↓'}{Math.abs(trend)}</span>}
-      </span>
-    );
-  }
-  // numeric (default) — small filled bar + score
-  return (
-    <span className="rag" data-tone={tone}>
-      <span className="rag-bar"><span className="rag-fill" style={{ width: `${score}%` }} /></span>
-      <span className="rag-num">{score}</span>
-      {trend !== 0 && <span className="rag-trend">{trend > 0 ? '↑' : '↓'}{Math.abs(trend)}</span>}
-    </span>
-  );
-}
-window.RAG = RAG;
 
 // ── Sparkline ───────────────────────────────────────────────────────────
 function Sparkline({ data, width = 120, height = 28, color }) {
@@ -283,21 +262,6 @@ function SectionHeader({ title, subtitle, actions }) {
 window.SectionHeader = SectionHeader;
 
 // ── Personalized greeting header (used by every dashboard) ───────────────
-// Time-of-day greeting for the signed-in user + live IST date/time that ticks
-// every 30s, so it changes with the user and as time passes.
-function GreetingHeader({ currentUser, context, actions }) {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
-  const ist = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', ...opts }).format(now);
-  const hour = Number(ist({ hour: '2-digit', hour12: false }));
-  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 21 ? 'Good evening' : 'Working late';
-  const first = (currentUser && currentUser.name ? currentUser.name.split(' ')[0] : 'there');
-  const dateline = `${ist({ weekday: 'long' })} · ${ist({ month: 'long', day: 'numeric', year: 'numeric' })} · ${ist({ hour: '2-digit', minute: '2-digit', hour12: false })} IST`;
-  return <SectionHeader title={`${greet}, ${first}.`} subtitle={context ? `${context} · ${dateline}` : dateline} actions={actions} />;
-}
-window.GreetingHeader = GreetingHeader;
-
-// ── Card wrapper ────────────────────────────────────────────────────────
 function Card({ title, meta, actions, children, pad = true, className = '', style }) {
   return (
     <div className={`card ${className}`} style={style}>
@@ -315,13 +279,6 @@ function Card({ title, meta, actions, children, pad = true, className = '', styl
   );
 }
 window.Card = Card;
-
-// ── Confirm if writing ──────────────────────────────────────────────────
-function relTime(iso) {
-  // very lightweight relative formatter
-  return iso;
-}
-window.relTime = relTime;
 
 // expose hooks too (for downstream files that load before React global wiring)
 window.Hooks = { useState, useEffect, useRef, useMemo, useCallback };

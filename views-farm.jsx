@@ -211,7 +211,7 @@ function RegisterAgentModal({ open, onClose, currentUser, onCreated }) {
     const units = num(f.unitsProcessed);
     const baseline = num(f.baselineHrsPerUnit);
     const agentPer = num(f.agentHrsPerUnit);
-    const today = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+    const today = CDC.fmt(CDC.today);
     const period = today.slice(0, 7);
     const agent = {
       id: `fa-${Date.now()}`,

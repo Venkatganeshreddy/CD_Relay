@@ -112,8 +112,6 @@ function CopilotView({ tweaks, currentUser, nav, initialPrompt }) {
         input: `Q: ${q.slice(0, 120)}`, output: clean,
       });
     }
-    await fakeStream(clean, (partial) => setStreamText(partial));
-
     setMessages((m) => [...m, {
       role: 'assistant', content: clean, actions,
       ts: timeNow(),
@@ -311,7 +309,7 @@ async function executeAction(a, user) {
     case 'create_task': {
       const owner = CDC.lookup.user(a.owner); if (!owner) throw new Error(`owner ${a.owner} not found`);
       const m = (CDC.TASK_CATALOG.OUTPUT_MAP || {})[a.outputCategory] || {};
-      const today = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+      const today = CDC.fmt(CDC.today);
       const ST = { 'In-progress': 'ACTIVE', Done: 'DONE', Blocked: 'BLOCKED', Overdue: 'ACTIVE', Backlog: 'BACKLOG' };
       const id = `task-${Date.now()}`;
       await CDC.db.addTask({
@@ -707,7 +705,7 @@ function buildSystemPrompt(corpus, user) {
     ? `Non-payroll budget: ${npe.length} rows, total ₹${npeTotal.toLocaleString('en-IN')}. Sample rows: ${npe.slice(0, 12).map((r) => `[${r.id}] ${r.tool}/${r.category}/${r.period} ₹${r.planned}`).join(' ; ')}`
     : 'No non-payroll budget rows in scope.';
   const wls = (CDC.filterWorklogs ? CDC.filterWorklogs(user.id) : []) || [];
-  const todayStr = CDC.fmt ? CDC.fmt(CDC.today) : new Date().toISOString().slice(0, 10);
+  const todayStr = CDC.fmt(CDC.today);
   const wlName = (w) => (CDC.lookup.user(w.userId || w.empId) || {}).name || w.userName || w.userId || '—';
   const wlToday = wls.filter((w) => w.date === todayStr);
   const todayBy = {};
@@ -825,13 +823,3 @@ function timeNow() {
   return d.toTimeString().slice(0, 5);
 }
 
-async function fakeStream(text, onPartial) {
-  // Stream-in animation only; the actual model returned the full text already.
-  const chunks = text.match(/.{1,8}/gs) || [];
-  let acc = '';
-  for (const c of chunks) {
-    acc += c;
-    onPartial(acc);
-    await new Promise((r) => setTimeout(r, 12));
-  }
-}

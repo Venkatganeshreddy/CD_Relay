@@ -55,7 +55,7 @@ const PRICES: Record<string, [number, number]> = { // $/M tokens, in/out — kee
   "anthropic/claude-haiku-4.5": [1, 5],
 };
 function nowIst(): string {
-  return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 16).replace("T", " ") + " IST";
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 16) + " IST";
 }
 async function logAiRun(tin: number, tout: number, latencyMs: number, output: string) {
   const [pin, pout] = PRICES[MODEL] || [3, 15];

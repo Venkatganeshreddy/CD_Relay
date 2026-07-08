@@ -432,13 +432,6 @@ function ragRowProps(treatment, status) {
   return {};
 }
 
-function formatNum(n) {
-  if (n == null) return '—';
-  if (n >= 10000) return n.toLocaleString();
-  if (n >= 1000) return n.toLocaleString();
-  return String(n);
-}
-window.formatNum = formatNum;
 window.ragRowProps = ragRowProps;
 
 // ── Department drilldown ────────────────────────────────────────────────
@@ -596,72 +589,3 @@ window.DepartmentView = DepartmentView;
 function countKind(r, kind) {
   return r.items?.filter((it) => it.kind === kind).length || 0;
 }
-
-function ReportDetail({ report, tweaks }) {
-  const CDC = window.CDC;
-  const author = CDC.lookup.author(report.author);
-  return (
-    <>
-      <div className="detail-h">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <div className="row" style={{ gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: 15 }}>{author?.name} <span className="muted" style={{ fontWeight: 400 }}>· {author?.sub}</span></h3>
-              <ConfChip value={report.confidence} show={tweaks.confidence} />
-              <Pill tone={report.validation === 'OK' ? 'green' : 'amber'}>{report.validation}</Pill>
-            </div>
-            <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
-              <span className="mono">{report.id}</span> · {report.date} · submitted {report.submittedAt} via Google Sheet · ingested by ReportIntake agent
-            </div>
-          </div>
-          <div className="row" style={{ gap: 6 }}>
-            <button className="btn" data-size="sm"><Icon name="sheet" size={12} /> Source row</button>
-            <button className="btn" data-size="sm"><Icon name="refresh" size={12} /> Re-run intake</button>
-          </div>
-        </div>
-      </div>
-      <div className="detail-b">
-        {report.warnings && report.warnings.length > 0 && (
-          <div style={{ background: 'var(--amber-soft)', color: 'var(--amber)', padding: '8px 12px', borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
-            <strong>Validation warnings:</strong> {report.warnings.join(' · ')}
-          </div>
-        )}
-
-        <div className="detail-section">Items ({report.items.length})</div>
-        <div className="col" style={{ gap: 8 }}>
-          {report.items.map((it, i) => (
-            <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-              <span className="item-kind" data-kind={it.kind}>{it.kind[0].toUpperCase()}</span>
-              <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.04, marginRight: 6, fontWeight: 500 }}>{it.kind}</span>
-                <span>{it.text}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {report.kpiHits && report.kpiHits.length > 0 && (
-          <>
-            <div className="detail-section">Linked KPIs</div>
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              {report.kpiHits.map((kid) => {
-                const k = CDC.lookup.kpi(kid);
-                if (!k) return null;
-                return <Pill key={kid} tone={k.status} dot>{k.name}</Pill>;
-              })}
-            </div>
-          </>
-        )}
-
-        <div className="detail-section">Audit</div>
-        <dl className="kv">
-          <dt>Source</dt><dd className="mono code">google.sheets · CD-DailyReports / {report.date}!A:Z</dd>
-          <dt>Intake run</dt><dd className="mono">run-1101 · claude-haiku-4-5 · 412 ms</dd>
-          <dt>Scope hash</dt><dd className="mono">7a1f…3e (RBAC: dept=Content, sub={author?.sub})</dd>
-          <dt>Cited by</dt><dd>2 tasks · 1 weekly draft</dd>
-        </dl>
-      </div>
-    </>
-  );
-}
-window.ReportDetail = ReportDetail;
