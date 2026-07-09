@@ -1,4 +1,4 @@
-﻿"""Modal entrypoint for Relay's Python agents.
+"""Modal entrypoint for Relay's Python agents.
 
 Exposes one authenticated HTTP endpoint per agent graph. Protected by a shared
 secret (RELAY_AGENT_SECRET) rather than the Supabase JWT, because the callers
@@ -31,6 +31,13 @@ def _auth(x_relay_secret: str):
         raise HTTPException(status_code=401, detail="bad secret")
 
 
+def _set_by(item: dict, default: str = ""):
+    # Stamp the initiating account onto this invocation's ai_runs rows (visibility:
+    # who ran it). Browser paths send `by` via the relay-agent proxy; crons default.
+    from graphs import common
+    common.set_by(item.get("by") or default)
+
+
 @app.function(image=image, secrets=[secret])
 @modal.fastapi_endpoint(method="GET")
 def health():
@@ -42,6 +49,7 @@ def health():
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_advisor(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item, "scheduled")
     from graphs.advisor import run
     return {"items": run(item.get("kinds"))}
 
@@ -50,6 +58,7 @@ def run_advisor(item: dict, x_relay_secret: str = Header("", alias="x-relay-secr
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_scribe(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item)
     from graphs.scribe import run
     return run(item.get("transcript", ""))
 
@@ -58,6 +67,7 @@ def run_scribe(item: dict, x_relay_secret: str = Header("", alias="x-relay-secre
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_rollup(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item)
     from graphs.rollup import run_rollup, run_weekly_digest
     if item.get("streams") is not None:
         return {"digest": run_weekly_digest(item)}
@@ -68,6 +78,7 @@ def run_rollup(item: dict, x_relay_secret: str = Header("", alias="x-relay-secre
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_sentry(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item)
     from graphs.sentry import run
     return {"line": run(item)}
 
@@ -76,6 +87,7 @@ def run_sentry(item: dict, x_relay_secret: str = Header("", alias="x-relay-secre
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_curator(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item)
     from graphs.curator import run
     return {"results": run(item.get("agent", ""))}
 
@@ -84,5 +96,6 @@ def run_curator(item: dict, x_relay_secret: str = Header("", alias="x-relay-secr
 @modal.fastapi_endpoint(method="POST", docs=True)
 def run_planner(item: dict, x_relay_secret: str = Header("", alias="x-relay-secret")):
     _auth(x_relay_secret)
+    _set_by(item, "scheduled (cron)")
     from graphs.planner import run
     return run(item.get("sub", ""), item.get("dept", ""), item.get("month", ""))

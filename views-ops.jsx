@@ -1594,6 +1594,7 @@ function RunsView({ tweaks, currentUser }) {
             <tr>
               <th>Run</th>
               <th>Agent</th>
+              <th>By</th>
               <th>Model</th>
               <th>When</th>
               <th>Latency</th>
@@ -1608,6 +1609,7 @@ function RunsView({ tweaks, currentUser }) {
               <tr key={r.id} onClick={() => setSelected(r)} style={{ cursor: 'default' }}>
                 <td className="mono">{r.id}</td>
                 <td>{r.agent}</td>
+                <td className="muted" style={{ fontSize: 12 }}>{r.by || '—'}</td>
                 <td className="mono muted" title={r.model}>{(r.model || '').split('/').pop()}</td>
                 <td className="muted mono" style={{ fontSize: 11 }}>{r.ts}</td>
                 <td className="num">{r.latencyMs.toLocaleString()}<span className="muted"> ms</span></td>
@@ -1625,6 +1627,7 @@ function RunsView({ tweaks, currentUser }) {
         {selected && (
           <div className="col" style={{ gap: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              <Metric label="By" value={selected.by || '—'} />
               <Metric label="Model" value={<span className="mono">{selected.model}</span>} />
               <Metric label="Latency" value={<><span className="mono">{selected.latencyMs}</span> ms</>} />
               <Metric label="Tokens" value={<span className="mono">{selected.tokensIn}/{selected.tokensOut}</span>} />

@@ -725,6 +725,7 @@
         costUsd: computeCost(model, tokensIn, tokensOut),
         outcome, ts: nowStr(), scopeHash: 'live', input,
         output: String(output || '').slice(0, 240),
+        by: (window.__RELAY && window.__RELAY.by) || '',   // which account triggered it
       };
       const act = { id: rid('act-'), kind: 'agent', ts: nowStr(),
         text: `${agent} ${outcome === 'OK' ? 'ran' : 'failed'}${input ? ' · ' + input : ''}`, icon: '⚙' };
@@ -762,7 +763,9 @@
     async _tryModal(agent, payload) {
       if (!sb) return null;
       try {
-        const { data, error } = await sb.functions.invoke('relay-agent', { body: { modal: agent, payload } });
+        // Carry the signed-in account so Modal-side runs are attributed too.
+        const body = { modal: agent, payload: { ...payload, by: (window.__RELAY && window.__RELAY.by) || '' } };
+        const { data, error } = await sb.functions.invoke('relay-agent', { body });
         if (error || !data || data.path !== 'modal') return null;
         return data;
       } catch (_) { return null; }

@@ -84,6 +84,12 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
   useEffect_a(() => {
     window.__RELAY = {
       authed: authMode === 'authed',
+      // Who is driving this session — stamped onto every ai_runs row (logRun /
+      // Modal payloads) so runs are attributable to an account. Real account
+      // first; impersonation shown explicitly.
+      by: authMode === 'authed' && realUser
+        ? (impersonating ? `${realUser.name} (as ${me.name})` : realUser.name)
+        : (me ? me.name : 'demo'),
       impersonate: (id) => Promise.resolve(window.CDC.setImpersonation && window.CDC.setImpersonation(id))
         .then(() => location.reload()),
       exitImpersonation: () => Promise.resolve(window.CDC.setImpersonation && window.CDC.setImpersonation(null))
@@ -93,7 +99,7 @@ function App({ authMode = 'demo', me = null, realUser = null, impersonating = fa
         .then(() => window.CDC.auth && window.CDC.auth.signOut())
         .then(() => location.reload()),
     };
-  }, [authMode]);
+  }, [authMode, me, realUser, impersonating]);
 
   // Hydrate openrouterKey from localStorage on mount
   useEffect_a(() => {

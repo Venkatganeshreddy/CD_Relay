@@ -20,6 +20,16 @@ from llm import llm, db_select, db_insert, SMART, FAST
 _IST = timezone(timedelta(hours=5, minutes=30))
 FALLBACK = {"smart": "fast", "fast": "smart"}
 
+# Who triggered the current request — set by modal_app per invocation and
+# stamped onto every ai_runs row. Module-global is safe here: Modal runs one
+# input per container by default (no concurrent requests share this).
+RUN_BY = ""
+
+
+def set_by(by: str):
+    global RUN_BY
+    RUN_BY = str(by or "")
+
 # Rough USD per 1M tokens (input, output) — estimate for visibility, not billing.
 # ponytail: keyword match, not a full price table; refine if finance needs exact spend.
 _COST = {"haiku": (1.0, 5.0), "sonnet": (3.0, 15.0), "opus": (5.0, 25.0)}
@@ -85,6 +95,7 @@ def _log(agent: str, model: str, t0: float, outcome: str, input_label: str, outp
         "id": run_id, "agent": agent, "model": model, "latencyMs": int((time.time() - t0) * 1000),
         "tokensIn": tin, "tokensOut": tout, "costUsd": _cost(model, tin, tout), "outcome": outcome,
         "ts": _now_ist(), "scopeHash": "live", "via": "modal", "input": input_label, "output": output[:240],
+        "by": RUN_BY,
     }}])
     act_id = _rid("act-")
     db_insert("activity", [{"id": act_id, "data": {

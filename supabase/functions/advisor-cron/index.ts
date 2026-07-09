@@ -63,7 +63,7 @@ async function logAiRun(tin: number, tout: number, latencyMs: number, output: st
   const run = {
     id, agent: "Advisor", model: MODEL, latencyMs, tokensIn: tin, tokensOut: tout,
     costUsd: (tin * pin + tout * pout) / 1e6, outcome: "OK", ts: nowIst(), scopeHash: "live",
-    via: "cron", input: "Weekly cron", output: output.slice(0, 240),
+    via: "cron", input: "Weekly cron", output: output.slice(0, 240), by: "scheduled",
   };
   const actId = "act-" + crypto.randomUUID().replace(/-/g, "").slice(0, 10);
   const act = { id: actId, kind: "agent", ts: run.ts, text: "Advisor ran · Weekly cron", icon: "⚙" };

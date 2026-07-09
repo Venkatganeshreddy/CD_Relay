@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       const r = await fetch(MODAL_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-relay-secret": RELAY_SECRET },
-        body: JSON.stringify({ sub, month }),
+        body: JSON.stringify({ sub, month, by: body.by || "scheduled (cron)" }),
       });
       if (!r.ok) return { sub, ok: false, error: `modal ${r.status}` };
       const out = await r.json();
